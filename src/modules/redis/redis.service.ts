@@ -11,12 +11,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     const config = this.configService.get('redis');
+    const tls = process.env.REDIS_TLS === 'true' ? { rejectUnauthorized: false } : undefined;
     this.client = new Redis({
       host: config.host,
       port: config.port,
       password: config.password || undefined,
       db: config.db,
       keyPrefix: config.keyPrefix,
+      tls,
       retryStrategy: (times) => Math.min(times * 50, 2000),
       lazyConnect: true,
     });

@@ -38,7 +38,7 @@ export class AuditInterceptor implements NestInterceptor {
           const entityId =
             request.params?.id ||
             (responseData as Record<string, unknown>)?.id ||
-            (responseData as Record<string, unknown>)?.data?.id;
+            (responseData as Record<string, Record<string, unknown>>)?.data?.id;
 
           void this.auditLogModel.create({
             school_id:

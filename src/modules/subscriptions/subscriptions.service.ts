@@ -75,6 +75,7 @@ export class SubscriptionsService {
       amount: dto.amount ? String(dto.amount) : undefined,
       start_date: dto.start_date ? new Date(dto.start_date) : undefined,
       end_date: dto.end_date ? new Date(dto.end_date) : undefined,
+      trial_end_date: dto.trial_end_date ? new Date(dto.trial_end_date) : undefined,
     });
     await this.invalidateCache(id, updated.school_id);
     return updated;

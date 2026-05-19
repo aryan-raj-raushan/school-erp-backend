@@ -44,7 +44,7 @@ export class SubscriptionExpiryTask {
         .where(
           and(
             eq(subscriptions.status, SubscriptionStatus.ACTIVE),
-            lt(subscriptions.end_date, new Date().toISOString().split('T')[0]),
+            lt(subscriptions.end_date, new Date()),
           ),
         );
 

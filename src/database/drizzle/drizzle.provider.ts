@@ -12,17 +12,14 @@ export const drizzleProvider = {
   useFactory: async (configService: ConfigService): Promise<DrizzleDB> => {
     const dbConfig = configService.get('database.postgres');
 
+    const connectionString = process.env.DATABASE_URL;
     const pool = new Pool({
-      host: dbConfig.host,
-      port: dbConfig.port,
-      user: dbConfig.user,
-      password: dbConfig.password,
-      database: dbConfig.database,
-      ssl: dbConfig.ssl ? { rejectUnauthorized: false } : false,
-      min: dbConfig.poolMin,
-      max: dbConfig.poolMax,
+      connectionString,
+      ssl: { rejectUnauthorized: false },
+      min: dbConfig.poolMin ?? 2,
+      max: dbConfig.poolMax ?? 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
     });
 
     pool.on('error', (err) => {

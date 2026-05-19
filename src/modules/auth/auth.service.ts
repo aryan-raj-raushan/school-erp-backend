@@ -15,7 +15,7 @@ import { companyUsers, schoolUsers, companyUserSchools } from '../../database/dr
 import { RedisService } from '../redis/redis.service';
 import { hashPassword, comparePassword } from '../../utils/hash.utils';
 import { generateId } from '../../utils/uuid.utils';
-import { AuthContext, CompanyRole } from '../../shared/enums';
+import { AuthContext, CompanyRole, SchoolRole } from '../../shared/enums';
 import { JwtPayload, RefreshTokenPayload } from '../../shared/types/jwt-payload.types';
 import { RegisterCompanyDto } from './dto/register-company.dto';
 import { LoginCompanyDto } from './dto/login-company.dto';
@@ -90,7 +90,7 @@ export class AuthService {
     const tokens = await this.generateTokens({
       sub: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role as CompanyRole,
       context: AuthContext.COMPANY,
     });
 
@@ -131,7 +131,7 @@ export class AuthService {
     const tokens = await this.generateTokens({
       sub: user.id,
       phone: user.phone_number,
-      role: user.role,
+      role: user.role as SchoolRole,
       school_id: user.school_id,
       context: AuthContext.SCHOOL,
     });
@@ -162,7 +162,7 @@ export class AuthService {
         .from(companyUsers)
         .where(and(eq(companyUsers.id, userId), eq(companyUsers.deleted, false)));
       if (!user) throw new NotFoundException('User not found');
-      payload = { sub: user.id, email: user.email, role: user.role, context: AuthContext.COMPANY };
+      payload = { sub: user.id, email: user.email, role: user.role as CompanyRole, context: AuthContext.COMPANY };
     } else {
       const [user] = await this.db
         .select()
@@ -172,7 +172,7 @@ export class AuthService {
       payload = {
         sub: user.id,
         phone: user.phone_number,
-        role: user.role,
+        role: user.role as SchoolRole,
         school_id: user.school_id,
         context: AuthContext.SCHOOL,
       };
