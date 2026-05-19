@@ -1,0 +1,33 @@
+export enum StudentStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  TRANSFERRED = 'TRANSFERRED',
+  GRADUATED = 'GRADUATED',
+  DROPPED = 'DROPPED',
+}
+
+export enum SubscriptionStatus {
+  ACTIVE = 'ACTIVE',
+  EXPIRED = 'EXPIRED',
+  CANCELLED = 'CANCELLED',
+  PENDING = 'PENDING',
+  TRIAL = 'TRIAL',
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  SUCCESS = 'SUCCESS',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+  PARTIALLY_REFUNDED = 'PARTIALLY_REFUNDED',
+}
+
+export enum PromotionStatus {
+  PENDING = 'PENDING',
+  PROMOTED = 'PROMOTED',
+  FAILED = 'FAILED',
+  DETAINED = 'DETAINED',
+  TRANSFERRED = 'TRANSFERRED',
+  GRADUATED = 'GRADUATED',
+  DROPPED = 'DROPPED',
+}

@@ -1,0 +1,119 @@
+import { relations } from 'drizzle-orm';
+import { schools } from './schools.schema';
+import { companyUsers } from './company-users.schema';
+import { companyUserSchools } from './company-user-schools.schema';
+import { schoolUsers } from './school-users.schema';
+import { academicYears } from './academic-years.schema';
+import { classes } from './classes.schema';
+import { sections } from './sections.schema';
+import { subjects } from './subjects.schema';
+import { students } from './students.schema';
+import { studentDocuments } from './student-documents.schema';
+import { studentParents } from './student-parents.schema';
+import { subscriptions } from './subscriptions.schema';
+import { subscriptionPayments } from './subscription-payments.schema';
+import { promotionLogs } from './promotion-logs.schema';
+
+export const schoolsRelations = relations(schools, ({ many }) => ({
+  users: many(schoolUsers),
+  academicYears: many(academicYears),
+  classes: many(classes),
+  sections: many(sections),
+  subjects: many(subjects),
+  students: many(students),
+  subscriptions: many(subscriptions),
+  companyUserSchools: many(companyUserSchools),
+}));
+
+export const companyUsersRelations = relations(companyUsers, ({ many }) => ({
+  schoolAccess: many(companyUserSchools),
+}));
+
+export const companyUserSchoolsRelations = relations(companyUserSchools, ({ one }) => ({
+  user: one(companyUsers, { fields: [companyUserSchools.user_id], references: [companyUsers.id] }),
+  school: one(schools, { fields: [companyUserSchools.school_id], references: [schools.id] }),
+}));
+
+export const schoolUsersRelations = relations(schoolUsers, ({ one, many }) => ({
+  school: one(schools, { fields: [schoolUsers.school_id], references: [schools.id] }),
+  sectionsAsClassTeacher: many(sections),
+}));
+
+export const academicYearsRelations = relations(academicYears, ({ one, many }) => ({
+  school: one(schools, { fields: [academicYears.school_id], references: [schools.id] }),
+  classes: many(classes),
+  students: many(students),
+}));
+
+export const classesRelations = relations(classes, ({ one, many }) => ({
+  school: one(schools, { fields: [classes.school_id], references: [schools.id] }),
+  academicYear: one(academicYears, {
+    fields: [classes.academic_year_id],
+    references: [academicYears.id],
+  }),
+  sections: many(sections),
+  subjects: many(subjects),
+  students: many(students),
+}));
+
+export const sectionsRelations = relations(sections, ({ one, many }) => ({
+  school: one(schools, { fields: [sections.school_id], references: [schools.id] }),
+  class: one(classes, { fields: [sections.class_id], references: [classes.id] }),
+  classTeacher: one(schoolUsers, {
+    fields: [sections.class_teacher_id],
+    references: [schoolUsers.id],
+  }),
+  students: many(students),
+}));
+
+export const subjectsRelations = relations(subjects, ({ one }) => ({
+  school: one(schools, { fields: [subjects.school_id], references: [schools.id] }),
+  class: one(classes, { fields: [subjects.class_id], references: [classes.id] }),
+}));
+
+export const studentsRelations = relations(students, ({ one, many }) => ({
+  school: one(schools, { fields: [students.school_id], references: [schools.id] }),
+  academicYear: one(academicYears, {
+    fields: [students.academic_year_id],
+    references: [academicYears.id],
+  }),
+  class: one(classes, { fields: [students.class_id], references: [classes.id] }),
+  section: one(sections, { fields: [students.section_id], references: [sections.id] }),
+  documents: many(studentDocuments),
+  parents: many(studentParents),
+}));
+
+export const studentDocumentsRelations = relations(studentDocuments, ({ one }) => ({
+  school: one(schools, { fields: [studentDocuments.school_id], references: [schools.id] }),
+  student: one(students, { fields: [studentDocuments.student_id], references: [students.id] }),
+}));
+
+export const studentParentsRelations = relations(studentParents, ({ one }) => ({
+  school: one(schools, { fields: [studentParents.school_id], references: [schools.id] }),
+  student: one(students, { fields: [studentParents.student_id], references: [students.id] }),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({
+  school: one(schools, { fields: [subscriptions.school_id], references: [schools.id] }),
+  payments: many(subscriptionPayments),
+}));
+
+export const subscriptionPaymentsRelations = relations(subscriptionPayments, ({ one }) => ({
+  school: one(schools, { fields: [subscriptionPayments.school_id], references: [schools.id] }),
+  subscription: one(subscriptions, {
+    fields: [subscriptionPayments.subscription_id],
+    references: [subscriptions.id],
+  }),
+}));
+
+export const promotionLogsRelations = relations(promotionLogs, ({ one }) => ({
+  school: one(schools, { fields: [promotionLogs.school_id], references: [schools.id] }),
+  fromAcademicYear: one(academicYears, {
+    fields: [promotionLogs.from_academic_year_id],
+    references: [academicYears.id],
+  }),
+  toAcademicYear: one(academicYears, {
+    fields: [promotionLogs.to_academic_year_id],
+    references: [academicYears.id],
+  }),
+}));
