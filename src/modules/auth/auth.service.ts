@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ConflictException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -42,6 +43,19 @@ export class AuthService {
       .where(eq(companyUsers.email, dto.email));
 
     if (existing) throw new ConflictException('Email already registered');
+
+    // BUG-001 + BUG-013: enforce single SUPER_ADMIN — only one may ever exist
+    if (dto.role === CompanyRole.SUPER_ADMIN) {
+      const [existingSuperAdmin] = await this.db
+        .select({ id: companyUsers.id })
+        .from(companyUsers)
+        .where(and(eq(companyUsers.role, CompanyRole.SUPER_ADMIN), eq(companyUsers.deleted, false)))
+        .limit(1);
+
+      if (existingSuperAdmin) {
+        throw new ForbiddenException('A SUPER_ADMIN already exists. Only one is allowed.');
+      }
+    }
 
     const password_hash = await hashPassword(dto.password);
     const id = generateId();
@@ -181,10 +195,25 @@ export class AuthService {
     return this.generateTokens(payload as JwtPayload);
   }
 
-  async logout(userId: string, tokenId: string): Promise<void> {
+  async logout(userId: string, tokenId: string, rawAccessToken?: string): Promise<void> {
     await this.redisService.delByPattern(`*refresh_token:${userId}:*`);
-    void tokenId;
     await this.redisService.del(`session:${userId}`);
+    void tokenId;
+
+    // BUG-002: blacklist the access token so it cannot be used after logout
+    if (rawAccessToken) {
+      try {
+        const decoded = this.jwtService.decode(rawAccessToken) as { iat?: number; exp?: number } | null;
+        if (decoded?.iat && decoded?.exp) {
+          const ttl = decoded.exp - Math.floor(Date.now() / 1000);
+          if (ttl > 0) {
+            await this.redisService.setex(`blocked_at:${userId}:${decoded.iat}`, ttl, '1');
+          }
+        }
+      } catch {
+        // ignore decode errors — token already invalid
+      }
+    }
   }
 
   async getMe(userId: string, context: AuthContext) {

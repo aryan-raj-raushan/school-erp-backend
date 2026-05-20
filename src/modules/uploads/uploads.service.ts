@@ -1,4 +1,5 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import { CompanyRole } from '../../shared/enums';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { InjectModel } from '@nestjs/mongoose';
@@ -48,7 +49,17 @@ export class UploadsService {
     return this.upload(file, schoolId, 'documents', uploadedBy);
   }
 
-  async deleteFile(s3Key: string): Promise<void> {
+  private static readonly S3_KEY_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(images|documents)\/.+$/i;
+
+  async deleteFile(s3Key: string, callerSchoolId?: string, callerRole?: string): Promise<void> {
+    if (!UploadsService.S3_KEY_PATTERN.test(s3Key)) {
+      throw new BadRequestException('Invalid S3 key format');
+    }
+    const keySchoolId = s3Key.split('/')[0];
+    if (callerRole !== CompanyRole.SUPER_ADMIN && callerSchoolId && keySchoolId !== callerSchoolId) {
+      throw new ForbiddenException('Cannot delete files from another school');
+    }
     await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: s3Key }));
     await this.docUploadModel.deleteOne({ s3_key: s3Key }).exec();
     this.logger.log(`Deleted S3 object: ${s3Key}`);

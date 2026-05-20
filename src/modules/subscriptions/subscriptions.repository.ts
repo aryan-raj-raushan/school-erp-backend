@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { subscriptions, subscriptionPayments } from '../../database/drizzle/schema';
@@ -10,8 +10,12 @@ import { SubscriptionFilterDto } from './dto/subscription-filter.dto';
 export class SubscriptionsRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
-  async findAll(filters: SubscriptionFilterDto): Promise<Subscription[]> {
+  async findAll(filters: SubscriptionFilterDto, allowedSchoolIds?: string[]): Promise<Subscription[]> {
     const conditions = [];
+    if (allowedSchoolIds) {
+      if (allowedSchoolIds.length === 0) return [];
+      conditions.push(inArray(subscriptions.school_id, allowedSchoolIds));
+    }
     if (filters.school_id) conditions.push(eq(subscriptions.school_id, filters.school_id));
     if (filters.status) conditions.push(eq(subscriptions.status, filters.status as Subscription['status']));
 
@@ -23,8 +27,12 @@ export class SubscriptionsRepository {
     return query.limit(limit).offset(offset);
   }
 
-  async count(filters: SubscriptionFilterDto): Promise<number> {
+  async count(filters: SubscriptionFilterDto, allowedSchoolIds?: string[]): Promise<number> {
     const conditions = [];
+    if (allowedSchoolIds) {
+      if (allowedSchoolIds.length === 0) return 0;
+      conditions.push(inArray(subscriptions.school_id, allowedSchoolIds));
+    }
     if (filters.school_id) conditions.push(eq(subscriptions.school_id, filters.school_id));
     if (filters.status) conditions.push(eq(subscriptions.status, filters.status as Subscription['status']));
 

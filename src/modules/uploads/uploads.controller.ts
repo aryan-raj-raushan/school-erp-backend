@@ -63,8 +63,12 @@ export class UploadsController {
   @Roles(SchoolRole.SCHOOL_ADMIN, CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete file from S3' })
-  async deleteFile(@Body() dto: DeleteUploadDto): Promise<ApiResponse<null>> {
-    await this.uploadsService.deleteFile(dto.s3Key);
+  async deleteFile(
+    @Body() dto: DeleteUploadDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUser() user: JwtPayload,
+  ): Promise<ApiResponse<null>> {
+    await this.uploadsService.deleteFile(dto.s3Key, schoolId, user.role as string);
     return ApiResponse.noContent('File deleted');
   }
 }

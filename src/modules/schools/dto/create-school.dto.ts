@@ -18,7 +18,7 @@ export class CreateSchoolDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(150)
-  @Transform(({ value }) => StringUtils.trim(value))
+  @Transform(({ value }) => StringUtils.sanitize(StringUtils.trim(value)))
   name: string;
 
   @ApiPropertyOptional({ example: 'DPS' })
@@ -61,14 +61,14 @@ export class CreateSchoolDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
+  @Transform(({ value }) => StringUtils.sanitize(StringUtils.titleCase(StringUtils.trim(value))))
   city?: string;
 
   @ApiPropertyOptional({ example: 'Delhi' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
+  @Transform(({ value }) => StringUtils.sanitize(StringUtils.titleCase(StringUtils.trim(value))))
   state?: string;
 
   @ApiPropertyOptional({ example: '110001' })

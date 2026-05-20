@@ -6,7 +6,9 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterCompanyDto } from './dto/register-company.dto';
@@ -65,8 +67,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Logout — invalidates all refresh tokens for user' })
-  async logout(@GetCurrentUser() user: { sub: string; token_id?: string }) {
-    await this.authService.logout(user.sub, user.token_id ?? '');
+  async logout(
+    @GetCurrentUser() user: { sub: string; token_id?: string },
+    @Req() req: Request,
+  ) {
+    const authHeader = req.headers['authorization'] ?? '';
+    const rawToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+    await this.authService.logout(user.sub, user.token_id ?? '', rawToken);
     return ApiResponse.noContent('Logged out successfully');
   }
 

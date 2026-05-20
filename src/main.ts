@@ -40,6 +40,22 @@ async function bootstrap() {
     }),
   );
 
+  // Stricter rate limit for auth endpoints (brute-force protection)
+  app.use(
+    `/${process.env.API_PREFIX || 'api/v1'}/auth`,
+    rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 10,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: {
+        success: false,
+        statusCode: 429,
+        message: 'Too many authentication attempts, please try again later',
+      },
+    }),
+  );
+
   const apiPrefix = process.env.API_PREFIX || 'api/v1';
   app.setGlobalPrefix(apiPrefix, {
     exclude: ['health', 'ready'],

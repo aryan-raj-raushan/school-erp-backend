@@ -17,9 +17,10 @@ import { CreateSchoolDto } from './dto/create-school.dto';
 import { UpdateSchoolDto } from './dto/update-school.dto';
 import { SchoolFilterDto } from './dto/school-filter.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { CompanyRole } from '../../shared/enums';
+import { JwtPayload } from '../../shared/types/jwt-payload.types';
 
 @ApiTags('Schools')
 @ApiBearerAuth('access-token')
@@ -30,16 +31,22 @@ export class SchoolsController {
   @Get()
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
   @ApiOperation({ summary: 'List all schools with pagination & filters' })
-  async findAll(@Query() filters: SchoolFilterDto) {
-    const data = await this.schoolsService.findAll(filters);
+  async findAll(
+    @Query() filters: SchoolFilterDto,
+    @GetCurrentUser() user: JwtPayload,
+  ) {
+    const data = await this.schoolsService.findAll(filters, user.sub, user.role as string);
     return ApiResponse.success(data.items, 'Schools fetched successfully', data.meta);
   }
 
   @Get(':id')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
   @ApiOperation({ summary: 'Get school by ID' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    const data = await this.schoolsService.findById(id);
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetCurrentUser() user: JwtPayload,
+  ) {
+    const data = await this.schoolsService.findById(id, user.sub, user.role as string);
     return ApiResponse.success(data);
   }
 
@@ -61,8 +68,9 @@ export class SchoolsController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSchoolDto,
+    @GetCurrentUser() user: JwtPayload,
   ) {
-    const data = await this.schoolsService.update(id, dto);
+    const data = await this.schoolsService.update(id, dto, user.sub, user.role as string);
     return ApiResponse.success(data, 'School updated successfully');
   }
 
@@ -70,8 +78,11 @@ export class SchoolsController {
   @Roles(CompanyRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft delete a school (SUPER_ADMIN only)' })
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
-    await this.schoolsService.remove(id);
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetCurrentUser() user: JwtPayload,
+  ) {
+    await this.schoolsService.remove(id, user.sub, user.role as string);
     return ApiResponse.noContent('School deleted successfully');
   }
 }
