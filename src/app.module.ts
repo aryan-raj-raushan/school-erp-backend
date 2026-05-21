@@ -19,6 +19,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
+import { LoadTestModule } from './modules/load-test/load-test.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -50,6 +51,7 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
     PromotionsModule,
     UploadsModule,
     SchedulerModule,
+    LoadTestModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

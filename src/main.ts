@@ -6,6 +6,7 @@ import * as compression from 'compression';
 import { rateLimit } from 'express-rate-limit';
 
 import { AppModule } from './app.module';
+import { LoadTestService } from './modules/load-test/load-test.service';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { CustomValidationPipe } from './common/pipes/validation.pipe';
 
@@ -44,8 +45,8 @@ async function bootstrap() {
   app.use(
     `/${process.env.API_PREFIX || 'api/v1'}/auth`,
     rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 10,
+      windowMs: 15 * 60 * 1000,
+      max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '10', 10),
       standardHeaders: true,
       legacyHeaders: false,
       message: {
@@ -90,6 +91,7 @@ async function bootstrap() {
     SwaggerModule.setup(process.env.SWAGGER_PATH || 'api/docs', app, document, {
       swaggerOptions: { persistAuthorization: true },
     });
+    app.get(LoadTestService).setDocument(document);
   }
 
   app.enableShutdownHooks();

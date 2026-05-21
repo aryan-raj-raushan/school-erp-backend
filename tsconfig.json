@@ -26,5 +26,6 @@
       "@shared/*": ["src/shared/*"],
       "@utils/*": ["src/utils/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", "dist", "drizzle.config.ts"]
 }
