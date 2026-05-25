@@ -51,14 +51,14 @@ export class SchoolsController {
   }
 
   @Post()
-  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
+  @Roles(CompanyRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create a new school' })
+  @ApiOperation({ summary: 'Create a new school (SUPER_ADMIN only)' })
   async create(
     @Body() dto: CreateSchoolDto,
     @GetCurrentUser() user: JwtPayload,
   ) {
-    const data = await this.schoolsService.create(dto, user.sub, user.role as string);
+    const data = await this.schoolsService.create(dto, user.sub);
     return ApiResponse.created(data, 'School created successfully');
   }
 
