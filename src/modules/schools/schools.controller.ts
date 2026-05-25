@@ -56,9 +56,9 @@ export class SchoolsController {
   @ApiOperation({ summary: 'Create a new school' })
   async create(
     @Body() dto: CreateSchoolDto,
-    @GetCurrentUserId() userId: string,
+    @GetCurrentUser() user: JwtPayload,
   ) {
-    const data = await this.schoolsService.create(dto, userId);
+    const data = await this.schoolsService.create(dto, user.sub, user.role as string);
     return ApiResponse.created(data, 'School created successfully');
   }
 

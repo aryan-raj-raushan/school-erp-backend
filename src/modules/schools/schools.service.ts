@@ -82,7 +82,7 @@ export class SchoolsService {
     });
   }
 
-  async create(dto: CreateSchoolDto, createdBy: string): Promise<School> {
+  async create(dto: CreateSchoolDto, createdBy: string, role: string): Promise<School> {
     if (StringUtils.isNotEmpty(dto.code)) {
       const existing = await this.schoolsRepo.findByCode(dto.code!);
       if (existing) throw new ConflictException(`School with code '${dto.code}' already exists`);
@@ -93,6 +93,16 @@ export class SchoolsService {
       created_by: createdBy,
       ...dto,
     });
+
+    if (role !== CompanyRole.SUPER_ADMIN) {
+      await this.db.insert(companyUserSchools).values({
+        id: generateId(),
+        user_id: createdBy,
+        school_id: school.id,
+        granted_by: createdBy,
+      });
+      await this.redisService.del(`company_user:${createdBy}:schools`);
+    }
 
     await this.redisService.delByPattern(`schools:list:*`);
     return school;
