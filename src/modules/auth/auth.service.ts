@@ -7,12 +7,8 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
 
-import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
-import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { companyUsers, schoolUsers, companyUserSchools } from '../../database/drizzle/schema';
+import { AuthRepository } from './auth.repository';
 import { RedisService } from '../redis/redis.service';
 import { hashPassword, comparePassword } from '../../utils/hash.utils';
 import { generateId } from '../../utils/uuid.utils';
@@ -30,72 +26,43 @@ const COMPANY_USER_SCHOOLS_TTL = 3600;
 @Injectable()
 export class AuthService {
   constructor(
-    @Inject(DRIZZLE_ORM) private readonly db: DrizzleDB,
+    private readonly authRepo: AuthRepository,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
   ) {}
 
   async registerCompany(dto: RegisterCompanyDto) {
-    const [existing] = await this.db
-      .select({ id: companyUsers.id })
-      .from(companyUsers)
-      .where(eq(companyUsers.email, dto.email));
-
-    if (existing) throw new ConflictException('Email already registered');
+    const emailTaken = await this.authRepo.findCompanyUserByEmailExists(dto.email);
+    if (emailTaken) throw new ConflictException('Email already registered');
 
     // BUG-001 + BUG-013: enforce single SUPER_ADMIN — only one may ever exist
     if (dto.role === CompanyRole.SUPER_ADMIN) {
-      const [existingSuperAdmin] = await this.db
-        .select({ id: companyUsers.id })
-        .from(companyUsers)
-        .where(and(eq(companyUsers.role, CompanyRole.SUPER_ADMIN), eq(companyUsers.deleted, false)))
-        .limit(1);
-
-      if (existingSuperAdmin) {
-        throw new ForbiddenException('A SUPER_ADMIN already exists. Only one is allowed.');
-      }
+      const exists = await this.authRepo.superAdminExists();
+      if (exists) throw new ForbiddenException('A SUPER_ADMIN already exists. Only one is allowed.');
     }
 
     const password_hash = await hashPassword(dto.password);
-    const id = generateId();
 
-    const [user] = await this.db
-      .insert(companyUsers)
-      .values({
-        id,
-        first_name: dto.first_name,
-        last_name: dto.last_name,
-        email: dto.email,
-        password_hash,
-        role: (dto.role as CompanyRole) ?? CompanyRole.ADMIN,
-      })
-      .returning({
-        id: companyUsers.id,
-        email: companyUsers.email,
-        role: companyUsers.role,
-        first_name: companyUsers.first_name,
-      });
-
-    return user;
+    return this.authRepo.createCompanyUser({
+      id: generateId(),
+      first_name: dto.first_name,
+      last_name: dto.last_name,
+      email: dto.email,
+      password_hash,
+      role: (dto.role as CompanyRole) ?? CompanyRole.ADMIN,
+    });
   }
 
   async loginCompany(dto: LoginCompanyDto): Promise<LoginResponse> {
-    const [user] = await this.db
-      .select()
-      .from(companyUsers)
-      .where(and(eq(companyUsers.email, dto.email), eq(companyUsers.deleted, false)));
-
+    const user = await this.authRepo.findCompanyUserByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
     if (!user.is_active) throw new UnauthorizedException('Account is deactivated');
 
     const passwordMatch = await comparePassword(dto.password, user.password_hash);
     if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
 
-    await this.db
-      .update(companyUsers)
-      .set({ last_login_at: new Date() })
-      .where(eq(companyUsers.id, user.id));
+    await this.authRepo.updateCompanyUserLastLogin(user.id);
 
     if (user.role !== CompanyRole.SUPER_ADMIN) {
       await this.cacheCompanyUserSchools(user.id);
@@ -120,27 +87,14 @@ export class AuthService {
   }
 
   async loginSchool(dto: LoginSchoolDto): Promise<LoginResponse> {
-    const [user] = await this.db
-      .select()
-      .from(schoolUsers)
-      .where(
-        and(
-          eq(schoolUsers.phone_number, dto.phone_number),
-          eq(schoolUsers.dial_code, dto.dial_code),
-          eq(schoolUsers.deleted, false),
-        ),
-      );
-
+    const user = await this.authRepo.findSchoolUserByPhone(dto.phone_number, dto.dial_code);
     if (!user) throw new UnauthorizedException('Invalid credentials');
     if (!user.is_active) throw new UnauthorizedException('Account is deactivated');
 
     const passwordMatch = await comparePassword(dto.password, user.password_hash);
     if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
 
-    await this.db
-      .update(schoolUsers)
-      .set({ last_login_at: new Date() })
-      .where(eq(schoolUsers.id, user.id));
+    await this.authRepo.updateSchoolUserLastLogin(user.id);
 
     const tokens = await this.generateTokens({
       sub: user.id,
@@ -171,17 +125,11 @@ export class AuthService {
     let payload: Partial<JwtPayload>;
 
     if (context === AuthContext.COMPANY) {
-      const [user] = await this.db
-        .select()
-        .from(companyUsers)
-        .where(and(eq(companyUsers.id, userId), eq(companyUsers.deleted, false)));
+      const user = await this.authRepo.findCompanyUserById(userId);
       if (!user) throw new NotFoundException('User not found');
       payload = { sub: user.id, email: user.email, role: user.role as CompanyRole, context: AuthContext.COMPANY };
     } else {
-      const [user] = await this.db
-        .select()
-        .from(schoolUsers)
-        .where(and(eq(schoolUsers.id, userId), eq(schoolUsers.deleted, false)));
+      const user = await this.authRepo.findSchoolUserById(userId);
       if (!user) throw new NotFoundException('User not found');
       payload = {
         sub: user.id,
@@ -218,37 +166,44 @@ export class AuthService {
 
   async getMe(userId: string, context: AuthContext) {
     if (context === AuthContext.COMPANY) {
-      const [user] = await this.db
-        .select({
-          id: companyUsers.id,
-          first_name: companyUsers.first_name,
-          last_name: companyUsers.last_name,
-          email: companyUsers.email,
-          role: companyUsers.role,
-          created_at: companyUsers.created_at,
-        })
-        .from(companyUsers)
-        .where(eq(companyUsers.id, userId));
+      const user = await this.authRepo.findCompanyUserProfile(userId);
       if (!user) throw new NotFoundException('User not found');
       return user;
     }
 
-    const [user] = await this.db
-      .select({
-        id: schoolUsers.id,
-        first_name: schoolUsers.first_name,
-        last_name: schoolUsers.last_name,
-        phone_number: schoolUsers.phone_number,
-        email: schoolUsers.email,
-        role: schoolUsers.role,
-        school_id: schoolUsers.school_id,
-        profile_image: schoolUsers.profile_image,
-        created_at: schoolUsers.created_at,
-      })
-      .from(schoolUsers)
-      .where(eq(schoolUsers.id, userId));
+    const user = await this.authRepo.findSchoolUserProfile(userId);
     if (!user) throw new NotFoundException('User not found');
     return user;
+  }
+
+  async switchSchool(userId: string, schoolId: string): Promise<LoginResponse> {
+    const user = await this.authRepo.findCompanyUserById(userId);
+    if (!user || user.role !== CompanyRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Only SUPER_ADMIN can switch into a school');
+    }
+
+    const school = await this.authRepo.findSchoolById(schoolId);
+    if (!school) throw new NotFoundException(`School '${schoolId}' not found`);
+    if (!school.is_active) throw new ForbiddenException(`School '${schoolId}' is inactive`);
+
+    const tokens = await this.generateTokens({
+      sub: userId,
+      email: user.email,
+      role: CompanyRole.SUPER_ADMIN,
+      school_id: schoolId,
+      context: AuthContext.SCHOOL,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: userId,
+        email: user.email,
+        role: CompanyRole.SUPER_ADMIN,
+        schoolId: schoolId,
+        context: AuthContext.SCHOOL,
+      },
+    };
   }
 
   private async generateTokens(payload: Omit<JwtPayload, 'iat' | 'exp'>): Promise<TokenPair> {
@@ -286,15 +241,12 @@ export class AuthService {
   }
 
   private async cacheCompanyUserSchools(userId: string): Promise<void> {
-    const rows = await this.db
-      .select({ school_id: companyUserSchools.school_id })
-      .from(companyUserSchools)
-      .where(eq(companyUserSchools.user_id, userId));
+    const schoolIds = await this.authRepo.getCompanyUserSchoolIds(userId);
 
-    if (rows.length > 0) {
+    if (schoolIds.length > 0) {
       const key = `company_user:${userId}:schools`;
       await this.redisService.del(key);
-      await this.redisService.sadd(key, ...rows.map((r) => r.school_id));
+      await this.redisService.sadd(key, ...schoolIds);
       await this.redisService.expire(key, COMPANY_USER_SCHOOLS_TTL);
     }
   }

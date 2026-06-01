@@ -3,6 +3,8 @@ import {
   Post,
   Get,
   Body,
+  Param,
+  ParseUUIDPipe,
   HttpCode,
   HttpStatus,
   UseGuards,
@@ -18,6 +20,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { RefreshTokenGuard } from '../../common/guards/refresh-token.guard';
+import { K6 } from '../../common/decorators/k6.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { AuthContext } from '../../shared/enums';
 import { RefreshTokenPayload } from '../../shared/types/jwt-payload.types';
@@ -61,6 +64,19 @@ export class AuthController {
   async refresh(@GetCurrentUser() user: RefreshTokenPayload) {
     const tokens = await this.authService.refresh(user.sub, user.token_id, user.context);
     return ApiResponse.success(tokens, 'Tokens refreshed');
+  }
+
+  @Post('switch-school/:schoolId')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'SUPER_ADMIN: switch into a school context to manage it' })
+  @K6({ authContext: 'company', paramSources: { schoolId: '/api/v1/schools' } })
+  async switchSchool(
+    @Param('schoolId', ParseUUIDPipe) schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    const result = await this.authService.switchSchool(userId, schoolId);
+    return ApiResponse.success(result, 'Switched to school context');
   }
 
   @Post('logout')
