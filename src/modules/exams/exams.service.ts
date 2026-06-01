@@ -67,12 +67,22 @@ export class ExamsService {
   }
 
   async createPolicy(dto: CreateExamPolicyDto, schoolId: string): Promise<ExamPolicy> {
-    return this.examsRepo.createPolicy({ id: generateId(), school_id: schoolId, ...dto, passing_marks: dto.passing_marks?.toString(), total_marks: dto.total_marks?.toString() });
+    return this.examsRepo.createPolicy({
+      id: generateId(), school_id: schoolId, ...dto,
+      passing_marks: dto.passing_marks?.toString(),
+      total_marks: dto.total_marks?.toString(),
+      marking_system: dto.marking_system as 'MARKS' | 'GRADES' | 'PERCENTAGE' | undefined,
+    });
   }
 
   async updatePolicy(id: string, schoolId: string, dto: Partial<CreateExamPolicyDto>): Promise<ExamPolicy> {
     await this.findPolicyById(id, schoolId);
-    return this.examsRepo.updatePolicy(id, schoolId, { ...dto, passing_marks: dto.passing_marks?.toString(), total_marks: dto.total_marks?.toString() });
+    return this.examsRepo.updatePolicy(id, schoolId, {
+      ...dto,
+      passing_marks: dto.passing_marks?.toString(),
+      total_marks: dto.total_marks?.toString(),
+      marking_system: dto.marking_system as 'MARKS' | 'GRADES' | 'PERCENTAGE' | undefined,
+    });
   }
 
   async deletePolicy(id: string, schoolId: string): Promise<void> {
@@ -213,6 +223,10 @@ export class ExamsService {
 
   async getStudentAdmitCard(examId: string, studentId: string, schoolId: string): Promise<AdmitCard | null> {
     return (await this.examsRepo.findAdmitCardByStudent(examId, studentId, schoolId)) ?? null;
+  }
+
+  async getClassAdmitCards(examId: string, classSectionId: string, schoolId: string): Promise<AdmitCard[]> {
+    return this.examsRepo.findAdmitCardsByClass(examId, classSectionId, schoolId);
   }
 
   async previewAdmitCard(examId: string, studentId: string, schoolId: string): Promise<string> {

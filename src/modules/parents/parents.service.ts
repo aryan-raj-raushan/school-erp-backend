@@ -82,7 +82,7 @@ export class ParentsService {
     const sheet = workbook.addWorksheet('Parent Import');
     sheet.columns = TEMPLATE_HEADERS.map((h) => ({ header: h, key: h, width: 20 }));
     sheet.addRow({ first_name: 'Rakesh', last_name: 'Sharma', dial_code: '+91', phone_number: '9876543210', email: 'rakesh@example.com', occupation: 'Engineer' });
-    return workbook.xlsx.writeBuffer() as Promise<Buffer>;
+    return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
   async bulkImport(fileBuffer: Buffer, schoolId: string, createdBy: string): Promise<{ jobId: string }> {
@@ -106,7 +106,7 @@ export class ParentsService {
 
     try {
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(fileBuffer);
+      await workbook.xlsx.load(fileBuffer as unknown as ExcelJS.Buffer);
       const sheet = workbook.getWorksheet(1);
       if (!sheet) {
         await this.redisService.setex(jobKey, BULK_JOB_TTL, JSON.stringify({ jobId, status: 'FAILED', errors: ['No worksheet found'] }));
