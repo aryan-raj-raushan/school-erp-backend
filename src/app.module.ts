@@ -20,6 +20,17 @@ import { PromotionsModule } from './modules/promotions/promotions.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { LoadTestModule } from './modules/load-test/load-test.module';
+import { HolidaysModule } from './modules/holidays/holidays.module';
+import { StaffModule } from './modules/staff/staff.module';
+import { ParentsModule } from './modules/parents/parents.module';
+import { AttendanceModule } from './modules/attendance/attendance.module';
+import { FeesModule } from './modules/fees/fees.module';
+import { ExamsModule } from './modules/exams/exams.module';
+import { AcademicsModule } from './modules/academics/academics.module';
+import { LeaveModule } from './modules/leave/leave.module';
+import { CommunicationsModule } from './modules/communications/communications.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ExportsModule } from './modules/exports/exports.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -52,6 +63,17 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
     UploadsModule,
     SchedulerModule,
     LoadTestModule,
+    HolidaysModule,
+    StaffModule,
+    ParentsModule,
+    AttendanceModule,
+    FeesModule,
+    ExamsModule,
+    AcademicsModule,
+    LeaveModule,
+    CommunicationsModule,
+    DashboardModule,
+    ExportsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

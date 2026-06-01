@@ -3,3 +3,7 @@ export * from './status.enum';
 export * from './gender.enum';
 export * from './subscription-plan.enum';
 export * from './document-type.enum';
+export * from './holiday-type.enum';
+export * from './attendance-status.enum';
+export * from './fee-status.enum';
+export * from './leave-status.enum';
