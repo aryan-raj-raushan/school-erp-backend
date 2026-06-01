@@ -134,7 +134,7 @@ export class StaffService {
       date_of_birth: '1990-05-15',
     });
 
-    return workbook.xlsx.writeBuffer() as Promise<Buffer>;
+    return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
   async bulkImport(fileBuffer: Buffer, schoolId: string, createdBy: string): Promise<{ jobId: string }> {
@@ -190,7 +190,7 @@ export class StaffService {
 
     try {
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(fileBuffer);
+      await workbook.xlsx.load(fileBuffer as unknown as ExcelJS.Buffer);
       const sheet = workbook.getWorksheet(1);
 
       if (!sheet) {

@@ -4,7 +4,7 @@ import { academicYears } from './academic-years.schema';
 import { students } from './students.schema';
 
 export const examStatusEnum = pgEnum('exam_status', ['DRAFT', 'PUBLISHED', 'ONGOING', 'COMPLETED', 'CANCELLED']);
-export const markingSystemEnum = pgEnum('exam_marking_system', ['MARKS', 'GRADES', 'PERCENTAGE']);
+export const examMarkingSystemEnum = pgEnum('exam_marking_system', ['MARKS', 'GRADES', 'PERCENTAGE']);
 
 export const exams = pgTable('exams', {
   id: varchar('id', { length: 36 }).primaryKey(),
@@ -29,7 +29,7 @@ export const examPolicies = pgTable('exam_policies', {
   name: varchar('name', { length: 150 }).notNull(),
   passing_marks: numeric('passing_marks', { precision: 5, scale: 2 }),
   total_marks: numeric('total_marks', { precision: 5, scale: 2 }),
-  marking_system: markingSystemEnum('marking_system').default('MARKS'),
+  marking_system: examMarkingSystemEnum('marking_system').default('MARKS'),
   grace_marks: integer('grace_marks').default(0),
   rules: jsonb('rules'),
   deleted: boolean('deleted').default(false).notNull(),

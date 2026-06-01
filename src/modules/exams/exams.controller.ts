@@ -224,7 +224,7 @@ export class AdmitCardsController {
   }
   @Get('class') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL) @ApiOperation({ summary: 'Get class admit cards' }) @ApiQuery({ name: 'exam_id', required: true }) @ApiQuery({ name: 'class_section_id', required: true })
   async getClass(@GetSchoolId() schoolId: string, @Query('exam_id') examId: string, @Query('class_section_id') classSectionId: string) {
-    return ApiResponse.success(await this.examsService.examsRepo?.findAdmitCardsByClass?.(examId, classSectionId, schoolId) ?? [], 'Class admit cards fetched');
+    return ApiResponse.success(await this.examsService.getClassAdmitCards(examId, classSectionId, schoolId), 'Class admit cards fetched');
   }
 }
 
