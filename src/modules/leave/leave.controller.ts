@@ -1,0 +1,150 @@
+import {
+  Controller, Get, Post, Put, Body, Param, Query,
+  ParseUUIDPipe, HttpCode, HttpStatus,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { IsArray, IsUUID } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { LeaveService } from './leave.service';
+import { CreateLeavePolicyDto, UpdateLeavePolicyDto, UpdateLeaveTypeDto, ApplyTeacherLeaveDto, ReviewLeaveDto, ApplyStudentLeaveDto } from './dto/leave.dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { GetSchoolId } from '../../common/decorators/school-id.decorator';
+import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { ApiResponse } from '../../shared/responses/api-response';
+import { SchoolRole } from '../../shared/enums';
+
+class ProvisionDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  staff_ids: string[];
+
+  @ApiProperty()
+  @IsUUID()
+  academic_year_id: string;
+}
+
+const ADMIN = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
+
+@ApiTags('Leave Policies')
+@ApiBearerAuth('access-token')
+@Controller('leave/policies')
+export class LeavePoliciesController {
+  constructor(private readonly leaveService: LeaveService) {}
+
+  @Post() @Roles(...ADMIN) @HttpCode(HttpStatus.CREATED) @ApiOperation({ summary: 'Create leave policy with leave types' })
+  async create(@Body() dto: CreateLeavePolicyDto, @GetSchoolId() schoolId: string) {
+    return ApiResponse.created(await this.leaveService.createPolicy(dto, schoolId), 'Leave policy created');
+  }
+
+  @Get() @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER, SchoolRole.ACCOUNTANT) @ApiOperation({ summary: 'List all leave policies' })
+  async findAll(@GetSchoolId() schoolId: string) {
+    return ApiResponse.success(await this.leaveService.findAllPolicies(schoolId), 'Policies fetched');
+  }
+
+  @Get(':policyId') @Roles(...ADMIN) @ApiOperation({ summary: 'Get leave policy by ID (with types)' })
+  async findOne(@Param('policyId', ParseUUIDPipe) policyId: string, @GetSchoolId() schoolId: string) {
+    return ApiResponse.success(await this.leaveService.findPolicyById(policyId, schoolId), 'Policy fetched');
+  }
+
+  @Put(':policyId') @Roles(...ADMIN) @ApiOperation({ summary: 'Update leave policy metadata' })
+  async update(@Param('policyId', ParseUUIDPipe) policyId: string, @GetSchoolId() schoolId: string, @Body() dto: UpdateLeavePolicyDto) {
+    return ApiResponse.success(await this.leaveService.updatePolicy(policyId, schoolId, dto), 'Policy updated');
+  }
+
+  @Put('types/:leaveTypeId') @Roles(...ADMIN) @ApiOperation({ summary: 'Update a leave type under a policy' })
+  async updateType(@Param('leaveTypeId', ParseUUIDPipe) leaveTypeId: string, @GetSchoolId() schoolId: string, @Body() dto: UpdateLeaveTypeDto) {
+    return ApiResponse.success(await this.leaveService.updateLeaveType(leaveTypeId, schoolId, dto), 'Leave type updated');
+  }
+
+  @Post(':policyId/provision') @Roles(...ADMIN) @HttpCode(HttpStatus.CREATED) @ApiOperation({ summary: 'Provision leave balances for all staff' })
+  async provision(@Param('policyId', ParseUUIDPipe) policyId: string, @GetSchoolId() schoolId: string, @Body() dto: ProvisionDto) {
+    return ApiResponse.created(await this.leaveService.provisionLeaveBalances(policyId, schoolId, dto.staff_ids, dto.academic_year_id), 'Leave balances provisioned');
+  }
+}
+
+@ApiTags('Teacher Leave')
+@ApiBearerAuth('access-token')
+@Controller('leave/teacher')
+export class TeacherLeaveController {
+  constructor(private readonly leaveService: LeaveService) {}
+
+  @Post('apply') @Roles(SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER, SchoolRole.VICE_PRINCIPAL, SchoolRole.ACCOUNTANT, SchoolRole.LIBRARIAN) @HttpCode(HttpStatus.CREATED) @ApiOperation({ summary: 'Teacher: Apply for leave' })
+  async apply(@Body() dto: ApplyTeacherLeaveDto, @GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
+    return ApiResponse.created(await this.leaveService.applyTeacherLeave(dto, schoolId, userId), 'Leave applied');
+  }
+
+  @Get('my-requests') @Roles(SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER, SchoolRole.VICE_PRINCIPAL, SchoolRole.ACCOUNTANT, SchoolRole.LIBRARIAN, SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL) @ApiOperation({ summary: 'Teacher: Own leave request history' })
+  async myRequests(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
+    return ApiResponse.success(await this.leaveService.getMyTeacherRequests(schoolId, userId), 'Requests fetched');
+  }
+
+  @Get('my-summary') @Roles(SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER, SchoolRole.VICE_PRINCIPAL, SchoolRole.ACCOUNTANT, SchoolRole.LIBRARIAN, SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL) @ApiOperation({ summary: 'Teacher: Own leave balance summary' }) @ApiQuery({ name: 'academic_year_id', required: true })
+  async mySummary(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string, @Query('academic_year_id') ayId: string) {
+    return ApiResponse.success(await this.leaveService.getMyTeacherSummary(schoolId, userId, ayId), 'Summary fetched');
+  }
+
+  @Get('all') @Roles(...[SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL]) @ApiOperation({ summary: 'Owner/Admin: All teacher leave requests' })
+  async allRequests(@GetSchoolId() schoolId: string) {
+    return ApiResponse.success(await this.leaveService.getAllTeacherRequests(schoolId), 'All requests fetched');
+  }
+
+  @Get('staff-summary') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL) @ApiOperation({ summary: 'Owner/Admin: Leave summary for all staff' }) @ApiQuery({ name: 'academic_year_id', required: true })
+  async staffSummary(@GetSchoolId() schoolId: string, @Query('academic_year_id') ayId: string) {
+    return ApiResponse.success(await this.leaveService.getStaffSummary(schoolId, ayId), 'Staff summary fetched');
+  }
+
+  @Put('review/:requestId') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL) @ApiOperation({ summary: 'Owner/Admin: Approve / reject teacher leave' })
+  async review(@Param('requestId', ParseUUIDPipe) requestId: string, @GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string, @Body() dto: ReviewLeaveDto) {
+    return ApiResponse.success(await this.leaveService.reviewTeacherLeave(requestId, schoolId, userId, dto), 'Request reviewed');
+  }
+
+  @Get(':requestId') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER) @ApiOperation({ summary: 'Get single teacher leave request by ID' })
+  async findOne(@Param('requestId', ParseUUIDPipe) requestId: string, @GetSchoolId() schoolId: string) {
+    return ApiResponse.success(await this.leaveService.getTeacherRequestById(requestId, schoolId), 'Request fetched');
+  }
+}
+
+@ApiTags('Student Leave')
+@ApiBearerAuth('access-token')
+@Controller('leave/student')
+export class StudentLeaveController {
+  constructor(private readonly leaveService: LeaveService) {}
+
+  @Get('all') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.CLASS_TEACHER, SchoolRole.TEACHER) @ApiOperation({ summary: 'List student leave requests' })
+  async findAll(@GetSchoolId() schoolId: string) {
+    return ApiResponse.success(await this.leaveService.getAllStudentRequests(schoolId), 'Requests fetched');
+  }
+
+  @Put('review/:requestId') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.CLASS_TEACHER) @ApiOperation({ summary: 'Approve / reject student leave' })
+  async review(@Param('requestId', ParseUUIDPipe) requestId: string, @GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string, @Body() dto: ReviewLeaveDto) {
+    return ApiResponse.success(await this.leaveService.reviewStudentLeave(requestId, schoolId, userId, dto), 'Request reviewed');
+  }
+
+  @Get(':requestId') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.CLASS_TEACHER, SchoolRole.TEACHER) @ApiOperation({ summary: 'Get single student leave request by ID' })
+  async findOne(@Param('requestId', ParseUUIDPipe) requestId: string, @GetSchoolId() schoolId: string) {
+    return ApiResponse.success(await this.leaveService.getStudentRequestById(requestId, schoolId), 'Request fetched');
+  }
+}
+
+@ApiTags('Parent Leave')
+@ApiBearerAuth('access-token')
+@Controller('leave/parent')
+export class ParentLeaveController {
+  constructor(private readonly leaveService: LeaveService) {}
+
+  @Post('apply') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.CLASS_TEACHER) @HttpCode(HttpStatus.CREATED) @ApiOperation({ summary: 'Parent: Apply for student leave' })
+  async apply(@Body() dto: ApplyStudentLeaveDto, @GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
+    return ApiResponse.created(await this.leaveService.applyStudentLeave(dto, schoolId, userId), 'Leave applied');
+  }
+
+  @Get('my-requests') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.CLASS_TEACHER) @ApiOperation({ summary: 'Parent: All leave requests submitted by me' })
+  async myRequests(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
+    return ApiResponse.success(await this.leaveService.getParentRequests(schoolId, userId), 'Requests fetched');
+  }
+
+  @Get('student/:studentId/summary') @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.CLASS_TEACHER, SchoolRole.TEACHER) @ApiOperation({ summary: 'Parent: Leave summary for a student' })
+  async studentSummary(@Param('studentId', ParseUUIDPipe) studentId: string, @GetSchoolId() schoolId: string) {
+    return ApiResponse.success(await this.leaveService.getStudentLeaveBalanceSummary(studentId, schoolId), 'Summary fetched');
+  }
+}
