@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, varchar, boolean, timestamp, date } from 'drizzle-orm/pg-core';
+import { pgTable, pgEnum, varchar, timestamp, date, unique } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 import { students } from './students.schema';
 import { academicYears } from './academic-years.schema';
@@ -23,4 +23,6 @@ export const attendances = pgTable('attendances', {
   marked_by: varchar('marked_by', { length: 36 }).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),
-});
+}, (t) => ({
+  uniqueStudentDate: unique('attendances_student_date_unique').on(t.student_id, t.date),
+}));
