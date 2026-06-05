@@ -31,6 +31,8 @@ import { LeaveModule } from './modules/leave/leave.module';
 import { CommunicationsModule } from './modules/communications/communications.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ExportsModule } from './modules/exports/exports.module';
+import { MasterDataModule } from './modules/master-data/master-data.module';
+import { ClassSubjectsModule } from './modules/class-subjects/class-subjects.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -74,6 +76,8 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
     CommunicationsModule,
     DashboardModule,
     ExportsModule,
+    MasterDataModule,
+    ClassSubjectsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

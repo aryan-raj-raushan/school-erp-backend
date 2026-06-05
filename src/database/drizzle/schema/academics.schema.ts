@@ -1,4 +1,4 @@
-import { pgTable, pgEnum, varchar, boolean, timestamp, date, text } from 'drizzle-orm/pg-core';
+import { pgTable, pgEnum, varchar, boolean, timestamp, date, text, unique } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 import { students } from './students.schema';
 import { academicYears } from './academic-years.schema';
@@ -33,7 +33,9 @@ export const homeworkSubmissions = pgTable('homework_submissions', {
   graded_at: timestamp('graded_at', { withTimezone: true }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),
-});
+}, (t) => ({
+  uniqueHwStudent: unique('hw_submissions_hw_student').on(t.homework_id, t.student_id),
+}));
 
 export const studyMaterials = pgTable('study_materials', {
   id: varchar('id', { length: 36 }).primaryKey(),

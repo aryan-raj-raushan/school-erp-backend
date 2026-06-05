@@ -20,4 +20,6 @@ export * from './exams.schema';
 export * from './academics.schema';
 export * from './leave.schema';
 export * from './communications.schema';
+export * from './master-subjects.schema';
+export * from './class-section-subjects.schema';
 export * from './relations';

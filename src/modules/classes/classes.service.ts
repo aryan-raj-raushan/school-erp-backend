@@ -6,7 +6,7 @@ import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { ClassFilterDto } from './dto/class-filter.dto';
-import { Class } from './types/class.types';
+import { Class, ClassSectionView } from './types/class.types';
 
 const CACHE_TTL = 300;
 
@@ -21,10 +21,7 @@ export class ClassesService {
     return `classes:${schoolId}:${academicYearId ?? 'all'}`;
   }
 
-  async findAll(
-    schoolId: string,
-    filters: ClassFilterDto,
-  ): Promise<PaginationResponse<Class>> {
+  async findAll(schoolId: string, filters: ClassFilterDto): Promise<PaginationResponse<ClassSectionView>> {
     const key = `${this.cacheKey(schoolId, filters.academic_year_id)}:list:${filters.page ?? 1}:${filters.limit ?? 20}`;
     return this.redisService.getOrSet(key, CACHE_TTL, async () => {
       const [items, total] = await Promise.all([
@@ -35,46 +32,33 @@ export class ClassesService {
     });
   }
 
-  async findById(id: string, schoolId: string): Promise<Class> {
+  async findById(id: string, schoolId: string): Promise<ClassSectionView> {
     const key = `classes:${schoolId}:${id}`;
     return this.redisService.getOrSet(key, CACHE_TTL, async () => {
       const cls = await this.classesRepo.findById(id, schoolId);
-      if (!cls) {
-        throw new NotFoundException(`Class with id '${id}' not found`);
-      }
+      if (!cls) throw new NotFoundException(`Class with id '${id}' not found`);
       return cls;
     });
   }
 
-  async create(
-    dto: CreateClassDto,
-    schoolId: string,
-    createdBy: string,
-  ): Promise<Class> {
-    const cls = await this.classesRepo.create({
-      id: generateId(),
-      school_id: schoolId,
-      created_by: createdBy,
-      ...dto,
-    });
+  async create(dto: CreateClassDto, schoolId: string, createdBy: string): Promise<Class> {
+    const cls = await this.classesRepo.create({ id: generateId(), school_id: schoolId, created_by: createdBy, ...dto });
     await this.redisService.delByPattern(`classes:${schoolId}:*`);
     return cls;
   }
 
-  async update(
-    id: string,
-    schoolId: string,
-    dto: UpdateClassDto,
-  ): Promise<Class> {
-    await this.findById(id, schoolId);
-    const updated = await this.classesRepo.update(id, schoolId, dto);
+  async update(id: string, schoolId: string, dto: UpdateClassDto): Promise<Class> {
+    const existing = await this.classesRepo.findById(id, schoolId);
+    if (!existing) throw new NotFoundException(`Class with id '${id}' not found`);
+    const updated = await this.classesRepo.update(existing.class_id, schoolId, dto);
     await this.redisService.delByPattern(`classes:${schoolId}:*`);
     return updated;
   }
 
   async remove(id: string, schoolId: string): Promise<void> {
-    await this.findById(id, schoolId);
-    await this.classesRepo.softDelete(id, schoolId);
+    const existing = await this.classesRepo.findById(id, schoolId);
+    if (!existing) throw new NotFoundException(`Class with id '${id}' not found`);
+    await this.classesRepo.softDelete(existing.class_id, schoolId);
     await this.redisService.delByPattern(`classes:${schoolId}:*`);
   }
 }

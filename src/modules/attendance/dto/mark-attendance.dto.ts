@@ -7,11 +7,16 @@ import {
   IsArray,
   ValidateNested,
   IsUUID,
+  IsBoolean,
   MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AttendanceStatus } from '../../../shared/enums';
+
+export enum MarkAttendanceStatus {
+  PRESENT = 'PRESENT',
+  ABSENT = 'ABSENT',
+}
 
 export class AttendanceEntryDto {
   @ApiProperty()
@@ -19,10 +24,15 @@ export class AttendanceEntryDto {
   @IsNotEmpty()
   student_id: string;
 
-  @ApiProperty({ enum: AttendanceStatus })
-  @IsEnum(AttendanceStatus)
+  @ApiProperty({ enum: MarkAttendanceStatus, description: 'Only PRESENT or ABSENT accepted' })
+  @IsEnum(MarkAttendanceStatus)
   @IsNotEmpty()
-  status: AttendanceStatus;
+  status: MarkAttendanceStatus;
+
+  @ApiPropertyOptional({ default: false, description: 'Mark student as late (used with PRESENT)' })
+  @IsOptional()
+  @IsBoolean()
+  is_late?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

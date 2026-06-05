@@ -106,7 +106,7 @@ export class AttendanceController {
     @Query() filters: StudentAttendanceFilterDto,
   ) {
     const data = await this.attendanceService.getStudentHistory(studentId, schoolId, filters);
-    return ApiResponse.success(data.items, 'Student attendance fetched successfully', data.meta);
+    return ApiResponse.success({ records: data.items, stats: data.stats }, 'Student attendance fetched successfully', data.meta);
   }
 
   @Get('students/:studentId/summary')

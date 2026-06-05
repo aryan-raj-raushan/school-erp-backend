@@ -3,6 +3,10 @@ import { eq, and, sql } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { homeworks, homeworkSubmissions, studyMaterials } from '../../database/drizzle/schema/academics.schema';
+import { sections } from '../../database/drizzle/schema/sections.schema';
+import { classes } from '../../database/drizzle/schema/classes.schema';
+import { subjects } from '../../database/drizzle/schema/subjects.schema';
+import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
 import { Homework, NewHomework, HomeworkSubmission, NewHomeworkSubmission, StudyMaterial, NewStudyMaterial } from './types/academic.types';
 
 @Injectable()
@@ -10,12 +14,39 @@ export class AcademicsRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
   // Homework
-  async findAllHomework(schoolId: string, filters: { class_section_id?: string; subject_id?: string; academic_year_id?: string }): Promise<Homework[]> {
+  async findAllHomework(schoolId: string, filters: { class_section_id?: string; subject_id?: string; academic_year_id?: string }) {
     const conditions = [eq(homeworks.school_id, schoolId), eq(homeworks.deleted, false)];
     if (filters.class_section_id) conditions.push(eq(homeworks.class_section_id, filters.class_section_id));
     if (filters.subject_id) conditions.push(eq(homeworks.subject_id, filters.subject_id));
     if (filters.academic_year_id) conditions.push(eq(homeworks.academic_year_id, filters.academic_year_id));
-    return this.db.select().from(homeworks).where(and(...conditions)).orderBy(homeworks.due_date);
+
+    return this.db
+      .select({
+        id: homeworks.id,
+        school_id: homeworks.school_id,
+        academic_year_id: homeworks.academic_year_id,
+        class_section_id: homeworks.class_section_id,
+        subject_id: homeworks.subject_id,
+        title: homeworks.title,
+        description: homeworks.description,
+        due_date: homeworks.due_date,
+        assigned_by: homeworks.assigned_by,
+        attachment_url: homeworks.attachment_url,
+        deleted: homeworks.deleted,
+        created_at: homeworks.created_at,
+        updated_at: homeworks.updated_at,
+        class_section_name: sql<string | null>`CASE WHEN ${sections.id} IS NOT NULL THEN concat(${classes.name}, ' ', ${sections.name}) ELSE NULL END`,
+        subject_name: subjects.name,
+        created_by_name: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
+        subject_teacher: sql<string | null>`NULL`,
+      })
+      .from(homeworks)
+      .leftJoin(sections, eq(homeworks.class_section_id, sections.id))
+      .leftJoin(classes, eq(sections.class_id, classes.id))
+      .leftJoin(subjects, eq(homeworks.subject_id, subjects.id))
+      .leftJoin(schoolUsers, eq(homeworks.assigned_by, schoolUsers.id))
+      .where(and(...conditions))
+      .orderBy(homeworks.due_date);
   }
 
   async findHomeworkById(id: string, schoolId: string): Promise<Homework | undefined> {
