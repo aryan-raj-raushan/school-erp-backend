@@ -1,7 +1,7 @@
 import { pgTable, varchar, boolean, timestamp, unique } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 import { sections } from './sections.schema';
-import { subjects } from './subjects.schema';
+import { masterSubjects } from './master-subjects.schema';
 import { academicYears } from './academic-years.schema';
 
 export const classSectionSubjects = pgTable('class_section_subjects', {
@@ -14,7 +14,7 @@ export const classSectionSubjects = pgTable('class_section_subjects', {
     .references(() => sections.id, { onDelete: 'cascade' }),
   subject_id: varchar('subject_id', { length: 36 })
     .notNull()
-    .references(() => subjects.id, { onDelete: 'cascade' }),
+    .references(() => masterSubjects.id, { onDelete: 'cascade' }),
   academic_year_id: varchar('academic_year_id', { length: 36 })
     .notNull()
     .references(() => academicYears.id, { onDelete: 'cascade' }),

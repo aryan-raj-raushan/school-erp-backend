@@ -3,7 +3,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { classSectionSubjects } from '../../database/drizzle/schema/class-section-subjects.schema';
-import { subjects } from '../../database/drizzle/schema/subjects.schema';
+import { masterSubjects } from '../../database/drizzle/schema/master-subjects.schema';
 import { ClassSectionSubject, NewClassSectionSubject } from './types/class-subject.types';
 import { ClassSubjectFilterDto } from './dto/class-subject-filter.dto';
 
@@ -28,16 +28,16 @@ export class ClassSubjectsRepository {
         id: classSectionSubjects.id,
         class_section_id: classSectionSubjects.class_section_id,
         subject_id: classSectionSubjects.subject_id,
-        subject_name: subjects.name,
-        subject_code: subjects.code,
+        subject_name: masterSubjects.name,
+        subject_code: masterSubjects.code,
         academic_year_id: classSectionSubjects.academic_year_id,
         is_teaching_subject: classSectionSubjects.is_teaching_subject,
         created_at: classSectionSubjects.created_at,
       })
       .from(classSectionSubjects)
-      .innerJoin(subjects, eq(classSectionSubjects.subject_id, subjects.id))
+      .innerJoin(masterSubjects, eq(classSectionSubjects.subject_id, masterSubjects.id))
       .where(and(...conditions))
-      .orderBy(subjects.name)
+      .orderBy(masterSubjects.name)
       .limit(limit)
       .offset(offset);
   }
