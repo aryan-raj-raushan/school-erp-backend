@@ -56,9 +56,8 @@ export class ClassesService {
   }
 
   async remove(id: string, schoolId: string): Promise<void> {
-    const existing = await this.classesRepo.findById(id, schoolId);
-    if (!existing) throw new NotFoundException(`Class with id '${id}' not found`);
-    await this.classesRepo.softDelete(existing.class_id, schoolId);
+    // id is class UUID (frontend passes class_id directly after normalization)
+    await this.classesRepo.softDelete(id, schoolId);
     await this.redisService.delByPattern(`classes:${schoolId}:*`);
   }
 }

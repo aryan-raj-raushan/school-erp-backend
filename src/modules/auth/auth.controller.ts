@@ -98,9 +98,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current authenticated user profile' })
   async getMe(
     @GetCurrentUserId() userId: string,
-    @GetCurrentUser() user: { context: AuthContext },
+    @GetCurrentUser() user: { context: AuthContext; role: string },
   ) {
-    const profile = await this.authService.getMe(userId, user.context);
+    const profile = await this.authService.getMe(userId, user.context, user.role);
     return ApiResponse.success(profile);
   }
 }

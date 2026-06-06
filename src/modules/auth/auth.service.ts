@@ -164,8 +164,8 @@ export class AuthService {
     }
   }
 
-  async getMe(userId: string, context: AuthContext) {
-    if (context === AuthContext.COMPANY) {
+  async getMe(userId: string, context: AuthContext, role?: string) {
+    if (context === AuthContext.COMPANY || role === CompanyRole.SUPER_ADMIN) {
       const user = await this.authRepo.findCompanyUserProfile(userId);
       if (!user) throw new NotFoundException('User not found');
       return user;
