@@ -44,6 +44,7 @@ import { ResponseTransformInterceptor } from './common/interceptors/response-tra
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
+import { SchoolEventsModule } from '@modules/school-events/school-events.module';
 
 @Module({
   imports: [
@@ -86,6 +87,7 @@ import { TenantMiddleware } from './common/middleware/tenant.middleware';
     SyllabiModule,
     DepartmentsModule,
     ClassTypesModule,
+    SchoolEventsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
