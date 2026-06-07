@@ -32,7 +32,7 @@ export class ClassesService {
     });
   }
 
-  async findById(id: string, schoolId: string): Promise<ClassSectionView> {
+  async findById(id: string, schoolId: string): Promise<Class> {
     const key = `classes:${schoolId}:${id}`;
     return this.redisService.getOrSet(key, CACHE_TTL, async () => {
       const cls = await this.classesRepo.findById(id, schoolId);
@@ -48,9 +48,8 @@ export class ClassesService {
   }
 
   async update(id: string, schoolId: string, dto: UpdateClassDto): Promise<Class> {
-    const existing = await this.classesRepo.findById(id, schoolId);
-    if (!existing) throw new NotFoundException(`Class with id '${id}' not found`);
-    const updated = await this.classesRepo.update(existing.class_id, schoolId, dto);
+    const updated = await this.classesRepo.update(id, schoolId, dto);
+    if (!updated) throw new NotFoundException(`Class with id '${id}' not found`);
     await this.redisService.delByPattern(`classes:${schoolId}:*`);
     return updated;
   }

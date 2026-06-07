@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthRepository } from './auth.repository';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
+import { SchoolsRepository } from '../schools/schools.repository';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
     JwtModule.register({}),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthRepository, JwtStrategy, JwtRefreshStrategy],
+  providers: [AuthService, AuthRepository, SchoolsRepository, JwtStrategy, JwtRefreshStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

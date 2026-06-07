@@ -16,9 +16,9 @@ export const drizzleProvider = {
     const pool = new Pool({
       connectionString,
       ssl: { rejectUnauthorized: false },
-      min: dbConfig.poolMin ?? 2,
-      max: dbConfig.poolMax ?? 20,
-      idleTimeoutMillis: 30000,
+      min: 0,                        // no persistent idle conns — Neon kills them on suspend
+      max: dbConfig.poolMax ?? 10,
+      idleTimeoutMillis: 10000,      // release idle connections before Neon does
       connectionTimeoutMillis: 10000,
     });
 

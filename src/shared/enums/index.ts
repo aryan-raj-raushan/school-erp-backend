@@ -7,3 +7,4 @@ export * from './holiday-type.enum';
 export * from './attendance-status.enum';
 export * from './fee-status.enum';
 export * from './leave-status.enum';
+export * from './timetable-session-type.enum';

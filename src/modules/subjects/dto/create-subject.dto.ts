@@ -4,8 +4,10 @@ import {
   IsOptional,
   IsUUID,
   IsBoolean,
+  IsInt,
   Matches,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -28,13 +30,38 @@ export class CreateSubjectDto {
   @Transform(({ value }) => StringUtils.trim(value)?.toUpperCase())
   code?: string;
 
-  @ApiPropertyOptional({
-    example: 'uuid-of-class',
-    description: 'Null means school-wide subject',
-  })
+  @ApiPropertyOptional({ example: 'uuid-of-class', description: 'Null means school-wide subject' })
   @IsOptional()
   @IsUUID()
   class_id?: string;
+
+  @ApiPropertyOptional({ example: 'uuid-of-timetable-session' })
+  @IsOptional()
+  @IsUUID()
+  timetable_session_id?: string;
+
+  @ApiPropertyOptional({ example: 'uuid-of-class-detail', description: 'Links to a specific year/semester' })
+  @IsOptional()
+  @IsUUID()
+  class_detail_id?: string;
+
+  @ApiPropertyOptional({ example: 0, description: 'Display order in subject list' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  display_order?: number;
+
+  @ApiPropertyOptional({ example: 100, description: 'Total marks for the subject' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  total_marks?: number;
+
+  @ApiPropertyOptional({ example: 35, description: 'Passing marks for the subject' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  passing_marks?: number;
 
   @ApiPropertyOptional({ example: 'Core mathematics curriculum', maxLength: 300 })
   @IsOptional()
@@ -47,4 +74,9 @@ export class CreateSubjectDto {
   @IsOptional()
   @IsBoolean()
   is_elective?: boolean;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }

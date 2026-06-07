@@ -57,6 +57,7 @@ export class SubjectsService {
       created_by: createdBy,
       ...dto,
       is_elective: dto.is_elective ?? false,
+      is_active: dto.is_active ?? true,
     });
     await this.redisService.delByPattern(`subjects:${schoolId}:*`);
     return subject;

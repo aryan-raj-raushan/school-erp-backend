@@ -12,106 +12,86 @@ import { ClassFilterDto } from './dto/class-filter.dto';
 export class ClassesRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
-  async findAll(schoolId: string, filters: ClassFilterDto): Promise<ClassSectionView[]> {
+  private buildConditions(schoolId: string, filters: Partial<ClassFilterDto> = {}) {
     const conditions = [
       eq(sections.school_id, schoolId),
       eq(sections.deleted, false),
       eq(classes.deleted, false),
     ];
+    if (filters.academic_year_id) conditions.push(eq(classes.academic_year_id, filters.academic_year_id));
+    if (filters.timetable_session_id) conditions.push(eq(classes.timetable_session_id, filters.timetable_session_id));
+    if (filters.department) conditions.push(eq(classes.department, filters.department));
+    if (filters.class_type) conditions.push(eq(classes.class_type, filters.class_type));
+    return conditions;
+  }
 
-    if (filters.academic_year_id) {
-      conditions.push(eq(classes.academic_year_id, filters.academic_year_id));
-    }
+  private classSelect() {
+    return {
+      id: sections.id,
+      class_id: sections.class_id,
+      class_name: classes.name,
+      section_name: sections.name,
+      timetable_session_id: classes.timetable_session_id,
+      department: classes.department,
+      class_type: classes.class_type,
+      class_sequence: classes.class_sequence,
+      no_of_sessions: classes.no_of_sessions,
+      class_code: classes.class_code,
+      default_sections: classes.default_sections,
+      numeric_value: classes.numeric_value,
+      school_id: sections.school_id,
+      academic_year_id: classes.academic_year_id,
+      class_teacher_id: sections.class_teacher_id,
+      class_teacher_name: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
+      room_number: sections.room_number,
+      student_capacity: sections.max_strength,
+      is_active: sections.is_active,
+      deleted: sections.deleted,
+      created_at: sections.created_at,
+      updated_at: sections.updated_at,
+    };
+  }
 
+  async findAll(schoolId: string, filters: ClassFilterDto): Promise<ClassSectionView[]> {
     const limit = filters.limit ?? 20;
     const offset = ((filters.page ?? 1) - 1) * limit;
 
     const rows = await this.db
-      .select({
-        id: sections.id,
-        class_id: sections.class_id,
-        class_name: classes.name,
-        section_name: sections.name,
-        numeric_value: classes.numeric_value,
-        school_id: sections.school_id,
-        academic_year_id: classes.academic_year_id,
-        class_teacher_id: sections.class_teacher_id,
-        class_teacher_name: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
-        room_number: sections.room_number,
-        student_capacity: sections.max_strength,
-        is_active: sections.is_active,
-        deleted: sections.deleted,
-        created_at: sections.created_at,
-        updated_at: sections.updated_at,
-      })
+      .select(this.classSelect())
       .from(sections)
       .innerJoin(classes, eq(sections.class_id, classes.id))
       .leftJoin(schoolUsers, eq(sections.class_teacher_id, schoolUsers.id))
-      .where(and(...conditions))
-      .orderBy(classes.numeric_value, sections.name)
+      .where(and(...this.buildConditions(schoolId, filters)))
+      .orderBy(classes.class_sequence, classes.numeric_value, sections.name)
       .limit(limit)
       .offset(offset);
 
-    return rows.map((r) => ({
-      ...r,
-      display_name: `${r.class_name} ${r.section_name}`,
-    }));
+    return rows.map((r) => ({ ...r, display_name: `${r.class_name} ${r.section_name}` }));
   }
 
   async count(schoolId: string, filters: ClassFilterDto): Promise<number> {
-    const conditions = [
-      eq(sections.school_id, schoolId),
-      eq(sections.deleted, false),
-      eq(classes.deleted, false),
-    ];
-
-    if (filters.academic_year_id) {
-      conditions.push(eq(classes.academic_year_id, filters.academic_year_id));
-    }
-
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(sections)
       .innerJoin(classes, eq(sections.class_id, classes.id))
-      .where(and(...conditions));
+      .where(and(...this.buildConditions(schoolId, filters)));
     return Number(count);
   }
 
-  async findById(id: string, schoolId: string): Promise<ClassSectionView | undefined> {
+  async findById(id: string, schoolId: string): Promise<Class | undefined> {
     const [row] = await this.db
-      .select({
-        id: sections.id,
-        class_id: sections.class_id,
-        class_name: classes.name,
-        section_name: sections.name,
-        numeric_value: classes.numeric_value,
-        school_id: sections.school_id,
-        academic_year_id: classes.academic_year_id,
-        class_teacher_id: sections.class_teacher_id,
-        class_teacher_name: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
-        room_number: sections.room_number,
-        student_capacity: sections.max_strength,
-        is_active: sections.is_active,
-        deleted: sections.deleted,
-        created_at: sections.created_at,
-        updated_at: sections.updated_at,
-      })
-      .from(sections)
-      .innerJoin(classes, eq(sections.class_id, classes.id))
-      .leftJoin(schoolUsers, eq(sections.class_teacher_id, schoolUsers.id))
+      .select()
+      .from(classes)
       .where(
         and(
-          eq(sections.id, id),
-          eq(sections.school_id, schoolId),
-          eq(sections.deleted, false),
+          eq(classes.id, id),
+          eq(classes.school_id, schoolId),
+          eq(classes.deleted, false),
         ),
       );
-
-    if (!row) return undefined;
-    return { ...row, display_name: `${row.class_name} ${row.section_name}` };
+    return row;
   }
 
-  // These remain for internal use by sections module / backward compat
   async create(data: NewClass): Promise<Class> {
     const [row] = await this.db.insert(classes).values(data).returning();
     return row;
@@ -121,12 +101,7 @@ export class ClassesRepository {
     const [row] = await this.db
       .update(classes)
       .set({ ...data, updated_at: new Date() })
-      .where(
-        and(
-          eq(classes.id, id),
-          eq(classes.school_id, schoolId),
-        ),
-      )
+      .where(and(eq(classes.id, id), eq(classes.school_id, schoolId)))
       .returning();
     return row;
   }
@@ -135,11 +110,6 @@ export class ClassesRepository {
     await this.db
       .update(classes)
       .set({ deleted: true, is_active: false, updated_at: new Date() })
-      .where(
-        and(
-          eq(classes.id, id),
-          eq(classes.school_id, schoolId),
-        ),
-      );
+      .where(and(eq(classes.id, id), eq(classes.school_id, schoolId)));
   }
 }

@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsBoolean,
   IsDateString,
+  IsUUID,
   MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
@@ -32,4 +33,27 @@ export class CreateAcademicYearDto {
   @IsOptional()
   @IsBoolean()
   is_current?: boolean;
+
+  @ApiPropertyOptional({ example: 'SY2024', maxLength: 50 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  @Transform(({ value }) => StringUtils.trim(value))
+  session_code?: string;
+
+  @ApiPropertyOptional({ example: 'Annual academic session for 2024-25' })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => StringUtils.trim(value))
+  description?: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  is_enabled?: boolean;
+
+  @ApiPropertyOptional({ example: 'uuid-of-timetable-session', description: 'Link to a timetable session' })
+  @IsOptional()
+  @IsUUID()
+  timetable_session_id?: string;
 }

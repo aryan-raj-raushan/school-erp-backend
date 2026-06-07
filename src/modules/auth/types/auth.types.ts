@@ -17,3 +17,10 @@ export interface LoginResponse {
   refreshToken: string;
   user: AuthUser;
 }
+
+export interface PasswordSetupRequired {
+  needs_password_setup: true;
+  setup_token: string;
+}
+
+export type LoginOrSetupResponse = LoginResponse | PasswordSetupRequired;

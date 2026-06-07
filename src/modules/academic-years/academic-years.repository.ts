@@ -88,6 +88,13 @@ export class AcademicYearsRepository {
     return row;
   }
 
+  async disableAll(schoolId: string): Promise<void> {
+    await this.db
+      .update(academicYears)
+      .set({ is_enabled: false, updated_at: new Date() })
+      .where(eq(academicYears.school_id, schoolId));
+  }
+
   async setCurrent(id: string, schoolId: string): Promise<AcademicYear> {
     await this.db
       .update(academicYears)

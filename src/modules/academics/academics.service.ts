@@ -20,13 +20,17 @@ export class AcademicsService {
 
   // Homework
   async findAllHomework(schoolId: string, filters: any): Promise<Homework[]> {
-    return this.repo.findAllHomework(schoolId, filters);
+    const key = `${this.cacheKey(schoolId)}:hw:list:${JSON.stringify(filters)}`;
+    return this.redisService.getOrSet(key, CACHE_TTL, () => this.repo.findAllHomework(schoolId, filters));
   }
 
   async findHomeworkById(id: string, schoolId: string): Promise<Homework> {
-    const hw = await this.repo.findHomeworkById(id, schoolId);
-    if (!hw) throw new NotFoundException(`Homework with id '${id}' not found`);
-    return hw;
+    const key = `${this.cacheKey(schoolId)}:hw:${id}`;
+    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+      const hw = await this.repo.findHomeworkById(id, schoolId);
+      if (!hw) throw new NotFoundException(`Homework with id '${id}' not found`);
+      return hw;
+    });
   }
 
   async createHomework(dto: CreateHomeworkDto, schoolId: string, assignedBy: string): Promise<Homework> {
@@ -51,11 +55,15 @@ export class AcademicsService {
   // Submissions
   async getSubmissions(homeworkId: string, schoolId: string): Promise<HomeworkSubmission[]> {
     await this.findHomeworkById(homeworkId, schoolId);
-    return this.repo.findSubmissionsByHomework(homeworkId, schoolId);
+    const key = `${this.cacheKey(schoolId)}:hw:${homeworkId}:submissions`;
+    return this.redisService.getOrSet(key, CACHE_TTL, () => this.repo.findSubmissionsByHomework(homeworkId, schoolId));
   }
 
   async getStudentSubmission(homeworkId: string, studentId: string, schoolId: string): Promise<HomeworkSubmission | null> {
-    return (await this.repo.findSubmissionByStudent(homeworkId, studentId, schoolId)) ?? null;
+    const key = `${this.cacheKey(schoolId)}:hw:${homeworkId}:sub:${studentId}`;
+    return this.redisService.getOrSet(key, CACHE_TTL, async () =>
+      (await this.repo.findSubmissionByStudent(homeworkId, studentId, schoolId)) ?? null,
+    );
   }
 
   async bulkMarkSubmissions(homeworkId: string, dto: BulkMarkSubmissionsDto, schoolId: string): Promise<HomeworkSubmission[]> {
@@ -69,24 +77,32 @@ export class AcademicsService {
       });
       results.push(sub);
     }
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:hw:${homeworkId}:sub*`);
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:hw:${homeworkId}:submissions`);
     return results;
   }
 
   async updateStudentSubmission(homeworkId: string, studentId: string, schoolId: string, dto: UpdateSubmissionDto): Promise<HomeworkSubmission> {
     const sub = await this.repo.updateSubmission(homeworkId, studentId, schoolId, { status: dto.status as any, remarks: dto.remarks, submission_url: dto.submission_url });
     if (!sub) throw new NotFoundException('Submission not found');
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:hw:${homeworkId}:sub*`);
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:hw:${homeworkId}:submissions`);
     return sub;
   }
 
   // Study Materials
   async findAllMaterials(schoolId: string, filters: any): Promise<StudyMaterial[]> {
-    return this.repo.findAllMaterials(schoolId, filters);
+    const key = `${this.cacheKey(schoolId)}:mat:list:${JSON.stringify(filters)}`;
+    return this.redisService.getOrSet(key, CACHE_TTL, () => this.repo.findAllMaterials(schoolId, filters));
   }
 
   async findMaterialById(id: string, schoolId: string): Promise<StudyMaterial> {
-    const mat = await this.repo.findMaterialById(id, schoolId);
-    if (!mat) throw new NotFoundException(`Study material with id '${id}' not found`);
-    return mat;
+    const key = `${this.cacheKey(schoolId)}:mat:${id}`;
+    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+      const mat = await this.repo.findMaterialById(id, schoolId);
+      if (!mat) throw new NotFoundException(`Study material with id '${id}' not found`);
+      return mat;
+    });
   }
 
   async createMaterial(dto: CreateStudyMaterialDto, schoolId: string, uploadedBy: string): Promise<StudyMaterial> {

@@ -13,6 +13,13 @@ export interface ClassSectionView {
   class_id: string;
   class_name: string;
   section_name: string;
+  timetable_session_id: string | null;
+  department: string | null;
+  class_type: string | null;
+  class_sequence: number | null;
+  no_of_sessions: number | null;
+  class_code: string | null;
+  default_sections: string | null;
   numeric_value: number | null;
   school_id: string;
   academic_year_id: string;

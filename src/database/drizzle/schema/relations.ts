@@ -13,6 +13,9 @@ import { studentParents } from './student-parents.schema';
 import { subscriptions } from './subscriptions.schema';
 import { subscriptionPayments } from './subscription-payments.schema';
 import { promotionLogs } from './promotion-logs.schema';
+import { timetableSessions } from './timetable-sessions.schema';
+import { classDetails } from './class-details.schema';
+import { syllabi, syllabusAttachments } from './syllabi.schema';
 
 export const schoolsRelations = relations(schools, ({ many }) => ({
   users: many(schoolUsers),
@@ -23,6 +26,7 @@ export const schoolsRelations = relations(schools, ({ many }) => ({
   students: many(students),
   subscriptions: many(subscriptions),
   companyUserSchools: many(companyUserSchools),
+  timetableSessions: many(timetableSessions),
 }));
 
 export const companyUsersRelations = relations(companyUsers, ({ many }) => ({
@@ -43,6 +47,48 @@ export const academicYearsRelations = relations(academicYears, ({ one, many }) =
   school: one(schools, { fields: [academicYears.school_id], references: [schools.id] }),
   classes: many(classes),
   students: many(students),
+  timetableSessions: many(timetableSessions),
+}));
+
+export const timetableSessionsRelations = relations(timetableSessions, ({ one, many }) => ({
+  school: one(schools, { fields: [timetableSessions.school_id], references: [schools.id] }),
+  academicYear: one(academicYears, {
+    fields: [timetableSessions.academic_year_id],
+    references: [academicYears.id],
+  }),
+  classDetails: many(classDetails),
+  subjects: many(subjects),
+  syllabi: many(syllabi),
+}));
+
+export const classDetailsRelations = relations(classDetails, ({ one, many }) => ({
+  school: one(schools, { fields: [classDetails.school_id], references: [schools.id] }),
+  class: one(classes, { fields: [classDetails.class_id], references: [classes.id] }),
+  timetableSession: one(timetableSessions, {
+    fields: [classDetails.timetable_session_id],
+    references: [timetableSessions.id],
+  }),
+  subjects: many(subjects),
+  syllabi: many(syllabi),
+}));
+
+export const syllabiRelations = relations(syllabi, ({ one, many }) => ({
+  school: one(schools, { fields: [syllabi.school_id], references: [schools.id] }),
+  class: one(classes, { fields: [syllabi.class_id], references: [classes.id] }),
+  timetableSession: one(timetableSessions, {
+    fields: [syllabi.timetable_session_id],
+    references: [timetableSessions.id],
+  }),
+  classDetail: one(classDetails, {
+    fields: [syllabi.class_detail_id],
+    references: [classDetails.id],
+  }),
+  attachments: many(syllabusAttachments),
+}));
+
+export const syllabusAttachmentsRelations = relations(syllabusAttachments, ({ one }) => ({
+  syllabus: one(syllabi, { fields: [syllabusAttachments.syllabus_id], references: [syllabi.id] }),
+  school: one(schools, { fields: [syllabusAttachments.school_id], references: [schools.id] }),
 }));
 
 export const classesRelations = relations(classes, ({ one, many }) => ({

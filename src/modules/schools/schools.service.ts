@@ -4,9 +4,11 @@ import {
   ConflictException,
   ForbiddenException,
   Inject,
+  BadRequestException,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { SchoolsRepository } from './schools.repository';
+import { AuthRepository } from '../auth/auth.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
 import { StringUtils } from '../../utils/string.utils';
@@ -27,6 +29,7 @@ const SCHOOLS_TTL = 3600;
 export class SchoolsService {
   constructor(
     private readonly schoolsRepo: SchoolsRepository,
+    private readonly authRepo: AuthRepository,
     private readonly redisService: RedisService,
     @Inject(DRIZZLE_ORM) private readonly db: DrizzleDB,
   ) {}
@@ -88,11 +91,44 @@ export class SchoolsService {
       if (existing) throw new ConflictException(`School with code '${dto.code}' already exists`);
     }
 
+    // Validate admin identifier before creating school
+    if (dto.admin_phone && !dto.admin_first_name) {
+      throw new BadRequestException('admin_first_name is required when admin_phone is provided');
+    }
+    if (dto.admin_email && !dto.admin_phone && !dto.admin_first_name) {
+      throw new BadRequestException('admin_first_name is required when admin_email is provided');
+    }
+
+    const { admin_first_name, admin_last_name, admin_phone, admin_email, admin_dial_code, ...schoolData } = dto;
+
     const school = await this.schoolsRepo.create({
       id: generateId(),
       created_by: createdBy,
-      ...dto,
+      ...schoolData,
     });
+
+    // Auto-create SCHOOL_ADMIN without password if admin contact provided
+    if (admin_phone || admin_email) {
+      const dialCode = admin_dial_code ?? dto.dial_code ?? '+91';
+      const phone = admin_phone ?? '0000000000';
+
+      const alreadyExists = admin_phone
+        ? await this.authRepo.findSchoolUserByPhoneExists(phone, dialCode, school.id)
+        : false;
+
+      if (!alreadyExists) {
+        await this.authRepo.createSchoolUserWithoutPassword({
+          id: generateId(),
+          school_id: school.id,
+          first_name: admin_first_name ?? 'Admin',
+          last_name: admin_last_name,
+          dial_code: dialCode,
+          phone_number: phone,
+          email: admin_email,
+          created_by: createdBy,
+        });
+      }
+    }
 
     await this.redisService.delByPattern(`schools:list:*`);
     return school;

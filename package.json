@@ -22,11 +22,9 @@
     "load:smoke": "set -a && source .env.k6 && set +a && curl -s \"${BASE_URL}/api/v1/load-test.js?scenario=smoke\" | k6 cloud run - --env BASE_URL=$BASE_URL --env SCHOOL_DIAL_CODE=$SCHOOL_DIAL_CODE --env SCHOOL_PHONE=$SCHOOL_PHONE --env SCHOOL_PASSWORD=$SCHOOL_PASSWORD --env K6_SCENARIO=smoke",
     "load:full": "set -a && source .env.k6 && set +a && curl -s \"${BASE_URL}/api/v1/load-test.js?scenario=full\" | k6 cloud run - --env BASE_URL=$BASE_URL --env SCHOOL_DIAL_CODE=$SCHOOL_DIAL_CODE --env SCHOOL_PHONE=$SCHOOL_PHONE --env SCHOOL_PASSWORD=$SCHOOL_PASSWORD --env K6_SCENARIO=full",
     "load": "npm run load:smoke",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
-    "start:migrate": "drizzle-kit migrate && node dist/main"
+    "start:migrate": "drizzle-kit push && node dist/main"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",

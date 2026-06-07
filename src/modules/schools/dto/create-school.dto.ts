@@ -90,4 +90,35 @@ export class CreateSchoolDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  // Auto-creates a SCHOOL_ADMIN without password when provided
+  @ApiPropertyOptional({ example: 'Ramesh' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
+  admin_first_name?: string;
+
+  @ApiPropertyOptional({ example: 'Kumar' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
+  admin_last_name?: string;
+
+  @ApiPropertyOptional({ example: '+91' })
+  @IsOptional()
+  @Matches(REGEX.DIAL_CODE, { message: 'Invalid dial code' })
+  admin_dial_code?: string;
+
+  @ApiPropertyOptional({ example: '9876543210' })
+  @IsOptional()
+  @Matches(REGEX.PHONE_IN, { message: 'Invalid mobile number' })
+  admin_phone?: string;
+
+  @ApiPropertyOptional({ example: 'admin@school.edu.in' })
+  @IsOptional()
+  @Matches(REGEX.EMAIL, { message: 'Invalid email address' })
+  @Transform(({ value }) => StringUtils.trim(value)?.toLowerCase())
+  admin_email?: string;
 }

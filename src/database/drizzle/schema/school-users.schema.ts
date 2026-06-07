@@ -21,7 +21,7 @@ export const schoolUsers = pgTable('school_users', {
   email: varchar('email', { length: 150 }),
   dial_code: varchar('dial_code', { length: 10 }).notNull().default('+91'),
   phone_number: varchar('phone_number', { length: 15 }).notNull(),
-  password_hash: varchar('password_hash', { length: 255 }).notNull(),
+  password_hash: varchar('password_hash', { length: 255 }),
   role: schoolRoleEnum('role').notNull(),
   profile_image: text('profile_image'),
   gender: varchar('gender', { length: 10 }),

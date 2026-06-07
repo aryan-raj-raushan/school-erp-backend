@@ -84,6 +84,108 @@ export class AuthRepository {
     return user ?? null;
   }
 
+  async findSchoolUserByEmail(email: string) {
+    const [user] = await this.db
+      .select()
+      .from(schoolUsers)
+      .where(and(eq(schoolUsers.email, email), eq(schoolUsers.deleted, false)));
+    return user ?? null;
+  }
+
+  async createSchoolUserWithoutPassword(data: {
+    id: string;
+    school_id: string;
+    first_name: string;
+    last_name?: string;
+    dial_code: string;
+    phone_number: string;
+    email?: string;
+    created_by: string;
+  }) {
+    const [user] = await this.db
+      .insert(schoolUsers)
+      .values({
+        ...data,
+        role: 'SCHOOL_ADMIN',
+        password_hash: null,
+      })
+      .returning({
+        id: schoolUsers.id,
+        school_id: schoolUsers.school_id,
+        first_name: schoolUsers.first_name,
+        last_name: schoolUsers.last_name,
+        phone_number: schoolUsers.phone_number,
+        email: schoolUsers.email,
+        role: schoolUsers.role,
+      });
+    return user;
+  }
+
+  async findSchoolUserByPhoneGlobal(phone_number: string, dial_code: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: schoolUsers.id })
+      .from(schoolUsers)
+      .where(
+        and(
+          eq(schoolUsers.phone_number, phone_number),
+          eq(schoolUsers.dial_code, dial_code),
+          eq(schoolUsers.deleted, false),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
+  async createSchoolUser(data: {
+    id: string;
+    school_id: string;
+    first_name: string;
+    last_name?: string;
+    dial_code: string;
+    phone_number: string;
+    email?: string;
+    password_hash: string;
+    role: string;
+    created_by: string;
+  }) {
+    const [user] = await this.db
+      .insert(schoolUsers)
+      .values({ ...data, role: data.role as any })
+      .returning({
+        id: schoolUsers.id,
+        school_id: schoolUsers.school_id,
+        first_name: schoolUsers.first_name,
+        last_name: schoolUsers.last_name,
+        phone_number: schoolUsers.phone_number,
+        email: schoolUsers.email,
+        role: schoolUsers.role,
+      });
+    return user;
+  }
+
+  async setSchoolUserPassword(userId: string, password_hash: string): Promise<void> {
+    await this.db
+      .update(schoolUsers)
+      .set({ password_hash, updated_at: new Date() })
+      .where(eq(schoolUsers.id, userId));
+  }
+
+  async findSchoolUserByPhoneExists(phone_number: string, dial_code: string, school_id: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: schoolUsers.id })
+      .from(schoolUsers)
+      .where(
+        and(
+          eq(schoolUsers.phone_number, phone_number),
+          eq(schoolUsers.dial_code, dial_code),
+          eq(schoolUsers.school_id, school_id),
+          eq(schoolUsers.deleted, false),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
   async findSchoolUserById(id: string) {
     const [user] = await this.db
       .select()

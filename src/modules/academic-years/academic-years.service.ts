@@ -62,12 +62,16 @@ export class AcademicYearsService {
     schoolId: string,
     createdBy: string,
   ): Promise<AcademicYear> {
+    if (dto.is_enabled) {
+      await this.academicYearsRepo.disableAll(schoolId);
+    }
     const academicYear = await this.academicYearsRepo.create({
       id: generateId(),
       school_id: schoolId,
       created_by: createdBy,
       ...dto,
       is_current: dto.is_current ?? false,
+      is_enabled: dto.is_enabled ?? true,
     });
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return academicYear;
@@ -79,6 +83,9 @@ export class AcademicYearsService {
     dto: UpdateAcademicYearDto,
   ): Promise<AcademicYear> {
     await this.findById(id, schoolId);
+    if (dto.is_enabled) {
+      await this.academicYearsRepo.disableAll(schoolId);
+    }
     const updated = await this.academicYearsRepo.update(id, schoolId, dto);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return updated;

@@ -10,47 +10,35 @@ import { SubjectFilterDto } from './dto/subject-filter.dto';
 export class SubjectsRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
-  async findAll(schoolId: string, filters: SubjectFilterDto): Promise<Subject[]> {
+  private buildConditions(schoolId: string, filters: Partial<SubjectFilterDto> = {}) {
     const conditions = [
       eq(subjects.school_id, schoolId),
       eq(subjects.deleted, false),
     ];
+    if (filters.class_id) conditions.push(eq(subjects.class_id, filters.class_id));
+    if (filters.timetable_session_id) conditions.push(eq(subjects.timetable_session_id, filters.timetable_session_id));
+    if (filters.class_detail_id) conditions.push(eq(subjects.class_detail_id, filters.class_detail_id));
+    if (filters.search) conditions.push(ilike(subjects.name, `%${filters.search}%`));
+    return conditions;
+  }
 
-    if (filters.class_id) {
-      conditions.push(eq(subjects.class_id, filters.class_id));
-    }
-    if (filters.search) {
-      conditions.push(ilike(subjects.name, `%${filters.search}%`));
-    }
-
+  async findAll(schoolId: string, filters: SubjectFilterDto): Promise<Subject[]> {
     const limit = filters.limit ?? 20;
     const offset = ((filters.page ?? 1) - 1) * limit;
-
     return this.db
       .select()
       .from(subjects)
-      .where(and(...conditions))
+      .where(and(...this.buildConditions(schoolId, filters)))
+      .orderBy(subjects.display_order, subjects.name)
       .limit(limit)
       .offset(offset);
   }
 
   async count(schoolId: string, filters: SubjectFilterDto): Promise<number> {
-    const conditions = [
-      eq(subjects.school_id, schoolId),
-      eq(subjects.deleted, false),
-    ];
-
-    if (filters.class_id) {
-      conditions.push(eq(subjects.class_id, filters.class_id));
-    }
-    if (filters.search) {
-      conditions.push(ilike(subjects.name, `%${filters.search}%`));
-    }
-
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(subjects)
-      .where(and(...conditions));
+      .where(and(...this.buildConditions(schoolId, filters)));
     return Number(count);
   }
 
@@ -58,13 +46,7 @@ export class SubjectsRepository {
     const [row] = await this.db
       .select()
       .from(subjects)
-      .where(
-        and(
-          eq(subjects.id, id),
-          eq(subjects.school_id, schoolId),
-          eq(subjects.deleted, false),
-        ),
-      );
+      .where(and(eq(subjects.id, id), eq(subjects.school_id, schoolId), eq(subjects.deleted, false)));
     return row;
   }
 
@@ -77,12 +59,7 @@ export class SubjectsRepository {
     const [row] = await this.db
       .update(subjects)
       .set({ ...data, updated_at: new Date() })
-      .where(
-        and(
-          eq(subjects.id, id),
-          eq(subjects.school_id, schoolId),
-        ),
-      )
+      .where(and(eq(subjects.id, id), eq(subjects.school_id, schoolId)))
       .returning();
     return row;
   }
@@ -91,11 +68,6 @@ export class SubjectsRepository {
     await this.db
       .update(subjects)
       .set({ deleted: true, is_active: false, updated_at: new Date() })
-      .where(
-        and(
-          eq(subjects.id, id),
-          eq(subjects.school_id, schoolId),
-        ),
-      );
+      .where(and(eq(subjects.id, id), eq(subjects.school_id, schoolId)));
   }
 }

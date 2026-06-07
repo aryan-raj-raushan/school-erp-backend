@@ -1,4 +1,4 @@
-import { pgTable, varchar, boolean, timestamp, date } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, boolean, timestamp, date, text } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 
 export const academicYears = pgTable('academic_years', {
@@ -11,6 +11,10 @@ export const academicYears = pgTable('academic_years', {
   end_date: date('end_date').notNull(),
   is_current: boolean('is_current').default(false).notNull(),
   is_active: boolean('is_active').default(true).notNull(),
+  is_enabled: boolean('is_enabled').default(true).notNull(),
+  session_code: varchar('session_code', { length: 50 }),
+  description: text('description'),
+  timetable_session_id: varchar('timetable_session_id', { length: 36 }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),
   created_by: varchar('created_by', { length: 36 }),

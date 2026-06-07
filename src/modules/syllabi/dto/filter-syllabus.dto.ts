@@ -2,14 +2,19 @@ import { IsOptional, IsUUID } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 
-export class ClassSubjectFilterDto extends PaginationDto {
+export class FilterSyllabusDto extends PaginationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
-  class_section_id?: string;
+  class_id?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
-  academic_year_id?: string;
+  timetable_session_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  class_detail_id?: string;
 }

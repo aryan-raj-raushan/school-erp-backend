@@ -4,6 +4,7 @@ import {
   Get,
   Body,
   Param,
+  Headers,
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
@@ -11,11 +12,14 @@ import {
   Req,
 } from '@nestjs/common';
 import { Request } from 'express';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterCompanyDto } from './dto/register-company.dto';
 import { LoginCompanyDto } from './dto/login-company.dto';
 import { LoginSchoolDto } from './dto/login-school.dto';
+import { LoginUnifiedDto } from './dto/login-unified.dto';
+import { SetupPasswordDto } from './dto/setup-password.dto';
+import { SchoolSignupDto } from './dto/school-signup.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
@@ -31,10 +35,23 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Post('school/signup')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Self-register a school + SCHOOL_ADMIN in one step. Returns tokens immediately.' })
+  async schoolSignup(@Body() dto: SchoolSignupDto) {
+    const result = await this.authService.schoolSignup(dto);
+    return ApiResponse.created(result, 'School registered successfully');
+  }
+
+  @Public()
   @Post('company/register')
-  @ApiOperation({ summary: 'Register a company user (SUPER_ADMIN only in prod)' })
-  async registerCompany(@Body() dto: RegisterCompanyDto) {
-    const user = await this.authService.registerCompany(dto);
+  @ApiOperation({ summary: 'Register a company user. SUPER_ADMIN requires X-Bootstrap-Secret header.' })
+  @ApiHeader({ name: 'x-bootstrap-secret', description: 'Required when creating SUPER_ADMIN', required: false })
+  async registerCompany(
+    @Body() dto: RegisterCompanyDto,
+    @Headers('x-bootstrap-secret') bootstrapSecret?: string,
+  ) {
+    const user = await this.authService.registerCompany(dto, bootstrapSecret);
     return ApiResponse.created(user, 'Company user registered successfully');
   }
 
@@ -54,6 +71,26 @@ export class AuthController {
   async loginSchool(@Body() dto: LoginSchoolDto) {
     const result = await this.authService.loginSchool(dto);
     return ApiResponse.success(result, 'Login successful');
+  }
+
+  @Public()
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Unified login — company (email) or school (email/phone). Returns needs_password_setup:true + setup_token when school admin has no password set.',
+  })
+  async loginUnified(@Body() dto: LoginUnifiedDto) {
+    const result = await this.authService.loginUnified(dto);
+    return ApiResponse.success(result, 'Login successful');
+  }
+
+  @Public()
+  @Post('school/setup-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'School admin first-time password setup using setup_token from login response' })
+  async setupPassword(@Body() dto: SetupPasswordDto) {
+    const result = await this.authService.setupPassword(dto);
+    return ApiResponse.success(result, 'Password set successfully');
   }
 
   @Public()

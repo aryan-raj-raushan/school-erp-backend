@@ -4,6 +4,7 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -17,7 +18,12 @@ import { JwtPayload, RefreshTokenPayload } from '../../shared/types/jwt-payload.
 import { RegisterCompanyDto } from './dto/register-company.dto';
 import { LoginCompanyDto } from './dto/login-company.dto';
 import { LoginSchoolDto } from './dto/login-school.dto';
-import { LoginResponse, TokenPair } from './types/auth.types';
+import { LoginUnifiedDto } from './dto/login-unified.dto';
+import { SetupPasswordDto } from './dto/setup-password.dto';
+import { SchoolSignupDto } from './dto/school-signup.dto';
+import { LoginResponse, TokenPair, LoginOrSetupResponse, PasswordSetupRequired } from './types/auth.types';
+import { REGEX } from '../../utils/regex.utils';
+import { SchoolsRepository } from '../schools/schools.repository';
 
 const ACCESS_TTL_SECONDS = 15 * 60;
 const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -27,17 +33,77 @@ const COMPANY_USER_SCHOOLS_TTL = 3600;
 export class AuthService {
   constructor(
     private readonly authRepo: AuthRepository,
+    private readonly schoolsRepo: SchoolsRepository,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
   ) {}
 
-  async registerCompany(dto: RegisterCompanyDto) {
+  async schoolSignup(dto: SchoolSignupDto): Promise<LoginResponse> {
+    const dialCode = dto.dial_code ?? '+91';
+
+    const phoneTaken = await this.authRepo.findSchoolUserByPhoneGlobal(dto.phone_number, dialCode);
+    if (phoneTaken) throw new ConflictException('Phone number already registered');
+
+    const school = await this.schoolsRepo.create({
+      id: generateId(),
+      name: dto.school_name,
+      code: dto.school_code,
+      board_type: dto.board_type as any,
+      marking_system: dto.marking_system as any,
+      created_by: 'self-signup',
+    });
+
+    const password_hash = await hashPassword(dto.password);
+
+    const adminUser = await this.authRepo.createSchoolUser({
+      id: generateId(),
+      school_id: school.id,
+      first_name: dto.first_name,
+      last_name: dto.last_name,
+      dial_code: dialCode,
+      phone_number: dto.phone_number,
+      email: dto.email,
+      password_hash,
+      role: 'SCHOOL_ADMIN',
+      created_by: 'self-signup',
+    });
+
+    const tokens = await this.generateTokens({
+      sub: adminUser.id,
+      phone: adminUser.phone_number,
+      role: adminUser.role as SchoolRole,
+      school_id: school.id,
+      context: AuthContext.SCHOOL,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: adminUser.id,
+        phone: adminUser.phone_number,
+        role: adminUser.role,
+        schoolId: school.id,
+        context: AuthContext.SCHOOL,
+      },
+    };
+  }
+
+  async registerCompany(dto: RegisterCompanyDto, bootstrapSecret?: string) {
     const emailTaken = await this.authRepo.findCompanyUserByEmailExists(dto.email);
     if (emailTaken) throw new ConflictException('Email already registered');
 
-    // BUG-001 + BUG-013: enforce single SUPER_ADMIN — only one may ever exist
-    if (dto.role === CompanyRole.SUPER_ADMIN) {
+    const isSuperAdmin = dto.role === CompanyRole.SUPER_ADMIN || !dto.role;
+
+    if (isSuperAdmin) {
+      // Require bootstrap secret from env to create SUPER_ADMIN
+      const envSecret = this.configService.get<string>('BOOTSTRAP_SECRET');
+      if (!envSecret) {
+        throw new ForbiddenException('SUPER_ADMIN registration is disabled — set BOOTSTRAP_SECRET env var');
+      }
+      if (bootstrapSecret !== envSecret) {
+        throw new ForbiddenException('Invalid bootstrap secret');
+      }
       const exists = await this.authRepo.superAdminExists();
       if (exists) throw new ForbiddenException('A SUPER_ADMIN already exists. Only one is allowed.');
     }
@@ -50,7 +116,7 @@ export class AuthService {
       last_name: dto.last_name,
       email: dto.email,
       password_hash,
-      role: (dto.role as CompanyRole) ?? CompanyRole.ADMIN,
+      role: (dto.role as CompanyRole) ?? CompanyRole.SUPER_ADMIN,
     });
   }
 
@@ -90,6 +156,7 @@ export class AuthService {
     const user = await this.authRepo.findSchoolUserByPhone(dto.phone_number, dto.dial_code);
     if (!user) throw new UnauthorizedException('Invalid credentials');
     if (!user.is_active) throw new UnauthorizedException('Account is deactivated');
+    if (!user.password_hash) throw new UnauthorizedException('Account setup incomplete — use /auth/login to set your password');
 
     const passwordMatch = await comparePassword(dto.password, user.password_hash);
     if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
@@ -114,6 +181,125 @@ export class AuthService {
         context: AuthContext.SCHOOL,
       },
     };
+  }
+
+  async loginUnified(dto: LoginUnifiedDto): Promise<LoginOrSetupResponse> {
+    const isEmail = REGEX.EMAIL.test(dto.identifier);
+
+    // Check company users first (always email-based)
+    if (isEmail) {
+      const companyUser = await this.authRepo.findCompanyUserByEmail(dto.identifier);
+      if (companyUser) {
+        if (!companyUser.is_active) throw new UnauthorizedException('Account is deactivated');
+        const match = await comparePassword(dto.password, companyUser.password_hash);
+        if (!match) throw new UnauthorizedException('Invalid credentials');
+        await this.authRepo.updateCompanyUserLastLogin(companyUser.id);
+        if (companyUser.role !== CompanyRole.SUPER_ADMIN) {
+          await this.cacheCompanyUserSchools(companyUser.id);
+        }
+        const tokens = await this.generateTokens({
+          sub: companyUser.id,
+          email: companyUser.email,
+          role: companyUser.role as CompanyRole,
+          context: AuthContext.COMPANY,
+        });
+        return { ...tokens, user: { id: companyUser.id, email: companyUser.email, role: companyUser.role, context: AuthContext.COMPANY } };
+      }
+    }
+
+    // School user lookup — by email or phone
+    const schoolUser = isEmail
+      ? await this.authRepo.findSchoolUserByEmail(dto.identifier)
+      : await this.authRepo.findSchoolUserByPhone(dto.identifier, dto.dial_code ?? '+91');
+
+    if (!schoolUser) throw new UnauthorizedException('Invalid credentials');
+    if (!schoolUser.is_active) throw new UnauthorizedException('Account is deactivated');
+
+    // No password set → school admin must complete signup
+    if (!schoolUser.password_hash) {
+      const setupToken = this.generateSetupToken(schoolUser.id);
+      return { needs_password_setup: true, setup_token: setupToken } satisfies PasswordSetupRequired;
+    }
+
+    const match = await comparePassword(dto.password, schoolUser.password_hash);
+    if (!match) throw new UnauthorizedException('Invalid credentials');
+
+    await this.authRepo.updateSchoolUserLastLogin(schoolUser.id);
+
+    const tokens = await this.generateTokens({
+      sub: schoolUser.id,
+      phone: schoolUser.phone_number,
+      role: schoolUser.role as SchoolRole,
+      school_id: schoolUser.school_id,
+      context: AuthContext.SCHOOL,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: schoolUser.id,
+        phone: schoolUser.phone_number,
+        role: schoolUser.role,
+        schoolId: schoolUser.school_id,
+        context: AuthContext.SCHOOL,
+      },
+    };
+  }
+
+  async setupPassword(dto: SetupPasswordDto): Promise<LoginResponse> {
+    if (dto.password !== dto.confirm_password) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    let payload: { sub: string; purpose: string };
+    try {
+      payload = this.jwtService.verify(dto.setup_token, {
+        secret: this.configService.get<string>('jwt.accessSecret'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired setup token');
+    }
+
+    if (payload.purpose !== 'password_setup') {
+      throw new UnauthorizedException('Invalid setup token');
+    }
+
+    const user = await this.authRepo.findSchoolUserById(payload.sub);
+    if (!user) throw new NotFoundException('User not found');
+    if (user.password_hash) throw new BadRequestException('Password already set — use login instead');
+
+    const password_hash = await hashPassword(dto.password);
+    await this.authRepo.setSchoolUserPassword(user.id, password_hash);
+    await this.authRepo.updateSchoolUserLastLogin(user.id);
+
+    const tokens = await this.generateTokens({
+      sub: user.id,
+      phone: user.phone_number,
+      role: user.role as SchoolRole,
+      school_id: user.school_id,
+      context: AuthContext.SCHOOL,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        phone: user.phone_number,
+        role: user.role,
+        schoolId: user.school_id,
+        context: AuthContext.SCHOOL,
+      },
+    };
+  }
+
+  private generateSetupToken(userId: string): string {
+    return this.jwtService.sign(
+      { sub: userId, purpose: 'password_setup' },
+      {
+        secret: this.configService.get<string>('jwt.accessSecret'),
+        expiresIn: '24h',
+      },
+    );
   }
 
   async refresh(userId: string, tokenId: string, context: AuthContext): Promise<TokenPair> {
