@@ -28,3 +28,7 @@ export * from './syllabi.schema';
 export * from './departments.schema';
 export * from './class-types.schema';
 export * from './relations';
+export * from './admission-enquiries.schema';
+export * from './admission-sources.schema';
+export * from './enquiry-history.schema';
+export * from './school-events.schema';
