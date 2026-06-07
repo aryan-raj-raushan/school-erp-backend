@@ -5,7 +5,7 @@ import { generateId } from '../../utils/uuid.utils';
 import { CreateHomeworkDto } from './dto/create-homework.dto';
 import { BulkMarkSubmissionsDto, UpdateSubmissionDto } from './dto/submission.dto';
 import { CreateStudyMaterialDto } from './dto/create-study-material.dto';
-import { Homework, HomeworkSubmission, StudyMaterial } from './types/academic.types';
+import { Homework, HomeworkAttachment, HomeworkSubmission, StudyMaterial } from './types/academic.types';
 
 const CACHE_TTL = 120;
 
@@ -19,7 +19,13 @@ export class AcademicsService {
   private cacheKey(schoolId: string) { return `academics:${schoolId}`; }
 
   // Homework
-  async findAllHomework(schoolId: string, filters: any): Promise<Homework[]> {
+  async findAllHomework(schoolId: string, filters: {
+    class_id?: string;
+    class_detail_id?: string;
+    subject_id?: string;
+    academic_year_id?: string;
+    timetable_session_id?: string;
+  }): Promise<Homework[]> {
     const key = `${this.cacheKey(schoolId)}:hw:list:${JSON.stringify(filters)}`;
     return this.redisService.getOrSet(key, CACHE_TTL, () => this.repo.findAllHomework(schoolId, filters));
   }
@@ -33,17 +39,41 @@ export class AcademicsService {
     });
   }
 
-  async createHomework(dto: CreateHomeworkDto, schoolId: string, assignedBy: string): Promise<Homework> {
-    const hw = await this.repo.createHomework({ id: generateId(), school_id: schoolId, assigned_by: assignedBy, ...dto });
-    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:hw:*`);
-    return hw;
+  async getHomeworkWithAttachments(id: string, schoolId: string): Promise<{ homework: Homework; attachments: HomeworkAttachment[] }> {
+    const homework = await this.findHomeworkById(id, schoolId);
+    const attachments = await this.repo.findAttachmentsByHomework(id);
+    return { homework, attachments };
   }
 
-  async updateHomework(id: string, schoolId: string, dto: Partial<CreateHomeworkDto>): Promise<Homework> {
-    await this.findHomeworkById(id, schoolId);
-    const updated = await this.repo.updateHomework(id, schoolId, dto);
+  async createHomework(dto: CreateHomeworkDto, schoolId: string, assignedBy: string): Promise<{ homework: Homework; attachments: HomeworkAttachment[] }> {
+    const { attachments: attachmentDtos, ...homeworkData } = dto;
+    const hw = await this.repo.createHomework({ id: generateId(), school_id: schoolId, assigned_by: assignedBy, ...homeworkData, status: (homeworkData.status as any) });
+
+    const attachments = attachmentDtos?.length
+      ? await this.repo.createAttachments(attachmentDtos.map((a) => ({ id: generateId(), homework_id: hw.id, school_id: schoolId, ...a })))
+      : [];
+
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:hw:*`);
-    return updated;
+    return { homework: hw, attachments };
+  }
+
+  async updateHomework(id: string, schoolId: string, dto: Partial<CreateHomeworkDto>): Promise<{ homework: Homework; attachments: HomeworkAttachment[] }> {
+    await this.findHomeworkById(id, schoolId);
+    const { attachments: attachmentDtos, ...homeworkData } = dto;
+    const updated = await this.repo.updateHomework(id, schoolId, { ...homeworkData, status: (homeworkData.status as any) });
+
+    let attachments: HomeworkAttachment[];
+    if (attachmentDtos !== undefined) {
+      await this.repo.deleteAttachmentsByHomework(id);
+      attachments = attachmentDtos.length
+        ? await this.repo.createAttachments(attachmentDtos.map((a) => ({ id: generateId(), homework_id: id, school_id: schoolId, ...a })))
+        : [];
+    } else {
+      attachments = await this.repo.findAttachmentsByHomework(id);
+    }
+
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:hw:*`);
+    return { homework: updated, attachments };
   }
 
   async deleteHomework(id: string, schoolId: string): Promise<void> {
@@ -91,7 +121,7 @@ export class AcademicsService {
   }
 
   // Study Materials
-  async findAllMaterials(schoolId: string, filters: any): Promise<StudyMaterial[]> {
+  async findAllMaterials(schoolId: string, filters: { class_id?: string; subject_id?: string; academic_year_id?: string }): Promise<StudyMaterial[]> {
     const key = `${this.cacheKey(schoolId)}:mat:list:${JSON.stringify(filters)}`;
     return this.redisService.getOrSet(key, CACHE_TTL, () => this.repo.findAllMaterials(schoolId, filters));
   }

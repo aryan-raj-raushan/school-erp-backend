@@ -3,7 +3,6 @@ import {
   Body, Param, Query, ParseUUIDPipe, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { PartialType } from '@nestjs/swagger';
 import { AcademicsService } from './academics.service';
 import { CreateHomeworkDto } from './dto/create-homework.dto';
 import { BulkMarkSubmissionsDto, UpdateSubmissionDto } from './dto/submission.dto';
@@ -34,33 +33,34 @@ export class HomeworkController {
   @Get()
   @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'List homework assignments with filters' })
-  @ApiQuery({ name: 'class_section_id', required: false })
+  @ApiQuery({ name: 'class_id', required: false })
+  @ApiQuery({ name: 'class_detail_id', required: false })
   @ApiQuery({ name: 'subject_id', required: false })
   @ApiQuery({ name: 'academic_year_id', required: false })
+  @ApiQuery({ name: 'timetable_session_id', required: false })
   async findAll(
     @GetSchoolId() schoolId: string,
-    @Query('class_section_id') csId?: string,
+    @Query('class_id') classId?: string,
+    @Query('class_detail_id') classDetailId?: string,
     @Query('subject_id') subjId?: string,
     @Query('academic_year_id') ayId?: string,
+    @Query('timetable_session_id') sessionId?: string,
   ) {
-    const data = await this.academicsService.findAllHomework(schoolId, { class_section_id: csId, subject_id: subjId, academic_year_id: ayId });
-    return ApiResponse.success(data, 'Homework fetched successfully');
-  }
-
-  @Get('parent')
-  @Roles(...VIEW_ROLES)
-  @ApiOperation({ summary: 'List homework for parent view' })
-  @ApiQuery({ name: 'class_section_id', required: false })
-  async getParentHomework(@GetSchoolId() schoolId: string, @Query('class_section_id') csId?: string) {
-    const data = await this.academicsService.findAllHomework(schoolId, { class_section_id: csId });
+    const data = await this.academicsService.findAllHomework(schoolId, {
+      class_id: classId,
+      class_detail_id: classDetailId,
+      subject_id: subjId,
+      academic_year_id: ayId,
+      timetable_session_id: sessionId,
+    });
     return ApiResponse.success(data, 'Homework fetched successfully');
   }
 
   @Get(':id')
   @Roles(...VIEW_ROLES)
-  @ApiOperation({ summary: 'Get a single homework assignment' })
+  @ApiOperation({ summary: 'Get a single homework assignment with attachments' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
-    return ApiResponse.success(await this.academicsService.findHomeworkById(id, schoolId), 'Homework fetched successfully');
+    return ApiResponse.success(await this.academicsService.getHomeworkWithAttachments(id, schoolId), 'Homework fetched successfully');
   }
 
   @Put(':id')
@@ -126,11 +126,11 @@ export class StudyMaterialsController {
   @Get()
   @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
   @ApiOperation({ summary: 'List study materials with filters' })
-  @ApiQuery({ name: 'class_section_id', required: false })
+  @ApiQuery({ name: 'class_id', required: false })
   @ApiQuery({ name: 'subject_id', required: false })
   @ApiQuery({ name: 'academic_year_id', required: false })
-  async findAll(@GetSchoolId() schoolId: string, @Query('class_section_id') csId?: string, @Query('subject_id') subjId?: string, @Query('academic_year_id') ayId?: string) {
-    return ApiResponse.success(await this.academicsService.findAllMaterials(schoolId, { class_section_id: csId, subject_id: subjId, academic_year_id: ayId }), 'Materials fetched');
+  async findAll(@GetSchoolId() schoolId: string, @Query('class_id') classId?: string, @Query('subject_id') subjId?: string, @Query('academic_year_id') ayId?: string) {
+    return ApiResponse.success(await this.academicsService.findAllMaterials(schoolId, { class_id: classId, subject_id: subjId, academic_year_id: ayId }), 'Materials fetched');
   }
 
   @Get(':id')
@@ -166,8 +166,8 @@ export class ParentHomeworkController {
   @Get()
   @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
   @ApiOperation({ summary: 'View student homework list (parent view)' })
-  @ApiQuery({ name: 'class_section_id', required: false })
-  async findAll(@GetSchoolId() schoolId: string, @Query('class_section_id') csId?: string) {
-    return ApiResponse.success(await this.academicsService.findAllHomework(schoolId, { class_section_id: csId }), 'Homework fetched');
+  @ApiQuery({ name: 'class_id', required: false })
+  async findAll(@GetSchoolId() schoolId: string, @Query('class_id') classId?: string) {
+    return ApiResponse.success(await this.academicsService.findAllHomework(schoolId, { class_id: classId }), 'Homework fetched');
   }
 }

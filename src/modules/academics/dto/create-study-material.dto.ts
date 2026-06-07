@@ -9,15 +9,15 @@ export class CreateStudyMaterialDto {
   @IsNotEmpty()
   academic_year_id: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID()
-  @IsNotEmpty()
-  class_section_id: string;
+  class_id?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsUUID()
-  @IsNotEmpty()
-  subject_id: string;
+  subject_id?: string;
 
   @ApiProperty({ example: 'Chapter 5 Notes' })
   @IsString()

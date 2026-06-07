@@ -2,23 +2,44 @@ import { pgTable, pgEnum, varchar, boolean, timestamp, date, text, unique } from
 import { schools } from './schools.schema';
 import { students } from './students.schema';
 import { academicYears } from './academic-years.schema';
+import { classes } from './classes.schema';
+import { classDetails } from './class-details.schema';
+import { timetableSessions } from './timetable-sessions.schema';
+import { subjects } from './subjects.schema';
 
 export const submissionStatusEnum = pgEnum('submission_status', ['PENDING', 'SUBMITTED', 'GRADED', 'LATE']);
+export const homeworkStatusEnum = pgEnum('homework_status', ['DRAFT', 'ACTIVE', 'CLOSED']);
 
 export const homeworks = pgTable('homeworks', {
   id: varchar('id', { length: 36 }).primaryKey(),
   school_id: varchar('school_id', { length: 36 }).notNull().references(() => schools.id, { onDelete: 'cascade' }),
   academic_year_id: varchar('academic_year_id', { length: 36 }).notNull().references(() => academicYears.id, { onDelete: 'cascade' }),
-  class_section_id: varchar('class_section_id', { length: 36 }).notNull(),
-  subject_id: varchar('subject_id', { length: 36 }).notNull(),
+  timetable_session_id: varchar('timetable_session_id', { length: 36 }).references(() => timetableSessions.id, { onDelete: 'set null' }),
+  class_id: varchar('class_id', { length: 36 }).references(() => classes.id, { onDelete: 'set null' }),
+  class_detail_id: varchar('class_detail_id', { length: 36 }).references(() => classDetails.id, { onDelete: 'set null' }),
+  subject_id: varchar('subject_id', { length: 36 }).references(() => subjects.id, { onDelete: 'set null' }),
   title: varchar('title', { length: 200 }).notNull(),
   description: text('description'),
+  homework_date: date('homework_date'),
   due_date: date('due_date').notNull(),
+  status: homeworkStatusEnum('status').default('ACTIVE').notNull(),
+  send_notification: boolean('send_notification').default(false).notNull(),
+  student_upload_allowed: boolean('student_upload_allowed').default(false).notNull(),
   assigned_by: varchar('assigned_by', { length: 36 }).notNull(),
-  attachment_url: text('attachment_url'),
   deleted: boolean('deleted').default(false).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),
+});
+
+export const homeworkAttachments = pgTable('homework_attachments', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  homework_id: varchar('homework_id', { length: 36 }).notNull().references(() => homeworks.id, { onDelete: 'cascade' }),
+  school_id: varchar('school_id', { length: 36 }).notNull().references(() => schools.id, { onDelete: 'cascade' }),
+  file_name: varchar('file_name', { length: 255 }).notNull(),
+  file_url: varchar('file_url', { length: 500 }).notNull(),
+  file_type: varchar('file_type', { length: 10 }).notNull(),
+  file_size: varchar('file_size', { length: 20 }),
+  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const homeworkSubmissions = pgTable('homework_submissions', {
@@ -41,8 +62,8 @@ export const studyMaterials = pgTable('study_materials', {
   id: varchar('id', { length: 36 }).primaryKey(),
   school_id: varchar('school_id', { length: 36 }).notNull().references(() => schools.id, { onDelete: 'cascade' }),
   academic_year_id: varchar('academic_year_id', { length: 36 }).notNull().references(() => academicYears.id, { onDelete: 'cascade' }),
-  class_section_id: varchar('class_section_id', { length: 36 }).notNull(),
-  subject_id: varchar('subject_id', { length: 36 }).notNull(),
+  class_id: varchar('class_id', { length: 36 }).references(() => classes.id, { onDelete: 'set null' }),
+  subject_id: varchar('subject_id', { length: 36 }).references(() => subjects.id, { onDelete: 'set null' }),
   title: varchar('title', { length: 200 }).notNull(),
   description: text('description'),
   file_url: text('file_url').notNull(),

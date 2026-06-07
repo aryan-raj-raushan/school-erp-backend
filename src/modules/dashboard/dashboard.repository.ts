@@ -53,7 +53,7 @@ export class DashboardRepository {
     return this.db
       .select({ subject_id: homeworks.subject_id, count: sql<number>`count(*)` })
       .from(homeworks)
-      .where(and(eq(homeworks.school_id, schoolId), eq(homeworks.class_section_id, classSectionId), eq(homeworks.deleted, false)))
+      .where(and(eq(homeworks.school_id, schoolId), eq(homeworks.class_id, classSectionId), eq(homeworks.deleted, false)))
       .groupBy(homeworks.subject_id);
   }
 }
