@@ -88,7 +88,7 @@ import { AdmissionModule } from '@modules/admission/admission.module';
     DepartmentsModule,
     ClassTypesModule,
     SchoolEventsModule,
-    AdmissionModule
+    AdmissionModule,
     TimetableModule,
   ],
   providers: [
