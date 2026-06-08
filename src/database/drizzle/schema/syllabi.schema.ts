@@ -2,17 +2,11 @@ import { pgTable, varchar, boolean, timestamp, text } from 'drizzle-orm/pg-core'
 import { schools } from './schools.schema';
 import { classes } from './classes.schema';
 import { classDetails } from './class-details.schema';
-import { timetableSessions } from './timetable-sessions.schema';
-
 export const syllabi = pgTable('syllabi', {
   id: varchar('id', { length: 36 }).primaryKey(),
   school_id: varchar('school_id', { length: 36 })
     .notNull()
     .references(() => schools.id, { onDelete: 'cascade' }),
-  timetable_session_id: varchar('timetable_session_id', { length: 36 }).references(
-    () => timetableSessions.id,
-    { onDelete: 'set null' },
-  ),
   class_id: varchar('class_id', { length: 36 })
     .notNull()
     .references(() => classes.id, { onDelete: 'cascade' }),

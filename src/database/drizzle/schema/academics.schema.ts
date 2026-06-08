@@ -4,7 +4,6 @@ import { students } from './students.schema';
 import { academicYears } from './academic-years.schema';
 import { classes } from './classes.schema';
 import { classDetails } from './class-details.schema';
-import { timetableSessions } from './timetable-sessions.schema';
 import { subjects } from './subjects.schema';
 
 export const submissionStatusEnum = pgEnum('submission_status', ['PENDING', 'SUBMITTED', 'GRADED', 'LATE']);
@@ -14,7 +13,6 @@ export const homeworks = pgTable('homeworks', {
   id: varchar('id', { length: 36 }).primaryKey(),
   school_id: varchar('school_id', { length: 36 }).notNull().references(() => schools.id, { onDelete: 'cascade' }),
   academic_year_id: varchar('academic_year_id', { length: 36 }).notNull().references(() => academicYears.id, { onDelete: 'cascade' }),
-  timetable_session_id: varchar('timetable_session_id', { length: 36 }).references(() => timetableSessions.id, { onDelete: 'set null' }),
   class_id: varchar('class_id', { length: 36 }).references(() => classes.id, { onDelete: 'set null' }),
   class_detail_id: varchar('class_detail_id', { length: 36 }).references(() => classDetails.id, { onDelete: 'set null' }),
   subject_id: varchar('subject_id', { length: 36 }).references(() => subjects.id, { onDelete: 'set null' }),

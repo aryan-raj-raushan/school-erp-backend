@@ -16,7 +16,6 @@ export class ClassDetailsRepository {
       eq(classDetails.deleted, false),
     ];
     if (filters.class_id) conditions.push(eq(classDetails.class_id, filters.class_id));
-    if (filters.timetable_session_id) conditions.push(eq(classDetails.timetable_session_id, filters.timetable_session_id));
     if (filters.year) conditions.push(eq(classDetails.year, filters.year));
     return conditions;
   }

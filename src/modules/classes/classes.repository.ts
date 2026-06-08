@@ -19,7 +19,6 @@ export class ClassesRepository {
       eq(classes.deleted, false),
     ];
     if (filters.academic_year_id) conditions.push(eq(classes.academic_year_id, filters.academic_year_id));
-    if (filters.timetable_session_id) conditions.push(eq(classes.timetable_session_id, filters.timetable_session_id));
     if (filters.department) conditions.push(eq(classes.department, filters.department));
     if (filters.class_type) conditions.push(eq(classes.class_type, filters.class_type));
     return conditions;
@@ -31,7 +30,6 @@ export class ClassesRepository {
       class_id: sections.class_id,
       class_name: classes.name,
       section_name: sections.name,
-      timetable_session_id: classes.timetable_session_id,
       department: classes.department,
       class_type: classes.class_type,
       class_sequence: classes.class_sequence,

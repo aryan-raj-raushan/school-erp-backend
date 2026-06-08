@@ -10,11 +10,6 @@ export class FilterClassDetailDto extends PaginationDto {
   @IsUUID()
   class_id?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by timetable session ID' })
-  @IsOptional()
-  @IsUUID()
-  timetable_session_id?: string;
-
   @ApiPropertyOptional({ description: 'Filter by year/semester label' })
   @IsOptional()
   @IsString()

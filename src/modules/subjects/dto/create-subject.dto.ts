@@ -35,10 +35,8 @@ export class CreateSubjectDto {
   @IsUUID()
   class_id?: string;
 
-  @ApiPropertyOptional({ example: 'uuid-of-timetable-session' })
   @IsOptional()
   @IsUUID()
-  timetable_session_id?: string;
 
   @ApiPropertyOptional({ example: 'uuid-of-class-detail', description: 'Links to a specific year/semester' })
   @IsOptional()

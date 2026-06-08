@@ -32,11 +32,11 @@ import { CommunicationsModule } from './modules/communications/communications.mo
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { MasterDataModule } from './modules/master-data/master-data.module';
-import { TimetableSessionsModule } from './modules/timetable-sessions/timetable-sessions.module';
 import { ClassDetailsModule } from './modules/class-details/class-details.module';
 import { SyllabiModule } from './modules/syllabi/syllabi.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { ClassTypesModule } from './modules/class-types/class-types.module';
+import { TimetableModule } from './modules/timetable/timetable.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -83,13 +83,13 @@ import { AdmissionModule } from '@modules/admission/admission.module';
     DashboardModule,
     ExportsModule,
     MasterDataModule,
-    TimetableSessionsModule,
     ClassDetailsModule,
     SyllabiModule,
     DepartmentsModule,
     ClassTypesModule,
     SchoolEventsModule,
     AdmissionModule
+    TimetableModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -37,21 +37,18 @@ export class HomeworkController {
   @ApiQuery({ name: 'class_detail_id', required: false })
   @ApiQuery({ name: 'subject_id', required: false })
   @ApiQuery({ name: 'academic_year_id', required: false })
-  @ApiQuery({ name: 'timetable_session_id', required: false })
   async findAll(
     @GetSchoolId() schoolId: string,
     @Query('class_id') classId?: string,
     @Query('class_detail_id') classDetailId?: string,
     @Query('subject_id') subjId?: string,
     @Query('academic_year_id') ayId?: string,
-    @Query('timetable_session_id') sessionId?: string,
   ) {
     const data = await this.academicsService.findAllHomework(schoolId, {
       class_id: classId,
       class_detail_id: classDetailId,
       subject_id: subjId,
       academic_year_id: ayId,
-      timetable_session_id: sessionId,
     });
     return ApiResponse.success(data, 'Homework fetched successfully');
   }

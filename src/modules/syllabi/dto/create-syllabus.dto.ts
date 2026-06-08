@@ -44,10 +44,8 @@ export class CreateSyllabusDto {
   @IsNotEmpty()
   class_id: string;
 
-  @ApiPropertyOptional({ example: 'uuid-of-timetable-session' })
   @IsOptional()
   @IsUUID()
-  timetable_session_id?: string;
 
   @ApiPropertyOptional({ example: 'uuid-of-class-detail' })
   @IsOptional()
