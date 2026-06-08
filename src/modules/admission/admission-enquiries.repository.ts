@@ -4,7 +4,12 @@ import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { admissionEnquiries } from '../../database/drizzle/schema/admission-enquiries.schema';
 import { enquiryHistory } from '../../database/drizzle/schema/enquiry-history.schema';
-import { AdmissionEnquiry, NewAdmissionEnquiry, EnquiryHistory, NewEnquiryHistory } from './types/admission-enquiry.types';
+import {
+  AdmissionEnquiry,
+  NewAdmissionEnquiry,
+  EnquiryHistory,
+  NewEnquiryHistory,
+} from './types/admission-enquiry.types';
 import { FilterAdmissionEnquiryDto } from './dto/filter-admission-enquiry.dto';
 
 @Injectable()
@@ -16,6 +21,7 @@ export class AdmissionEnquiriesRepository {
       eq(admissionEnquiries.school_id, schoolId),
       eq(admissionEnquiries.deleted, false),
     ];
+
     if (filters.academic_year_id) {
       conditions.push(eq(admissionEnquiries.academic_year_id, filters.academic_year_id));
     }
@@ -31,6 +37,11 @@ export class AdmissionEnquiriesRepository {
     if (filters.enquiry_source_id) {
       conditions.push(eq(admissionEnquiries.enquiry_source_id, filters.enquiry_source_id));
     }
+    // New: filter by next follow-up date
+    if (filters.next_followup_date) {
+      conditions.push(eq(admissionEnquiries.next_followup_date, filters.next_followup_date));
+    }
+
     return conditions;
   }
 
@@ -60,6 +71,7 @@ export class AdmissionEnquiriesRepository {
 
   async count(schoolId: string, filters: FilterAdmissionEnquiryDto): Promise<number> {
     const conditions = this.buildConditions(schoolId, filters);
+
     if (filters.search) {
       const term = `%${filters.search}%`;
       conditions.push(
@@ -69,6 +81,7 @@ export class AdmissionEnquiriesRepository {
         )!,
       );
     }
+
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(admissionEnquiries)
@@ -93,7 +106,11 @@ export class AdmissionEnquiriesRepository {
     return row;
   }
 
-  async update(id: string, schoolId: string, data: Partial<NewAdmissionEnquiry>): Promise<AdmissionEnquiry> {
+  async update(
+    id: string,
+    schoolId: string,
+    data: Partial<NewAdmissionEnquiry>,
+  ): Promise<AdmissionEnquiry> {
     const [row] = await this.db
       .update(admissionEnquiries)
       .set({ ...data, updated_at: new Date() })
@@ -109,13 +126,17 @@ export class AdmissionEnquiriesRepository {
       .where(and(eq(admissionEnquiries.id, id), eq(admissionEnquiries.school_id, schoolId)));
   }
 
-  // History
+  // ─── History ────────────────────────────────────────
+
   async createHistory(data: NewEnquiryHistory): Promise<EnquiryHistory> {
     const [row] = await this.db.insert(enquiryHistory).values(data).returning();
     return row;
   }
 
-  async findHistoryByEnquiryId(enquiryId: string, schoolId: string): Promise<EnquiryHistory[]> {
+  async findHistoryByEnquiryId(
+    enquiryId: string,
+    schoolId: string,
+  ): Promise<EnquiryHistory[]> {
     return this.db
       .select()
       .from(enquiryHistory)

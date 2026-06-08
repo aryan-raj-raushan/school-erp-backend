@@ -1,8 +1,14 @@
-import { IsOptional, IsEnum, IsUUID, IsString } from 'class-validator';
+import { IsOptional, IsEnum, IsUUID, IsString, IsDateString } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
-import { EnquiryStatus } from './update-admission-enquiry.dto';
+
+export enum EnquiryStatus {
+  NEW = 'NEW',
+  FOLLOW_UP = 'FOLLOW_UP',
+  ADMISSION_CONFIRMED = 'ADMISSION_CONFIRMED',
+  REJECTED = 'REJECTED',
+}
 
 export class FilterAdmissionEnquiryDto extends PaginationDto {
   @ApiPropertyOptional({ example: 'uuid-of-academic-year' })
@@ -35,4 +41,9 @@ export class FilterAdmissionEnquiryDto extends PaginationDto {
   @IsString()
   @Transform(({ value }) => value?.trim())
   search?: string;
+
+  @ApiPropertyOptional({ example: '2025-09-01', description: 'Filter by next follow-up date (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsDateString()
+  next_followup_date?: string;
 }

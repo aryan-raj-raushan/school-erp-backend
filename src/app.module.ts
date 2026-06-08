@@ -45,6 +45,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { SchoolEventsModule } from '@modules/school-events/school-events.module';
+import { AdmissionModule } from '@modules/admission/admission.module';
 
 @Module({
   imports: [
@@ -88,6 +89,7 @@ import { SchoolEventsModule } from '@modules/school-events/school-events.module'
     DepartmentsModule,
     ClassTypesModule,
     SchoolEventsModule,
+    AdmissionModule
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -1,14 +1,12 @@
-import { pgTable, varchar, timestamp, text, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, timestamp, text, date, time, pgEnum } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 import { admissionEnquiries } from './admission-enquiries.schema';
 
 export const enquiryActionEnum = pgEnum('enquiry_action', [
   'NEW_ENQUIRY',
-  'FOLLOW_UP_UPDATED',
+  'NEXT_FOLLOW_UP_UPDATE',
   'ADMISSION_CONFIRMED',
   'ENQUIRY_REJECTED',
-  'REMARKS_UPDATED',
-  'TEACHER_ASSIGNED',
 ]);
 
 export const enquiryHistory = pgTable('enquiry_history', {
@@ -21,6 +19,9 @@ export const enquiryHistory = pgTable('enquiry_history', {
     .references(() => admissionEnquiries.id, { onDelete: 'cascade' }),
   assigned_teacher_id: varchar('assigned_teacher_id', { length: 36 }),
   action: enquiryActionEnum('action').notNull(),
+  // New fields for follow-up scheduling
+  next_followup_date: date('next_followup_date'),
+  next_followup_time: time('next_followup_time'),
   details: text('details'),
   remarks: text('remarks'),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AdmissionEnquiriesRepository } from './admission-enquiries.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
@@ -6,10 +6,12 @@ import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateAdmissionEnquiryDto } from './dto/create-admission-enquiry.dto';
 import { UpdateAdmissionEnquiryDto, EnquiryStatus } from './dto/update-admission-enquiry.dto';
 import { FilterAdmissionEnquiryDto } from './dto/filter-admission-enquiry.dto';
+import { CreateEnquiryHistoryDto, EnquiryAction } from './dto/create-enquiry-history.dto';
 import { AdmissionEnquiry, EnquiryHistory } from './types/admission-enquiry.types';
 
 const LIST_TTL = 60;
 const ITEM_TTL = 180;
+const HISTORY_TTL = 120;
 
 @Injectable()
 export class AdmissionEnquiriesService {
@@ -22,7 +24,10 @@ export class AdmissionEnquiriesService {
     return `admission_enquiries:${schoolId}`;
   }
 
-  async findAll(schoolId: string, filters: FilterAdmissionEnquiryDto): Promise<PaginationResponse<AdmissionEnquiry>> {
+  async findAll(
+    schoolId: string,
+    filters: FilterAdmissionEnquiryDto,
+  ): Promise<PaginationResponse<AdmissionEnquiry>> {
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
     return this.redisService.getOrSet(key, LIST_TTL, async () => {
       const [items, total] = await Promise.all([
@@ -42,7 +47,11 @@ export class AdmissionEnquiriesService {
     });
   }
 
-  async create(dto: CreateAdmissionEnquiryDto, schoolId: string, createdBy: string): Promise<AdmissionEnquiry> {
+  async create(
+    dto: CreateAdmissionEnquiryDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<AdmissionEnquiry> {
     const enquiry = await this.enquiriesRepo.create({
       id: generateId(),
       school_id: schoolId,
@@ -67,41 +76,14 @@ export class AdmissionEnquiriesService {
     return enquiry;
   }
 
-  async update(id: string, schoolId: string, dto: UpdateAdmissionEnquiryDto, updatedBy: string): Promise<AdmissionEnquiry> {
-    const existing = await this.findById(id, schoolId);
+  async update(
+    id: string,
+    schoolId: string,
+    dto: UpdateAdmissionEnquiryDto,
+    updatedBy: string,
+  ): Promise<AdmissionEnquiry> {
+    await this.findById(id, schoolId);
     const updated = await this.enquiriesRepo.update(id, schoolId, dto);
-
-    // Determine history action from what changed
-    let action: 'FOLLOW_UP_UPDATED' | 'ADMISSION_CONFIRMED' | 'ENQUIRY_REJECTED' | 'REMARKS_UPDATED' | 'TEACHER_ASSIGNED' = 'REMARKS_UPDATED';
-    let details = 'Enquiry updated';
-
-    if (dto.status === EnquiryStatus.ADMISSION_CONFIRMED) {
-      action = 'ADMISSION_CONFIRMED';
-      details = 'Admission has been confirmed';
-    } else if (dto.status === EnquiryStatus.REJECTED) {
-      action = 'ENQUIRY_REJECTED';
-      details = 'Enquiry has been rejected';
-    } else if (dto.next_followup_date || dto.next_followup_time) {
-      action = 'FOLLOW_UP_UPDATED';
-      details = `Follow-up scheduled for ${dto.next_followup_date ?? existing.next_followup_date}`;
-    } else if (dto.assigned_teacher_id && dto.assigned_teacher_id !== existing.assigned_teacher_id) {
-      action = 'TEACHER_ASSIGNED';
-      details = 'Assigned teacher has been updated';
-    }
-
-    if (dto.remarks) {
-      await this.enquiriesRepo.createHistory({
-        id: generateId(),
-        school_id: schoolId,
-        enquiry_id: id,
-        assigned_teacher_id: updated.assigned_teacher_id ?? null,
-        action,
-        details,
-        remarks: dto.remarks,
-        created_by: updatedBy,
-      });
-    }
-
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return updated;
   }
@@ -112,8 +94,86 @@ export class AdmissionEnquiriesService {
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
   }
 
+  // ─── History ────────────────────────────────────────
+
   async getHistory(enquiryId: string, schoolId: string): Promise<EnquiryHistory[]> {
-    await this.findById(enquiryId, schoolId); // ensures enquiry exists and belongs to school
-    return this.enquiriesRepo.findHistoryByEnquiryId(enquiryId, schoolId);
+    // Verify enquiry exists and belongs to this school
+    await this.findById(enquiryId, schoolId);
+
+    const key = `${this.cacheKey(schoolId)}:${enquiryId}:history`;
+    return this.redisService.getOrSet(key, HISTORY_TTL, () =>
+      this.enquiriesRepo.findHistoryByEnquiryId(enquiryId, schoolId),
+    );
+  }
+
+  async addHistory(
+    enquiryId: string,
+    schoolId: string,
+    dto: CreateEnquiryHistoryDto,
+    createdBy: string,
+  ): Promise<EnquiryHistory> {
+    const enquiry = await this.findById(enquiryId, schoolId);
+
+    // Block history additions on terminal statuses
+    if (
+      enquiry.status === 'ADMISSION_CONFIRMED' ||
+      enquiry.status === 'REJECTED'
+    ) {
+      throw new ForbiddenException(
+        `Cannot add history to an enquiry with status '${enquiry.status}'`,
+      );
+    }
+
+    // Validate: NEXT_FOLLOW_UP_UPDATE requires date
+    if (dto.action === EnquiryAction.NEXT_FOLLOW_UP_UPDATE && !dto.next_followup_date) {
+      throw new ForbiddenException(
+        'next_followup_date is required when action is NEXT_FOLLOW_UP_UPDATE',
+      );
+    }
+
+    // Create history entry
+    const entry = await this.enquiriesRepo.createHistory({
+      id: generateId(),
+      school_id: schoolId,
+      enquiry_id: enquiryId,
+      assigned_teacher_id: enquiry.assigned_teacher_id ?? null,
+      action: dto.action,
+      next_followup_date: dto.next_followup_date ?? null,
+      next_followup_time: dto.next_followup_time ?? null,
+      details: dto.details ?? null,
+      remarks: dto.remarks,
+      created_by: createdBy,
+    });
+
+    // Side-effect: if NEXT_FOLLOW_UP_UPDATE, sync date/time back to parent enquiry
+    if (
+      dto.action === EnquiryAction.NEXT_FOLLOW_UP_UPDATE &&
+      dto.next_followup_date
+    ) {
+      await this.enquiriesRepo.update(enquiryId, schoolId, {
+        next_followup_date: dto.next_followup_date,
+        next_followup_time: dto.next_followup_time ?? null,
+        status: 'FOLLOW_UP',
+      });
+    }
+
+    // Side-effect: sync status for terminal actions
+    if (dto.action === EnquiryAction.ADMISSION_CONFIRMED) {
+      await this.enquiriesRepo.update(enquiryId, schoolId, {
+        status: 'ADMISSION_CONFIRMED',
+      });
+    }
+
+    if (dto.action === EnquiryAction.ENQUIRY_REJECTED) {
+      await this.enquiriesRepo.update(enquiryId, schoolId, {
+        status: 'REJECTED',
+      });
+    }
+
+    // Invalidate all caches for this enquiry
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:${enquiryId}*`);
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:list:*`);
+
+    return entry;
   }
 }
