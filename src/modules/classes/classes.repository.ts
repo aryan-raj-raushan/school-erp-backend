@@ -5,6 +5,7 @@ import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { classes } from '../../database/drizzle/schema/classes.schema';
 import { sections } from '../../database/drizzle/schema/sections.schema';
 import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
+import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
 import { Class, NewClass, ClassSectionView } from './types/class.types';
 import { ClassFilterDto } from './dto/class-filter.dto';
 
@@ -18,7 +19,12 @@ export class ClassesRepository {
       eq(sections.deleted, false),
       eq(classes.deleted, false),
     ];
-    if (filters.academic_year_id) conditions.push(eq(classes.academic_year_id, filters.academic_year_id));
+    if (filters.academic_year_id) {
+      conditions.push(eq(classes.academic_year_id, filters.academic_year_id));
+    } else {
+      // Default to current academic year when none specified
+      conditions.push(eq(academicYears.is_current, true));
+    }
     if (filters.department) conditions.push(eq(classes.department, filters.department));
     if (filters.class_type) conditions.push(eq(classes.class_type, filters.class_type));
     return conditions;
@@ -59,6 +65,7 @@ export class ClassesRepository {
       .from(sections)
       .innerJoin(classes, eq(sections.class_id, classes.id))
       .leftJoin(schoolUsers, eq(sections.class_teacher_id, schoolUsers.id))
+      .leftJoin(academicYears, eq(classes.academic_year_id, academicYears.id))
       .where(and(...this.buildConditions(schoolId, filters)))
       .orderBy(classes.class_sequence, classes.numeric_value, sections.name)
       .limit(limit)
@@ -72,6 +79,7 @@ export class ClassesRepository {
       .select({ count: sql<number>`count(*)` })
       .from(sections)
       .innerJoin(classes, eq(sections.class_id, classes.id))
+      .leftJoin(academicYears, eq(classes.academic_year_id, academicYears.id))
       .where(and(...this.buildConditions(schoolId, filters)));
     return Number(count);
   }

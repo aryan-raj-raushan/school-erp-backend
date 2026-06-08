@@ -25,10 +25,6 @@ export class CreateClassDto {
   @IsNotEmpty()
   academic_year_id: string;
 
-  @ApiPropertyOptional({ example: 'uuid-of-timetable-session' })
-  @IsOptional()
-  @IsUUID()
-
   @ApiPropertyOptional({ example: 'Science', maxLength: 100 })
   @IsOptional()
   @IsString()

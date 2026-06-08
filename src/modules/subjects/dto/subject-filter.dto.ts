@@ -9,9 +9,6 @@ export class SubjectFilterDto extends PaginationDto {
   @IsUUID()
   class_id?: string;
 
-  @IsOptional()
-  @IsUUID()
-
   @ApiPropertyOptional({ description: 'Filter by class detail (year/semester) ID' })
   @IsOptional()
   @IsUUID()
