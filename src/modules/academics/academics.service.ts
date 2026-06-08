@@ -24,7 +24,6 @@ export class AcademicsService {
     class_detail_id?: string;
     subject_id?: string;
     academic_year_id?: string;
-    timetable_session_id?: string;
   }): Promise<Homework[]> {
     const key = `${this.cacheKey(schoolId)}:hw:list:${JSON.stringify(filters)}`;
     return this.redisService.getOrSet(key, CACHE_TTL, () => this.repo.findAllHomework(schoolId, filters));

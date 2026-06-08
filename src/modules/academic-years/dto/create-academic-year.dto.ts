@@ -4,7 +4,6 @@ import {
   IsOptional,
   IsBoolean,
   IsDateString,
-  IsUUID,
   MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
@@ -52,8 +51,4 @@ export class CreateAcademicYearDto {
   @IsBoolean()
   is_enabled?: boolean;
 
-  @ApiPropertyOptional({ example: 'uuid-of-timetable-session', description: 'Link to a timetable session' })
-  @IsOptional()
-  @IsUUID()
-  timetable_session_id?: string;
 }

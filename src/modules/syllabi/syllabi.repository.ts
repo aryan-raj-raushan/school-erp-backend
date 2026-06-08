@@ -22,7 +22,6 @@ export class SyllabiRepository {
       eq(syllabi.deleted, false),
     ];
     if (filters.class_id) conditions.push(eq(syllabi.class_id, filters.class_id));
-    if (filters.timetable_session_id) conditions.push(eq(syllabi.timetable_session_id, filters.timetable_session_id));
     if (filters.class_detail_id) conditions.push(eq(syllabi.class_detail_id, filters.class_detail_id));
     return conditions;
   }

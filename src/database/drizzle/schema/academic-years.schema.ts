@@ -14,7 +14,6 @@ export const academicYears = pgTable('academic_years', {
   is_enabled: boolean('is_enabled').default(true).notNull(),
   session_code: varchar('session_code', { length: 50 }),
   description: text('description'),
-  timetable_session_id: varchar('timetable_session_id', { length: 36 }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),
   created_by: varchar('created_by', { length: 36 }),

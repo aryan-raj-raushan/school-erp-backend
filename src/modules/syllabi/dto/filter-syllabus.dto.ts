@@ -11,7 +11,6 @@ export class FilterSyllabusDto extends PaginationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
-  timetable_session_id?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

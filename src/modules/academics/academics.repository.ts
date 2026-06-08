@@ -5,7 +5,6 @@ import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { homeworks, homeworkAttachments, homeworkSubmissions, studyMaterials } from '../../database/drizzle/schema/academics.schema';
 import { classes } from '../../database/drizzle/schema/classes.schema';
 import { classDetails } from '../../database/drizzle/schema/class-details.schema';
-import { timetableSessions } from '../../database/drizzle/schema/timetable-sessions.schema';
 import { subjects } from '../../database/drizzle/schema/subjects.schema';
 import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
 import {
@@ -25,21 +24,18 @@ export class AcademicsRepository {
     class_detail_id?: string;
     subject_id?: string;
     academic_year_id?: string;
-    timetable_session_id?: string;
   }) {
     const conditions = [eq(homeworks.school_id, schoolId), eq(homeworks.deleted, false)];
     if (filters.class_id) conditions.push(eq(homeworks.class_id, filters.class_id));
     if (filters.class_detail_id) conditions.push(eq(homeworks.class_detail_id, filters.class_detail_id));
     if (filters.subject_id) conditions.push(eq(homeworks.subject_id, filters.subject_id));
     if (filters.academic_year_id) conditions.push(eq(homeworks.academic_year_id, filters.academic_year_id));
-    if (filters.timetable_session_id) conditions.push(eq(homeworks.timetable_session_id, filters.timetable_session_id));
 
     return this.db
       .select({
         id: homeworks.id,
         school_id: homeworks.school_id,
         academic_year_id: homeworks.academic_year_id,
-        timetable_session_id: homeworks.timetable_session_id,
         class_id: homeworks.class_id,
         class_detail_id: homeworks.class_detail_id,
         subject_id: homeworks.subject_id,
@@ -56,14 +52,12 @@ export class AcademicsRepository {
         updated_at: homeworks.updated_at,
         class_name: classes.name,
         subject_name: subjects.name,
-        session_name: timetableSessions.name,
         class_detail_name: classDetails.name,
         created_by_name: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
       })
       .from(homeworks)
       .leftJoin(classes, eq(homeworks.class_id, classes.id))
       .leftJoin(classDetails, eq(homeworks.class_detail_id, classDetails.id))
-      .leftJoin(timetableSessions, eq(homeworks.timetable_session_id, timetableSessions.id))
       .leftJoin(subjects, eq(homeworks.subject_id, subjects.id))
       .leftJoin(schoolUsers, eq(homeworks.assigned_by, schoolUsers.id))
       .where(and(...conditions))

@@ -12,7 +12,6 @@ export class HomeworkAttachmentDto {
 
 export class CreateHomeworkDto {
   @ApiProperty() @IsUUID() @IsNotEmpty() academic_year_id: string;
-  @ApiPropertyOptional() @IsOptional() @IsUUID() timetable_session_id?: string;
   @ApiProperty() @IsUUID() @IsNotEmpty() class_id: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() class_detail_id?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() subject_id?: string;

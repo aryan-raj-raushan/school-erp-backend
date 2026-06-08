@@ -16,7 +16,6 @@ export class SubjectsRepository {
       eq(subjects.deleted, false),
     ];
     if (filters.class_id) conditions.push(eq(subjects.class_id, filters.class_id));
-    if (filters.timetable_session_id) conditions.push(eq(subjects.timetable_session_id, filters.timetable_session_id));
     if (filters.class_detail_id) conditions.push(eq(subjects.class_detail_id, filters.class_detail_id));
     if (filters.search) conditions.push(ilike(subjects.name, `%${filters.search}%`));
     return conditions;

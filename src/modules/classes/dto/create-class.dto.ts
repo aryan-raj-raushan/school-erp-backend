@@ -28,7 +28,6 @@ export class CreateClassDto {
   @ApiPropertyOptional({ example: 'uuid-of-timetable-session' })
   @IsOptional()
   @IsUUID()
-  timetable_session_id?: string;
 
   @ApiPropertyOptional({ example: 'Science', maxLength: 100 })
   @IsOptional()

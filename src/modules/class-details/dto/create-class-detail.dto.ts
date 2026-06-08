@@ -18,10 +18,8 @@ export class CreateClassDetailDto {
   @IsNotEmpty()
   class_id: string;
 
-  @ApiPropertyOptional({ example: 'uuid-of-timetable-session' })
   @IsOptional()
   @IsUUID()
-  timetable_session_id?: string;
 
   @ApiProperty({ example: 'NURSERY', maxLength: 100 })
   @IsString()
