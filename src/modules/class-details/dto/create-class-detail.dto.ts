@@ -18,9 +18,6 @@ export class CreateClassDetailDto {
   @IsNotEmpty()
   class_id: string;
 
-  @IsOptional()
-  @IsUUID()
-
   @ApiProperty({ example: 'NURSERY', maxLength: 100 })
   @IsString()
   @IsNotEmpty()
