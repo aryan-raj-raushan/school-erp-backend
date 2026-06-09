@@ -21,3 +21,22 @@ export enum AuthContext {
   COMPANY = 'COMPANY',
   SCHOOL = 'SCHOOL',
 }
+
+export const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
+export const VIEW_ROLES = [
+  SchoolRole.SCHOOL_ADMIN,
+  SchoolRole.PRINCIPAL,
+  SchoolRole.VICE_PRINCIPAL,
+  SchoolRole.TEACHER,
+  SchoolRole.CLASS_TEACHER,
+];
+
+export const ALL_SCHOOL_ROLES = [
+  SchoolRole.SCHOOL_ADMIN,
+  SchoolRole.PRINCIPAL,
+  SchoolRole.VICE_PRINCIPAL,
+  SchoolRole.TEACHER,
+  SchoolRole.CLASS_TEACHER,
+  SchoolRole.ACCOUNTANT,
+  SchoolRole.LIBRARIAN,
+];
