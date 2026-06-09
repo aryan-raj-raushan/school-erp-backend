@@ -7,9 +7,7 @@ import { CreateSchoolEventDto } from './dto/create-school-event.dto';
 import { UpdateSchoolEventDto } from './dto/update-school-event.dto';
 import { SchoolEventFilterDto } from './dto/school-event-filter.dto';
 import { SchoolEvent } from './types/school-event.types';
-
-const LIST_TTL = 120;
-const ITEM_TTL = 300;
+import { REDI_HOLIDAY_EVENTS_KEY } from '@shared/redis/redis-key';
 
 @Injectable()
 export class SchoolEventsService {
@@ -19,7 +17,7 @@ export class SchoolEventsService {
   ) {}
 
   private cacheKey(schoolId: string): string {
-    return `school_events:${schoolId}`;
+    return REDI_HOLIDAY_EVENTS_KEY.SCHOOL_EVENTS(schoolId);
   }
 
   async findAll(
@@ -27,7 +25,7 @@ export class SchoolEventsService {
     filters: SchoolEventFilterDto,
   ): Promise<PaginationResponse<SchoolEvent>> {
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(key, LIST_TTL, async () => {
+    return this.redisService.getOrSet(key, REDI_HOLIDAY_EVENTS_KEY.LIST_TTL, async () => {
       const [items, total] = await Promise.all([
         this.schoolEventsRepo.findAll(schoolId, filters),
         this.schoolEventsRepo.count(schoolId, filters),
@@ -38,7 +36,7 @@ export class SchoolEventsService {
 
   async findById(id: string, schoolId: string): Promise<SchoolEvent> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, ITEM_TTL, async () => {
+    return this.redisService.getOrSet(key, REDI_HOLIDAY_EVENTS_KEY.ITEM_TTL, async () => {
       const event = await this.schoolEventsRepo.findById(id, schoolId);
       if (!event) throw new NotFoundException(`School event with id '${id}' not found`);
       return event;
@@ -60,11 +58,7 @@ export class SchoolEventsService {
     return event;
   }
 
-  async update(
-    id: string,
-    schoolId: string,
-    dto: UpdateSchoolEventDto,
-  ): Promise<SchoolEvent> {
+  async update(id: string, schoolId: string, dto: UpdateSchoolEventDto): Promise<SchoolEvent> {
     await this.findById(id, schoolId);
     const updated = await this.schoolEventsRepo.update(id, schoolId, dto);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);

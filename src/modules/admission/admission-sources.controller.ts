@@ -11,13 +11,9 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
+import { ADMIN_ROLES, VIEW_ROLES } from '../../shared/enums';
 
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
-const VIEW_ROLES = [
-  SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER,
-];
+
 
 @ApiTags('Admission Sources')
 @ApiBearerAuth('access-token')

@@ -2,13 +2,9 @@ import { IsOptional, IsEnum, IsUUID, IsString, IsDateString } from 'class-valida
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
+import { EnquiryStatus } from '@shared/enums/admission.enum';
 
-export enum EnquiryStatus {
-  NEW = 'NEW',
-  FOLLOW_UP = 'FOLLOW_UP',
-  ADMISSION_CONFIRMED = 'ADMISSION_CONFIRMED',
-  REJECTED = 'REJECTED',
-}
+
 
 export class FilterAdmissionEnquiryDto extends PaginationDto {
   @ApiPropertyOptional({ example: 'uuid-of-academic-year' })

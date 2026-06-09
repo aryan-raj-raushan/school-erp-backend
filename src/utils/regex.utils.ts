@@ -16,4 +16,5 @@ export const REGEX = {
   DATE_YYYY_MM_DD: /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/,
   SCHOOL_CODE: /^[A-Z0-9]{2,10}$/,
   SUBJECT_CODE: /^[A-Z0-9\-]{2,20}$/,
+  TIME_REGEX: /^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/
 } as const;

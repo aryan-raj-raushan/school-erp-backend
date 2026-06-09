@@ -3,16 +3,11 @@ import {
   IsUUID, IsEmail, MaxLength, Matches, IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { REGEX } from '@utils/regex.utils';
+import { CategoryEnum, GenderEnum, ReligionEnum } from '@shared/enums';
 
-export enum EnquiryGender { MALE = 'MALE', FEMALE = 'FEMALE', OTHER = 'OTHER' }
-export enum EnquiryReligion {
-  HINDU = 'HINDU', MUSLIM = 'MUSLIM', CHRISTIAN = 'CHRISTIAN',
-  SIKH = 'SIKH', JAIN = 'JAIN', BUDDHIST = 'BUDDHIST', OTHER = 'OTHER',
-}
-export enum EnquiryCategory { GENERAL = 'GENERAL', OBC = 'OBC', SC = 'SC', ST = 'ST', OTHER = 'OTHER' }
 
-const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/;
+
 
 export class CreateAdmissionEnquiryDto {
   // Academic Year
@@ -71,14 +66,14 @@ export class CreateAdmissionEnquiryDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString()
   date_of_birth?: string;
 
-  @ApiPropertyOptional({ enum: EnquiryGender }) @IsOptional() @IsEnum(EnquiryGender)
-  gender?: EnquiryGender;
+  @ApiPropertyOptional({ enum: GenderEnum }) @IsOptional() @IsEnum(GenderEnum)
+  gender?: GenderEnum;
 
-  @ApiPropertyOptional({ enum: EnquiryReligion }) @IsOptional() @IsEnum(EnquiryReligion)
-  religion?: EnquiryReligion;
+  @ApiPropertyOptional({ enum: ReligionEnum }) @IsOptional() @IsEnum(ReligionEnum)
+  religion?: ReligionEnum;
 
-  @ApiPropertyOptional({ enum: EnquiryCategory }) @IsOptional() @IsEnum(EnquiryCategory)
-  category?: EnquiryCategory;
+  @ApiPropertyOptional({ enum: CategoryEnum }) @IsOptional() @IsEnum(CategoryEnum)
+  category?: CategoryEnum;
 
   @ApiPropertyOptional() @IsOptional() @IsString()
   student_current_address?: string;
@@ -114,7 +109,7 @@ export class CreateAdmissionEnquiryDto {
 
   @ApiPropertyOptional({ example: '10:00' })
   @IsOptional()
-  @Matches(TIME_REGEX, { message: 'next_followup_time must be HH:mm or HH:mm:ss' })
+  @Matches(REGEX.TIME_REGEX, { message: 'next_followup_time must be HH:mm or HH:mm:ss' })
   next_followup_time?: string;
 
   @ApiPropertyOptional({ example: 'uuid-of-admission-source' })

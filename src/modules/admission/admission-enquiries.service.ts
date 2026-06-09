@@ -4,14 +4,13 @@ import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateAdmissionEnquiryDto } from './dto/create-admission-enquiry.dto';
-import { UpdateAdmissionEnquiryDto, EnquiryStatus } from './dto/update-admission-enquiry.dto';
+import { UpdateAdmissionEnquiryDto } from './dto/update-admission-enquiry.dto';
 import { FilterAdmissionEnquiryDto } from './dto/filter-admission-enquiry.dto';
-import { CreateEnquiryHistoryDto, EnquiryAction } from './dto/create-enquiry-history.dto';
+import { CreateEnquiryHistoryDto } from './dto/create-enquiry-history.dto';
 import { AdmissionEnquiry, EnquiryHistory } from './types/admission-enquiry.types';
+import { EnquiryAction } from '@shared/enums/admission.enum';
+import { REDIS_ADMISSION_KEY } from '@shared/redis/redis-key';
 
-const LIST_TTL = 60;
-const ITEM_TTL = 180;
-const HISTORY_TTL = 120;
 
 @Injectable()
 export class AdmissionEnquiriesService {
@@ -21,7 +20,7 @@ export class AdmissionEnquiriesService {
   ) {}
 
   private cacheKey(schoolId: string) {
-    return `admission_enquiries:${schoolId}`;
+    return REDIS_ADMISSION_KEY.ADMISSION_ENQUIRY(schoolId);
   }
 
   async findAll(
@@ -29,7 +28,7 @@ export class AdmissionEnquiriesService {
     filters: FilterAdmissionEnquiryDto,
   ): Promise<PaginationResponse<AdmissionEnquiry>> {
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(key, LIST_TTL, async () => {
+    return this.redisService.getOrSet(key, REDIS_ADMISSION_KEY.LIST_TTL, async () => {
       const [items, total] = await Promise.all([
         this.enquiriesRepo.findAll(schoolId, filters),
         this.enquiriesRepo.count(schoolId, filters),
@@ -40,7 +39,7 @@ export class AdmissionEnquiriesService {
 
   async findById(id: string, schoolId: string): Promise<AdmissionEnquiry> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, ITEM_TTL, async () => {
+    return this.redisService.getOrSet(key, REDIS_ADMISSION_KEY.ITEM_TTL, async () => {
       const enquiry = await this.enquiriesRepo.findById(id, schoolId);
       if (!enquiry) throw new NotFoundException(`Admission enquiry with id '${id}' not found`);
       return enquiry;
@@ -101,7 +100,7 @@ export class AdmissionEnquiriesService {
     await this.findById(enquiryId, schoolId);
 
     const key = `${this.cacheKey(schoolId)}:${enquiryId}:history`;
-    return this.redisService.getOrSet(key, HISTORY_TTL, () =>
+    return this.redisService.getOrSet(key, REDIS_ADMISSION_KEY.HISTORY_TTL, () =>
       this.enquiriesRepo.findHistoryByEnquiryId(enquiryId, schoolId),
     );
   }

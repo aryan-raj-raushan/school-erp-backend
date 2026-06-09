@@ -20,19 +20,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const ALL_SCHOOL_ROLES = [
-  SchoolRole.SCHOOL_ADMIN,
-  SchoolRole.PRINCIPAL,
-  SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER,
-  SchoolRole.CLASS_TEACHER,
-  SchoolRole.ACCOUNTANT,
-  SchoolRole.LIBRARIAN,
-];
-
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
+import { ADMIN_ROLES, ALL_SCHOOL_ROLES, SchoolRole } from '../../shared/enums';
 
 @ApiTags('School Events & Holidays')
 @ApiBearerAuth('access-token')

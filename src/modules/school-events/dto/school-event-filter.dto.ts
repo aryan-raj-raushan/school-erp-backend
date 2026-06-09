@@ -2,11 +2,7 @@ import { IsOptional, IsEnum, IsUUID, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
-
-export enum SchoolEventType {
-  EVENT = 'EVENT',
-  HOLIDAY = 'HOLIDAY',
-}
+import { SchoolEventType } from '@shared/enums/holiday-events.enum';
 
 export class SchoolEventFilterDto extends PaginationDto {
   @ApiPropertyOptional({ enum: SchoolEventType, description: 'Filter by type: EVENT or HOLIDAY' })

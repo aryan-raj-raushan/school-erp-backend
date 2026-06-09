@@ -7,9 +7,9 @@ import { CreateAdmissionSourceDto } from './dto/create-admission-source.dto';
 import { UpdateAdmissionSourceDto } from './dto/update-admission-source.dto';
 import { FilterAdmissionSourceDto } from './dto/filter-admission-source.dto';
 import { AdmissionSource } from './types/admission-source.types';
+import { REDIS_ADMISSION_SOURCE_KEY } from '@shared/redis/redis-key';
 
-const LIST_TTL = 120;
-const ITEM_TTL = 300;
+
 
 @Injectable()
 export class AdmissionSourcesService {
@@ -19,12 +19,12 @@ export class AdmissionSourcesService {
   ) {}
 
   private cacheKey(schoolId: string) {
-    return `admission_sources:${schoolId}`;
+    return REDIS_ADMISSION_SOURCE_KEY.ADMISSION_SOURCE(schoolId);
   }
 
   async findAll(schoolId: string, filters: FilterAdmissionSourceDto): Promise<PaginationResponse<AdmissionSource>> {
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(key, LIST_TTL, async () => {
+    return this.redisService.getOrSet(key, REDIS_ADMISSION_SOURCE_KEY.LIST_TTL, async () => {
       const [items, total] = await Promise.all([
         this.sourcesRepo.findAll(schoolId, filters),
         this.sourcesRepo.count(schoolId, filters),
@@ -35,7 +35,7 @@ export class AdmissionSourcesService {
 
   async findById(id: string, schoolId: string): Promise<AdmissionSource> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, ITEM_TTL, async () => {
+    return this.redisService.getOrSet(key, REDIS_ADMISSION_SOURCE_KEY.ITEM_TTL, async () => {
       const source = await this.sourcesRepo.findById(id, schoolId);
       if (!source) throw new NotFoundException(`Admission source with id '${id}' not found`);
       return source;
