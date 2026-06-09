@@ -11,6 +11,12 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const ALLOWED_DOC_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
+export interface UploadMeta {
+  reference_id: string;
+  reference_type: string;
+  document_type: string;
+}
+
 @Injectable()
 export class UploadsService {
   private readonly logger = new Logger(UploadsService.name);
@@ -21,12 +27,14 @@ export class UploadsService {
     private readonly configService: ConfigService,
     @InjectModel(DocumentUpload.name) private readonly docUploadModel: Model<DocumentUpload>,
   ) {
+    const endpoint = this.configService.get<string>('aws.s3Endpoint');
     this.s3 = new S3Client({
       region: this.configService.get<string>('aws.region'),
       credentials: {
         accessKeyId: this.configService.get<string>('aws.accessKeyId')!,
         secretAccessKey: this.configService.get<string>('aws.secretAccessKey')!,
       },
+      ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
     });
     this.bucket = this.configService.get<string>('aws.s3Bucket')!;
   }
@@ -35,18 +43,20 @@ export class UploadsService {
     file: Express.Multer.File,
     schoolId: string,
     uploadedBy: string,
+    meta: UploadMeta,
   ): Promise<{ url: string; s3Key: string }> {
     this.validateFile(file, ALLOWED_IMAGE_TYPES);
-    return this.upload(file, schoolId, 'images', uploadedBy);
+    return this.upload(file, schoolId, 'images', uploadedBy, meta);
   }
 
   async uploadDocument(
     file: Express.Multer.File,
     schoolId: string,
     uploadedBy: string,
+    meta: UploadMeta,
   ): Promise<{ url: string; s3Key: string }> {
     this.validateFile(file, ALLOWED_DOC_TYPES);
-    return this.upload(file, schoolId, 'documents', uploadedBy);
+    return this.upload(file, schoolId, 'documents', uploadedBy, meta);
   }
 
   private static readonly S3_KEY_PATTERN =
@@ -70,6 +80,7 @@ export class UploadsService {
     schoolId: string,
     folder: string,
     uploadedBy: string,
+    meta: UploadMeta,
   ): Promise<{ url: string; s3Key: string }> {
     const ext = file.originalname.split('.').pop() ?? 'bin';
     const s3Key = `${schoolId}/${folder}/${uuidv4()}.${ext}`;
@@ -84,18 +95,23 @@ export class UploadsService {
       }),
     );
 
+    const baseUrl = this.configService.get<string>('aws.s3BaseUrl');
     const region = this.configService.get<string>('aws.region');
-    const url = `https://${this.bucket}.s3.${region}.amazonaws.com/${s3Key}`;
+    const url = baseUrl
+      ? `${baseUrl.replace(/\/$/, '')}/${s3Key}`
+      : `https://${this.bucket}.s3.${region}.amazonaws.com/${s3Key}`;
 
     await this.docUploadModel.create({
       school_id: schoolId,
       uploaded_by: uploadedBy,
       original_name: file.originalname,
       mime_type: file.mimetype,
-      size_bytes: file.size,
+      file_size_bytes: file.size,
       s3_key: s3Key,
       s3_url: url,
-      folder,
+      reference_id: meta.reference_id,
+      reference_type: meta.reference_type,
+      document_type: meta.document_type,
     });
 
     return { url, s3Key };

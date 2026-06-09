@@ -56,16 +56,22 @@ export const homeworkSubmissions = pgTable('homework_submissions', {
   uniqueHwStudent: unique('hw_submissions_hw_student').on(t.homework_id, t.student_id),
 }));
 
+export const studyMaterialContentTypeEnum = pgEnum('study_material_content_type', ['text', 'file', 'youtube']);
+
 export const studyMaterials = pgTable('study_materials', {
   id: varchar('id', { length: 36 }).primaryKey(),
   school_id: varchar('school_id', { length: 36 }).notNull().references(() => schools.id, { onDelete: 'cascade' }),
   academic_year_id: varchar('academic_year_id', { length: 36 }).notNull().references(() => academicYears.id, { onDelete: 'cascade' }),
   class_id: varchar('class_id', { length: 36 }).references(() => classes.id, { onDelete: 'set null' }),
+  class_detail_id: varchar('class_detail_id', { length: 36 }).references(() => classDetails.id, { onDelete: 'set null' }),
   subject_id: varchar('subject_id', { length: 36 }).references(() => subjects.id, { onDelete: 'set null' }),
   title: varchar('title', { length: 200 }).notNull(),
   description: text('description'),
-  file_url: text('file_url').notNull(),
+  content_type: studyMaterialContentTypeEnum('content_type').default('file').notNull(),
+  content_text: text('content_text'),
+  file_url: text('file_url'),
   file_type: varchar('file_type', { length: 50 }),
+  youtube_url: varchar('youtube_url', { length: 500 }),
   uploaded_by: varchar('uploaded_by', { length: 36 }).notNull(),
   deleted: boolean('deleted').default(false).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

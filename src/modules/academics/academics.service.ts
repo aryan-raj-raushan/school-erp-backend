@@ -120,7 +120,7 @@ export class AcademicsService {
   }
 
   // Study Materials
-  async findAllMaterials(schoolId: string, filters: { class_id?: string; subject_id?: string; academic_year_id?: string }): Promise<StudyMaterial[]> {
+  async findAllMaterials(schoolId: string, filters: { class_id?: string; class_detail_id?: string; subject_id?: string; academic_year_id?: string }): Promise<StudyMaterial[]> {
     const key = `${this.cacheKey(schoolId)}:mat:list:${JSON.stringify(filters)}`;
     return this.redisService.getOrSet(key, CACHE_TTL, () => this.repo.findAllMaterials(schoolId, filters));
   }

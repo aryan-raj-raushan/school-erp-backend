@@ -124,9 +124,10 @@ export class AcademicsRepository {
   }
 
   // Study Materials
-  async findAllMaterials(schoolId: string, filters: { class_id?: string; subject_id?: string; academic_year_id?: string }): Promise<StudyMaterial[]> {
+  async findAllMaterials(schoolId: string, filters: { class_id?: string; class_detail_id?: string; subject_id?: string; academic_year_id?: string }): Promise<StudyMaterial[]> {
     const conditions = [eq(studyMaterials.school_id, schoolId), eq(studyMaterials.deleted, false)];
     if (filters.class_id) conditions.push(eq(studyMaterials.class_id, filters.class_id));
+    if (filters.class_detail_id) conditions.push(eq(studyMaterials.class_detail_id, filters.class_detail_id));
     if (filters.subject_id) conditions.push(eq(studyMaterials.subject_id, filters.subject_id));
     if (filters.academic_year_id) conditions.push(eq(studyMaterials.academic_year_id, filters.academic_year_id));
     return this.db.select().from(studyMaterials).where(and(...conditions)).orderBy(studyMaterials.created_at);

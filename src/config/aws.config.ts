@@ -6,4 +6,5 @@ export default registerAs('aws', () => ({
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
   s3Bucket: process.env.AWS_S3_BUCKET || 'school-erp-files',
   s3BaseUrl: process.env.AWS_S3_BASE_URL || '',
+  s3Endpoint: process.env.AWS_S3_ENDPOINT || '',
 }));

@@ -58,14 +58,16 @@ export class TimetableController {
   @ApiQuery({ name: 'day', required: true, enum: ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY'] })
   @ApiQuery({ name: 'academic_year_id', required: false })
   @ApiQuery({ name: 'class_id', required: false })
+  @ApiQuery({ name: 'timetable_name', required: false })
   async getSessionView(
     @GetSchoolId() schoolId: string,
     @Query('day') day: string,
     @Query('academic_year_id') ayId?: string,
     @Query('class_id') classId?: string,
+    @Query('timetable_name') timetableName?: string,
   ) {
     return ApiResponse.success(
-      await this.timetableService.getSessionView(schoolId, { day, academic_year_id: ayId, class_id: classId }),
+      await this.timetableService.getSessionView(schoolId, { day, academic_year_id: ayId, class_id: classId, timetable_name: timetableName }),
       'Session view fetched',
     );
   }

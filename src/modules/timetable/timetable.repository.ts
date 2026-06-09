@@ -151,10 +151,11 @@ export class TimetableRepository {
   }
 
   // Session day view - all timetables for a day
-  async findSessionView(schoolId: string, filters: { day: string; academic_year_id?: string; class_id?: string }) {
+  async findSessionView(schoolId: string, filters: { day: string; academic_year_id?: string; class_id?: string; timetable_name?: string }) {
     const conditions = [eq(timetableEntries.school_id, schoolId), eq(timetableEntries.day_of_week, filters.day as any), eq(timetables.deleted, false)];
     if (filters.academic_year_id) conditions.push(eq(timetables.academic_year_id, filters.academic_year_id));
     if (filters.class_id) conditions.push(eq(timetables.class_id, filters.class_id));
+    if (filters.timetable_name) conditions.push(eq(timetables.name, filters.timetable_name));
 
     return this.db
       .select({
@@ -166,6 +167,8 @@ export class TimetableRepository {
         class_detail_name: classDetails.name,
         teacher_name: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
         timetable_name: timetables.name,
+        start_time: timetablePeriodTimes.start_time,
+        end_time: timetablePeriodTimes.end_time,
       })
       .from(timetableEntries)
       .innerJoin(timetables, and(eq(timetableEntries.timetable_id, timetables.id), eq(timetables.school_id, schoolId)))
@@ -173,6 +176,10 @@ export class TimetableRepository {
       .leftJoin(schoolUsers, eq(timetableEntries.teacher_id, schoolUsers.id))
       .leftJoin(classes, eq(timetables.class_id, classes.id))
       .leftJoin(classDetails, eq(timetables.class_detail_id, classDetails.id))
+      .leftJoin(timetablePeriodTimes, and(
+        eq(timetablePeriodTimes.timetable_id, timetableEntries.timetable_id),
+        eq(timetablePeriodTimes.period_number, timetableEntries.period_number),
+      ))
       .where(and(...conditions))
       .orderBy(classes.class_sequence, timetableEntries.period_number);
   }

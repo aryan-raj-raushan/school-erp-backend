@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsIn, MaxLength, IsUrl } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { StringUtils } from '../../../utils/string.utils';
@@ -17,6 +17,11 @@ export class CreateStudyMaterialDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
+  class_detail_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
   subject_id?: string;
 
   @ApiProperty({ example: 'Chapter 5 Notes' })
@@ -31,14 +36,28 @@ export class CreateStudyMaterialDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ example: 'https://s3.example.com/materials/ch5.pdf' })
+  @ApiProperty({ example: 'file', enum: ['text', 'file', 'youtube'] })
+  @IsIn(['text', 'file', 'youtube'])
+  content_type: 'text' | 'file' | 'youtube';
+
+  @ApiPropertyOptional({ description: 'Rich text content (for content_type=text)' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  file_url: string;
+  content_text?: string;
+
+  @ApiPropertyOptional({ example: 'https://s3.example.com/materials/ch5.pdf' })
+  @IsOptional()
+  @IsString()
+  file_url?: string;
 
   @ApiPropertyOptional({ example: 'PDF' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   file_type?: string;
+
+  @ApiPropertyOptional({ example: 'https://www.youtube.com/watch?v=abc123' })
+  @IsOptional()
+  @IsUrl()
+  youtube_url?: string;
 }

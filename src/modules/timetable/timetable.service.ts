@@ -105,7 +105,7 @@ export class TimetableService {
     return this.repo.findEntriesByTeacher(schoolId, teacherId);
   }
 
-  async getSessionView(schoolId: string, filters: { day: string; academic_year_id?: string; class_id?: string }) {
+  async getSessionView(schoolId: string, filters: { day: string; academic_year_id?: string; class_id?: string; timetable_name?: string }) {
     return this.repo.findSessionView(schoolId, filters);
   }
 }

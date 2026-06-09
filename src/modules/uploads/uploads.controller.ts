@@ -9,9 +9,10 @@ import {
   HttpStatus,
   ParseFilePipe,
   MaxFileSizeValidator,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags, ApiBody } from '@nestjs/swagger';
 import { UploadsService } from './uploads.service';
 import { DeleteUploadDto } from './dto/delete-upload.dto';
 import { ApiResponse } from '../../shared/responses/api-response';
@@ -34,13 +35,33 @@ export class UploadsController {
   @UseInterceptors(FileInterceptor('file', { storage: undefined }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload image to S3' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'reference_id', 'reference_type', 'document_type'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        reference_id: { type: 'string' },
+        reference_type: { type: 'string' },
+        document_type: { type: 'string' },
+      },
+    },
+  })
   async uploadImage(
     @UploadedFile(new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: TEN_MB })] }))
     file: Express.Multer.File,
+    @Body() body: { reference_id?: string; reference_type?: string; document_type?: string },
     @GetSchoolId() schoolId: string,
     @GetCurrentUser() user: JwtPayload,
   ): Promise<ApiResponse<{ url: string; s3Key: string }>> {
-    const data = await this.uploadsService.uploadImage(file, schoolId, user.sub);
+    if (!body.reference_id || !body.reference_type || !body.document_type) {
+      throw new BadRequestException('reference_id, reference_type, and document_type are required');
+    }
+    const data = await this.uploadsService.uploadImage(file, schoolId, user.sub, {
+      reference_id: body.reference_id,
+      reference_type: body.reference_type,
+      document_type: body.document_type,
+    });
     return ApiResponse.success(data, 'Image uploaded');
   }
 
@@ -49,13 +70,33 @@ export class UploadsController {
   @UseInterceptors(FileInterceptor('file', { storage: undefined }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload document to S3' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'reference_id', 'reference_type', 'document_type'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        reference_id: { type: 'string' },
+        reference_type: { type: 'string' },
+        document_type: { type: 'string' },
+      },
+    },
+  })
   async uploadDocument(
     @UploadedFile(new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: TEN_MB })] }))
     file: Express.Multer.File,
+    @Body() body: { reference_id?: string; reference_type?: string; document_type?: string },
     @GetSchoolId() schoolId: string,
     @GetCurrentUser() user: JwtPayload,
   ): Promise<ApiResponse<{ url: string; s3Key: string }>> {
-    const data = await this.uploadsService.uploadDocument(file, schoolId, user.sub);
+    if (!body.reference_id || !body.reference_type || !body.document_type) {
+      throw new BadRequestException('reference_id, reference_type, and document_type are required');
+    }
+    const data = await this.uploadsService.uploadDocument(file, schoolId, user.sub, {
+      reference_id: body.reference_id,
+      reference_type: body.reference_type,
+      document_type: body.document_type,
+    });
     return ApiResponse.success(data, 'Document uploaded');
   }
 

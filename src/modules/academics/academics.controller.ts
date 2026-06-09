@@ -124,10 +124,20 @@ export class StudyMaterialsController {
   @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
   @ApiOperation({ summary: 'List study materials with filters' })
   @ApiQuery({ name: 'class_id', required: false })
+  @ApiQuery({ name: 'class_detail_id', required: false })
   @ApiQuery({ name: 'subject_id', required: false })
   @ApiQuery({ name: 'academic_year_id', required: false })
-  async findAll(@GetSchoolId() schoolId: string, @Query('class_id') classId?: string, @Query('subject_id') subjId?: string, @Query('academic_year_id') ayId?: string) {
-    return ApiResponse.success(await this.academicsService.findAllMaterials(schoolId, { class_id: classId, subject_id: subjId, academic_year_id: ayId }), 'Materials fetched');
+  async findAll(
+    @GetSchoolId() schoolId: string,
+    @Query('class_id') classId?: string,
+    @Query('class_detail_id') classDetailId?: string,
+    @Query('subject_id') subjId?: string,
+    @Query('academic_year_id') ayId?: string,
+  ) {
+    return ApiResponse.success(
+      await this.academicsService.findAllMaterials(schoolId, { class_id: classId, class_detail_id: classDetailId, subject_id: subjId, academic_year_id: ayId }),
+      'Materials fetched',
+    );
   }
 
   @Get(':id')
