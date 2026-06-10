@@ -1,9 +1,15 @@
-import { IsString, IsEnum, IsOptional, IsUUID, IsDateString, Matches, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsUUID,
+  IsDateString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { SchoolEventType } from './school-event-filter.dto';
+import { SchoolEventType } from '@shared/enums/holiday-events.enum';
 import { REGEX } from '@utils/regex.utils';
-
-
 
 export class CreateSchoolEventDto {
   @ApiProperty({ example: 'Republic Day' })
