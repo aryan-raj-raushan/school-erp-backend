@@ -2,7 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, ilike, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { schools } from '../../database/drizzle/schema';
+import { schools, companyUserSchools } from '../../database/drizzle/schema';
 import { School, NewSchool } from './types/school.types';
 import { SchoolFilterDto } from './dto/school-filter.dto';
 
@@ -24,7 +24,12 @@ export class SchoolsRepository {
     const limit = filters.limit ?? 20;
     const offset = ((filters.page ?? 1) - 1) * limit;
 
-    return this.db.select().from(schools).where(and(...conditions)).limit(limit).offset(offset);
+    return this.db
+      .select()
+      .from(schools)
+      .where(and(...conditions))
+      .limit(limit)
+      .offset(offset);
   }
 
   async count(filters: SchoolFilterDto, allowedIds?: string[]): Promise<number> {
@@ -79,5 +84,13 @@ export class SchoolsRepository {
       .update(schools)
       .set({ deleted: true, is_active: false, updated_at: new Date() })
       .where(eq(schools.id, id));
+  }
+
+  async findSchoolIdsByCompanyUserId(userId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ school_id: companyUserSchools.school_id })
+      .from(companyUserSchools)
+      .where(eq(companyUserSchools.user_id, userId));
+    return rows.map((r) => r.school_id);
   }
 }

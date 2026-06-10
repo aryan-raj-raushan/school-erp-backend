@@ -9,8 +9,7 @@ import { CreateFeeDto, BulkCreateFeeDto } from './dto/create-fee.dto';
 import { ManualPaymentDto } from './dto/manual-payment.dto';
 import { FeeMasterType, FeeReceipt, FeePayment } from './types/fee.types';
 import { FeeStatus } from '../../shared/enums';
-
-const CACHE_TTL = 120;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class FeesService {
@@ -25,8 +24,10 @@ export class FeesService {
 
   // Fee Master Types
   async findAllMasterTypes(schoolId: string): Promise<FeeMasterType[]> {
-    return this.redisService.getOrSet(`${this.cacheKey(schoolId)}:master-types`, CACHE_TTL, () =>
-      this.feesRepo.findAllMasterTypes(schoolId),
+    return this.redisService.getOrSet(
+      `${this.cacheKey(schoolId)}:master-types`,
+      CacheTTL.MEDIUM,
+      () => this.feesRepo.findAllMasterTypes(schoolId),
     );
   }
 
@@ -36,13 +37,26 @@ export class FeesService {
     return item;
   }
 
-  async createMasterType(dto: CreateFeeMasterTypeDto, schoolId: string, createdBy: string): Promise<FeeMasterType> {
-    const item = await this.feesRepo.createMasterType({ id: generateId(), school_id: schoolId, created_by: createdBy, ...dto });
+  async createMasterType(
+    dto: CreateFeeMasterTypeDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<FeeMasterType> {
+    const item = await this.feesRepo.createMasterType({
+      id: generateId(),
+      school_id: schoolId,
+      created_by: createdBy,
+      ...dto,
+    });
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return item;
   }
 
-  async updateMasterType(id: string, schoolId: string, dto: UpdateFeeMasterTypeDto): Promise<FeeMasterType> {
+  async updateMasterType(
+    id: string,
+    schoolId: string,
+    dto: UpdateFeeMasterTypeDto,
+  ): Promise<FeeMasterType> {
     await this.findMasterTypeById(id, schoolId);
     const updated = await this.feesRepo.updateMasterType(id, schoolId, dto);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
@@ -56,7 +70,12 @@ export class FeesService {
   }
 
   // Fee Receipts
-  async findAllReceipts(schoolId: string, page = 1, limit = 20, studentId?: string): Promise<PaginationResponse<FeeReceipt>> {
+  async findAllReceipts(
+    schoolId: string,
+    page = 1,
+    limit = 20,
+    studentId?: string,
+  ): Promise<PaginationResponse<FeeReceipt>> {
     const items = await this.feesRepo.findAllReceipts(schoolId, page, limit, studentId);
     return PaginationResponse.of(items, items.length, { page, limit });
   }
@@ -71,7 +90,11 @@ export class FeesService {
     return this.createReceiptFromDto(dto, schoolId, createdBy);
   }
 
-  async createBulk(dto: BulkCreateFeeDto, schoolId: string, createdBy: string): Promise<FeeReceipt[]> {
+  async createBulk(
+    dto: BulkCreateFeeDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<FeeReceipt[]> {
     const results: FeeReceipt[] = [];
     for (const fee of dto.fees) {
       results.push(await this.createReceiptFromDto(fee, schoolId, createdBy));
@@ -79,15 +102,26 @@ export class FeesService {
     return results;
   }
 
-  async createPaymentOrder(receiptId: string, schoolId: string): Promise<{ orderId: string; amount: number }> {
+  async createPaymentOrder(
+    receiptId: string,
+    schoolId: string,
+  ): Promise<{ orderId: string; amount: number }> {
     const receipt = await this.findReceiptById(receiptId, schoolId);
-    const outstanding = Number(receipt.total_amount) - Number(receipt.discount_amount ?? 0) - Number(receipt.paid_amount ?? 0);
+    const outstanding =
+      Number(receipt.total_amount) -
+      Number(receipt.discount_amount ?? 0) -
+      Number(receipt.paid_amount ?? 0);
     const orderId = `ORD-${generateId()}`;
     await this.feesRepo.updateReceipt(receiptId, schoolId, { updated_at: new Date() });
     return { orderId, amount: outstanding };
   }
 
-  async recordManualPayment(receiptId: string, schoolId: string, dto: ManualPaymentDto, createdBy: string): Promise<FeePayment> {
+  async recordManualPayment(
+    receiptId: string,
+    schoolId: string,
+    dto: ManualPaymentDto,
+    createdBy: string,
+  ): Promise<FeePayment> {
     const receipt = await this.findReceiptById(receiptId, schoolId);
     const payment = await this.feesRepo.createPayment({
       id: generateId(),
@@ -101,8 +135,10 @@ export class FeesService {
     });
 
     const newPaid = Number(receipt.paid_amount ?? 0) + dto.amount;
-    const outstanding = Number(receipt.total_amount) - Number(receipt.discount_amount ?? 0) - newPaid;
-    const status: FeeStatus = outstanding <= 0 ? FeeStatus.PAID : newPaid > 0 ? FeeStatus.PARTIAL : FeeStatus.PENDING;
+    const outstanding =
+      Number(receipt.total_amount) - Number(receipt.discount_amount ?? 0) - newPaid;
+    const status: FeeStatus =
+      outstanding <= 0 ? FeeStatus.PAID : newPaid > 0 ? FeeStatus.PARTIAL : FeeStatus.PENDING;
 
     await this.feesRepo.updateReceipt(receiptId, schoolId, {
       paid_amount: String(newPaid),
@@ -113,7 +149,12 @@ export class FeesService {
     return payment;
   }
 
-  async getParentFees(schoolId: string, studentIds: string[], page = 1, limit = 20): Promise<PaginationResponse<FeeReceipt>> {
+  async getParentFees(
+    schoolId: string,
+    studentIds: string[],
+    page = 1,
+    limit = 20,
+  ): Promise<PaginationResponse<FeeReceipt>> {
     const items: FeeReceipt[] = [];
     for (const sid of studentIds) {
       const studentFees = await this.feesRepo.findAllReceipts(schoolId, 1, 100, sid);
@@ -122,7 +163,11 @@ export class FeesService {
     return PaginationResponse.of(items, items.length, { page, limit });
   }
 
-  private async createReceiptFromDto(dto: CreateFeeDto, schoolId: string, createdBy: string): Promise<FeeReceipt> {
+  private async createReceiptFromDto(
+    dto: CreateFeeDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<FeeReceipt> {
     const totalAmount = dto.fee_items.reduce((sum, item) => sum + item.amount, 0);
     const receiptNumber = await this.feesRepo.getNextReceiptNumber(schoolId);
 

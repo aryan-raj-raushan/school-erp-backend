@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { StudentsRepository } from './students.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
@@ -13,10 +9,8 @@ import { StudentFilterDto } from './dto/student-filter.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { CreateParentDto } from './dto/create-parent.dto';
 import { UpdateParentDto } from './dto/update-parent.dto';
-import { Student, StudentDocument, StudentParent } from './types/student.types';
-
-const LIST_TTL = 120;
-const ITEM_TTL = 300;
+import { Student, StudentDocument, StudentParentView } from './types/student.types';
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class StudentsService {
@@ -27,7 +21,7 @@ export class StudentsService {
 
   async findAll(schoolId: string, filters: StudentFilterDto): Promise<PaginationResponse<Student>> {
     const cacheKey = `students:${schoolId}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(cacheKey, LIST_TTL, async () => {
+    return this.redisService.getOrSet(cacheKey, CacheTTL.MEDIUM, async () => {
       const [items, total] = await Promise.all([
         this.studentsRepo.findAll(schoolId, filters),
         this.studentsRepo.count(schoolId, filters),
@@ -38,7 +32,7 @@ export class StudentsService {
 
   async findById(id: string, schoolId: string): Promise<Student> {
     const cacheKey = `students:${schoolId}:${id}`;
-    return this.redisService.getOrSet(cacheKey, ITEM_TTL, async () => {
+    return this.redisService.getOrSet(cacheKey, CacheTTL.LONG, async () => {
       const student = await this.studentsRepo.findById(id, schoolId);
       if (!student) throw new NotFoundException(`Student with id '${id}' not found`);
       return student;
@@ -111,16 +105,21 @@ export class StudentsService {
 
   // Parents
 
-  async getParents(studentId: string, schoolId: string): Promise<StudentParent[]> {
+  async getParents(studentId: string, schoolId: string): Promise<StudentParentView[]> {
     await this.findById(studentId, schoolId);
     return this.studentsRepo.findParents(studentId, schoolId);
   }
 
-  async addParent(studentId: string, schoolId: string, dto: CreateParentDto): Promise<StudentParent> {
+  async addParent(
+    studentId: string,
+    schoolId: string,
+    dto: CreateParentDto,
+  ): Promise<StudentParentView> {
     await this.findById(studentId, schoolId);
 
     return this.studentsRepo.createParent({
       id: generateId(),
+      link_id: generateId(),
       school_id: schoolId,
       student_id: studentId,
       ...dto,
@@ -132,7 +131,7 @@ export class StudentsService {
     studentId: string,
     schoolId: string,
     dto: UpdateParentDto,
-  ): Promise<StudentParent> {
+  ): Promise<StudentParentView> {
     await this.findById(studentId, schoolId);
     const parent = await this.studentsRepo.findParentById(parentId, studentId, schoolId);
     if (!parent) throw new NotFoundException(`Parent with id '${parentId}' not found`);
@@ -143,6 +142,6 @@ export class StudentsService {
     await this.findById(studentId, schoolId);
     const parent = await this.studentsRepo.findParentById(parentId, studentId, schoolId);
     if (!parent) throw new NotFoundException(`Parent with id '${parentId}' not found`);
-    await this.studentsRepo.softDeleteParent(parentId, studentId, schoolId);
+    await this.studentsRepo.unlinkParent(parentId, studentId, schoolId);
   }
 }

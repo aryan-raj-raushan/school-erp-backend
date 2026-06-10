@@ -4,8 +4,16 @@ import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { students } from '../../database/drizzle/schema/students.schema';
 import { studentDocuments } from '../../database/drizzle/schema/student-documents.schema';
-import { studentParents } from '../../database/drizzle/schema/student-parents.schema';
-import { Student, NewStudent, StudentDocument, NewStudentDocument, StudentParent, NewStudentParent } from './types/student.types';
+import { parents, parentStudentLinks } from '../../database/drizzle/schema/parents.schema';
+import {
+  Student,
+  NewStudent,
+  StudentDocument,
+  NewStudentDocument,
+  StudentParentView,
+  CreateParentRepoData,
+  UpdateParentRepoData,
+} from './types/student.types';
 import { StudentFilterDto } from './dto/student-filter.dto';
 
 @Injectable()
@@ -13,10 +21,7 @@ export class StudentsRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
   async findAll(schoolId: string, filters: StudentFilterDto): Promise<Student[]> {
-    const conditions = [
-      eq(students.school_id, schoolId),
-      eq(students.deleted, false),
-    ];
+    const conditions = [eq(students.school_id, schoolId), eq(students.deleted, false)];
 
     if (filters.search) {
       const term = `%${filters.search}%`;
@@ -56,10 +61,7 @@ export class StudentsRepository {
   }
 
   async count(schoolId: string, filters: StudentFilterDto): Promise<number> {
-    const conditions = [
-      eq(students.school_id, schoolId),
-      eq(students.deleted, false),
-    ];
+    const conditions = [eq(students.school_id, schoolId), eq(students.deleted, false)];
 
     if (filters.search) {
       const term = `%${filters.search}%`;
@@ -98,11 +100,16 @@ export class StudentsRepository {
     const [row] = await this.db
       .select()
       .from(students)
-      .where(and(eq(students.id, id), eq(students.school_id, schoolId), eq(students.deleted, false)));
+      .where(
+        and(eq(students.id, id), eq(students.school_id, schoolId), eq(students.deleted, false)),
+      );
     return row;
   }
 
-  async findByAdmissionNumber(schoolId: string, admissionNumber: string): Promise<Student | undefined> {
+  async findByAdmissionNumber(
+    schoolId: string,
+    admissionNumber: string,
+  ): Promise<Student | undefined> {
     const [row] = await this.db
       .select()
       .from(students)
@@ -152,7 +159,11 @@ export class StudentsRepository {
       );
   }
 
-  async findDocumentById(id: string, studentId: string, schoolId: string): Promise<StudentDocument | undefined> {
+  async findDocumentById(
+    id: string,
+    studentId: string,
+    schoolId: string,
+  ): Promise<StudentDocument | undefined> {
     const [row] = await this.db
       .select()
       .from(studentDocuments)
@@ -187,63 +198,179 @@ export class StudentsRepository {
 
   // Parent methods
 
-  async findParents(studentId: string, schoolId: string): Promise<StudentParent[]> {
+  private parentViewSelect() {
+    return {
+      id: parents.id,
+      link_id: parentStudentLinks.id,
+      school_id: parents.school_id,
+      student_id: parentStudentLinks.student_id,
+      first_name: parents.first_name,
+      last_name: parents.last_name,
+      dial_code: parents.dial_code,
+      phone_number: parents.phone_number,
+      alternate_phone: parents.alternate_phone,
+      email: parents.email,
+      occupation: parents.occupation,
+      annual_income: parents.annual_income,
+      aadhaar_number: parents.aadhaar_number,
+      profile_image: parents.profile_image,
+      is_active: parents.is_active,
+      relation: parentStudentLinks.relation,
+      is_primary: parentStudentLinks.is_primary,
+      can_pickup: parentStudentLinks.can_pickup,
+      created_at: parents.created_at,
+      updated_at: parents.updated_at,
+    };
+  }
+
+  async findParents(studentId: string, schoolId: string): Promise<StudentParentView[]> {
     return this.db
-      .select()
-      .from(studentParents)
+      .select(this.parentViewSelect())
+      .from(parentStudentLinks)
+      .innerJoin(parents, eq(parentStudentLinks.parent_id, parents.id))
       .where(
         and(
-          eq(studentParents.student_id, studentId),
-          eq(studentParents.school_id, schoolId),
-          eq(studentParents.deleted, false),
+          eq(parentStudentLinks.student_id, studentId),
+          eq(parentStudentLinks.school_id, schoolId),
+          eq(parents.deleted, false),
         ),
       );
   }
 
-  async findParentById(id: string, studentId: string, schoolId: string): Promise<StudentParent | undefined> {
+  async findParentById(
+    id: string,
+    studentId: string,
+    schoolId: string,
+  ): Promise<StudentParentView | undefined> {
     const [row] = await this.db
-      .select()
-      .from(studentParents)
+      .select(this.parentViewSelect())
+      .from(parentStudentLinks)
+      .innerJoin(parents, eq(parentStudentLinks.parent_id, parents.id))
       .where(
         and(
-          eq(studentParents.id, id),
-          eq(studentParents.student_id, studentId),
-          eq(studentParents.school_id, schoolId),
-          eq(studentParents.deleted, false),
+          eq(parents.id, id),
+          eq(parentStudentLinks.student_id, studentId),
+          eq(parentStudentLinks.school_id, schoolId),
+          eq(parents.deleted, false),
         ),
       );
     return row;
   }
 
-  async createParent(data: NewStudentParent): Promise<StudentParent> {
-    const [row] = await this.db.insert(studentParents).values(data).returning();
-    return row;
-  }
-
-  async updateParent(id: string, studentId: string, schoolId: string, data: Partial<NewStudentParent>): Promise<StudentParent> {
-    const [row] = await this.db
-      .update(studentParents)
-      .set({ ...data, updated_at: new Date() })
+  async createParent(data: CreateParentRepoData): Promise<StudentParentView> {
+    let [existing] = await this.db
+      .select()
+      .from(parents)
       .where(
         and(
-          eq(studentParents.id, id),
-          eq(studentParents.student_id, studentId),
-          eq(studentParents.school_id, schoolId),
+          eq(parents.phone_number, data.phone_number),
+          eq(parents.dial_code, data.dial_code),
+          eq(parents.school_id, data.school_id),
+          eq(parents.deleted, false),
         ),
-      )
+      );
+
+    if (!existing) {
+      [existing] = await this.db
+        .insert(parents)
+        .values({
+          id: data.id,
+          school_id: data.school_id,
+          first_name: data.first_name,
+          last_name: data.last_name,
+          dial_code: data.dial_code,
+          phone_number: data.phone_number,
+          alternate_phone: data.alternate_phone,
+          email: data.email,
+          occupation: data.occupation,
+          annual_income: data.annual_income,
+          aadhaar_number: data.aadhaar_number,
+          created_by: data.created_by,
+        })
+        .returning();
+    }
+
+    const [link] = await this.db
+      .insert(parentStudentLinks)
+      .values({
+        id: data.link_id,
+        school_id: data.school_id,
+        parent_id: existing.id,
+        student_id: data.student_id,
+        relation: data.relation,
+        is_primary: data.is_primary ?? false,
+        can_pickup: data.can_pickup ?? true,
+      })
       .returning();
-    return row;
+
+    return {
+      id: existing.id,
+      link_id: link.id,
+      school_id: existing.school_id,
+      student_id: data.student_id,
+      first_name: existing.first_name,
+      last_name: existing.last_name ?? null,
+      dial_code: existing.dial_code,
+      phone_number: existing.phone_number,
+      alternate_phone: existing.alternate_phone ?? null,
+      email: existing.email ?? null,
+      occupation: existing.occupation ?? null,
+      annual_income: existing.annual_income ?? null,
+      aadhaar_number: existing.aadhaar_number ?? null,
+      profile_image: existing.profile_image ?? null,
+      is_active: existing.is_active,
+      relation: link.relation,
+      is_primary: link.is_primary,
+      can_pickup: link.can_pickup,
+      created_at: existing.created_at,
+      updated_at: existing.updated_at ?? null,
+    };
   }
 
-  async softDeleteParent(id: string, studentId: string, schoolId: string): Promise<void> {
+  async updateParent(
+    id: string,
+    studentId: string,
+    schoolId: string,
+    data: UpdateParentRepoData,
+  ): Promise<StudentParentView> {
+    const { relation, is_primary, can_pickup, ...parentFields } = data;
+
+    if (Object.keys(parentFields).length > 0) {
+      await this.db
+        .update(parents)
+        .set({ ...parentFields, updated_at: new Date() })
+        .where(and(eq(parents.id, id), eq(parents.school_id, schoolId)));
+    }
+
+    const linkUpdate: Partial<typeof parentStudentLinks.$inferInsert> = {};
+    if (relation !== undefined) linkUpdate.relation = relation;
+    if (is_primary !== undefined) linkUpdate.is_primary = is_primary;
+    if (can_pickup !== undefined) linkUpdate.can_pickup = can_pickup;
+
+    if (Object.keys(linkUpdate).length > 0) {
+      await this.db
+        .update(parentStudentLinks)
+        .set(linkUpdate)
+        .where(
+          and(
+            eq(parentStudentLinks.parent_id, id),
+            eq(parentStudentLinks.student_id, studentId),
+            eq(parentStudentLinks.school_id, schoolId),
+          ),
+        );
+    }
+
+    return (await this.findParentById(id, studentId, schoolId))!;
+  }
+
+  async unlinkParent(id: string, studentId: string, schoolId: string): Promise<void> {
     await this.db
-      .update(studentParents)
-      .set({ deleted: true, updated_at: new Date() })
+      .delete(parentStudentLinks)
       .where(
         and(
-          eq(studentParents.id, id),
-          eq(studentParents.student_id, studentId),
-          eq(studentParents.school_id, schoolId),
+          eq(parentStudentLinks.parent_id, id),
+          eq(parentStudentLinks.student_id, studentId),
+          eq(parentStudentLinks.school_id, schoolId),
         ),
       );
   }

@@ -2,29 +2,45 @@ import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { subscriptions, subscriptionPayments } from '../../database/drizzle/schema';
-import { Subscription, NewSubscription, SubscriptionPayment, NewSubscriptionPayment } from './types/subscription.types';
+import {
+  subscriptions,
+  subscriptionPayments,
+  companyUserSchools,
+} from '../../database/drizzle/schema';
+import {
+  Subscription,
+  NewSubscription,
+  SubscriptionPayment,
+  NewSubscriptionPayment,
+} from './types/subscription.types';
 import { SubscriptionFilterDto } from './dto/subscription-filter.dto';
 
 @Injectable()
 export class SubscriptionsRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
-  async findAll(filters: SubscriptionFilterDto, allowedSchoolIds?: string[]): Promise<Subscription[]> {
+  async findAll(
+    filters: SubscriptionFilterDto,
+    allowedSchoolIds?: string[],
+  ): Promise<Subscription[]> {
     const conditions = [];
     if (allowedSchoolIds) {
       if (allowedSchoolIds.length === 0) return [];
       conditions.push(inArray(subscriptions.school_id, allowedSchoolIds));
     }
     if (filters.school_id) conditions.push(eq(subscriptions.school_id, filters.school_id));
-    if (filters.status) conditions.push(eq(subscriptions.status, filters.status as Subscription['status']));
+    if (filters.status)
+      conditions.push(eq(subscriptions.status, filters.status as Subscription['status']));
 
     const limit = filters.limit ?? 20;
     const offset = ((filters.page ?? 1) - 1) * limit;
 
-    const query = this.db.select().from(subscriptions);
-    if (conditions.length > 0) query.where(and(...conditions));
-    return query.limit(limit).offset(offset);
+    return this.db
+      .select()
+      .from(subscriptions)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .limit(limit)
+      .offset(offset);
   }
 
   async count(filters: SubscriptionFilterDto, allowedSchoolIds?: string[]): Promise<number> {
@@ -34,11 +50,13 @@ export class SubscriptionsRepository {
       conditions.push(inArray(subscriptions.school_id, allowedSchoolIds));
     }
     if (filters.school_id) conditions.push(eq(subscriptions.school_id, filters.school_id));
-    if (filters.status) conditions.push(eq(subscriptions.status, filters.status as Subscription['status']));
+    if (filters.status)
+      conditions.push(eq(subscriptions.status, filters.status as Subscription['status']));
 
-    const query = this.db.select({ count: sql<number>`count(*)` }).from(subscriptions);
-    if (conditions.length > 0) query.where(and(...conditions));
-    const [{ count }] = await query;
+    const [{ count }] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(subscriptions)
+      .where(conditions.length > 0 ? and(...conditions) : undefined);
     return Number(count);
   }
 
@@ -91,12 +109,23 @@ export class SubscriptionsRepository {
     return row;
   }
 
-  async updatePayment(id: string, data: Partial<NewSubscriptionPayment>): Promise<SubscriptionPayment> {
+  async updatePayment(
+    id: string,
+    data: Partial<NewSubscriptionPayment>,
+  ): Promise<SubscriptionPayment> {
     const [row] = await this.db
       .update(subscriptionPayments)
       .set({ ...data, updated_at: new Date() })
       .where(eq(subscriptionPayments.id, id))
       .returning();
     return row;
+  }
+
+  async findSchoolIdsByCompanyUserId(userId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ school_id: companyUserSchools.school_id })
+      .from(companyUserSchools)
+      .where(eq(companyUserSchools.user_id, userId));
+    return rows.map((r) => r.school_id);
   }
 }

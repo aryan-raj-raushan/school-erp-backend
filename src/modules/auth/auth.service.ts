@@ -21,13 +21,16 @@ import { LoginSchoolDto } from './dto/login-school.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
 import { SetupPasswordDto } from './dto/setup-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
-import { LoginResponse, TokenPair, LoginOrSetupResponse, PasswordSetupRequired } from './types/auth.types';
+import {
+  LoginResponse,
+  TokenPair,
+  LoginOrSetupResponse,
+  PasswordSetupRequired,
+} from './types/auth.types';
 import { REGEX } from '../../utils/regex.utils';
 import { SchoolsRepository } from '../schools/schools.repository';
-
-const ACCESS_TTL_SECONDS = 15 * 60;
-const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
-const COMPANY_USER_SCHOOLS_TTL = 3600;
+import { School } from '../schools/types/school.types';
+import { AuthTTL } from '../../shared/constants';
 
 @Injectable()
 export class AuthService {
@@ -49,8 +52,8 @@ export class AuthService {
       id: generateId(),
       name: dto.school_name,
       code: dto.school_code,
-      board_type: dto.board_type as any,
-      marking_system: dto.marking_system as any,
+      board_type: dto.board_type as School['board_type'],
+      marking_system: dto.marking_system as School['marking_system'],
       created_by: 'self-signup',
     });
 
@@ -99,13 +102,16 @@ export class AuthService {
       // Require bootstrap secret from env to create SUPER_ADMIN
       const envSecret = this.configService.get<string>('BOOTSTRAP_SECRET');
       if (!envSecret) {
-        throw new ForbiddenException('SUPER_ADMIN registration is disabled — set BOOTSTRAP_SECRET env var');
+        throw new ForbiddenException(
+          'SUPER_ADMIN registration is disabled — set BOOTSTRAP_SECRET env var',
+        );
       }
       if (bootstrapSecret !== envSecret) {
         throw new ForbiddenException('Invalid bootstrap secret');
       }
       const exists = await this.authRepo.superAdminExists();
-      if (exists) throw new ForbiddenException('A SUPER_ADMIN already exists. Only one is allowed.');
+      if (exists)
+        throw new ForbiddenException('A SUPER_ADMIN already exists. Only one is allowed.');
     }
 
     const password_hash = await hashPassword(dto.password);
@@ -156,7 +162,10 @@ export class AuthService {
     const user = await this.authRepo.findSchoolUserByPhone(dto.phone_number, dto.dial_code);
     if (!user) throw new UnauthorizedException('Invalid credentials');
     if (!user.is_active) throw new UnauthorizedException('Account is deactivated');
-    if (!user.password_hash) throw new UnauthorizedException('Account setup incomplete — use /auth/login to set your password');
+    if (!user.password_hash)
+      throw new UnauthorizedException(
+        'Account setup incomplete — use /auth/login to set your password',
+      );
 
     const passwordMatch = await comparePassword(dto.password, user.password_hash);
     if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
@@ -203,7 +212,15 @@ export class AuthService {
           role: companyUser.role as CompanyRole,
           context: AuthContext.COMPANY,
         });
-        return { ...tokens, user: { id: companyUser.id, email: companyUser.email, role: companyUser.role, context: AuthContext.COMPANY } };
+        return {
+          ...tokens,
+          user: {
+            id: companyUser.id,
+            email: companyUser.email,
+            role: companyUser.role,
+            context: AuthContext.COMPANY,
+          },
+        };
       }
     }
 
@@ -218,7 +235,10 @@ export class AuthService {
     // No password set → school admin must complete signup
     if (!schoolUser.password_hash) {
       const setupToken = this.generateSetupToken(schoolUser.id);
-      return { needs_password_setup: true, setup_token: setupToken } satisfies PasswordSetupRequired;
+      return {
+        needs_password_setup: true,
+        setup_token: setupToken,
+      } satisfies PasswordSetupRequired;
     }
 
     const match = await comparePassword(dto.password, schoolUser.password_hash);
@@ -266,7 +286,8 @@ export class AuthService {
 
     const user = await this.authRepo.findSchoolUserById(payload.sub);
     if (!user) throw new NotFoundException('User not found');
-    if (user.password_hash) throw new BadRequestException('Password already set — use login instead');
+    if (user.password_hash)
+      throw new BadRequestException('Password already set — use login instead');
 
     const password_hash = await hashPassword(dto.password);
     await this.authRepo.setSchoolUserPassword(user.id, password_hash);
@@ -313,7 +334,12 @@ export class AuthService {
     if (context === AuthContext.COMPANY) {
       const user = await this.authRepo.findCompanyUserById(userId);
       if (!user) throw new NotFoundException('User not found');
-      payload = { sub: user.id, email: user.email, role: user.role as CompanyRole, context: AuthContext.COMPANY };
+      payload = {
+        sub: user.id,
+        email: user.email,
+        role: user.role as CompanyRole,
+        context: AuthContext.COMPANY,
+      };
     } else {
       const user = await this.authRepo.findSchoolUserById(userId);
       if (!user) throw new NotFoundException('User not found');
@@ -337,7 +363,10 @@ export class AuthService {
     // BUG-002: blacklist the access token so it cannot be used after logout
     if (rawAccessToken) {
       try {
-        const decoded = this.jwtService.decode(rawAccessToken) as { iat?: number; exp?: number } | null;
+        const decoded = this.jwtService.decode(rawAccessToken) as {
+          iat?: number;
+          exp?: number;
+        } | null;
         if (decoded?.iat && decoded?.exp) {
           const ttl = decoded.exp - Math.floor(Date.now() / 1000);
           if (ttl > 0) {
@@ -413,13 +442,13 @@ export class AuthService {
 
     await this.redisService.setex(
       `refresh_token:${payload.sub}:${tokenId}`,
-      REFRESH_TTL_SECONDS,
+      AuthTTL.REFRESH_TOKEN_SECONDS,
       '1',
     );
 
     await this.redisService.setex(
       `session:${payload.sub}`,
-      ACCESS_TTL_SECONDS,
+      AuthTTL.ACCESS_TOKEN_SECONDS,
       JSON.stringify(payload),
     );
 
@@ -433,7 +462,7 @@ export class AuthService {
       const key = `company_user:${userId}:schools`;
       await this.redisService.del(key);
       await this.redisService.sadd(key, ...schoolIds);
-      await this.redisService.expire(key, COMPANY_USER_SCHOOLS_TTL);
+      await this.redisService.expire(key, AuthTTL.COMPANY_SCHOOLS_SECONDS);
     }
   }
 }

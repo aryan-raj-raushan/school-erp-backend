@@ -9,11 +9,17 @@ import { CreateExamRoomDto } from './dto/create-exam-room.dto';
 import { AssignSeatDto, AutoGenerateSeatingDto } from './dto/assign-seat.dto';
 import { BulkExamMarksDto, TeacherRemarkDto } from './dto/exam-marks.dto';
 import {
-  Exam, ExamPolicy, ExamTimetableEntry, ExamStudent, ExamRoom,
-  ExamSeat, AdmitCard, ExamMark, TeacherRemark,
+  Exam,
+  ExamPolicy,
+  ExamTimetableEntry,
+  ExamStudent,
+  ExamRoom,
+  ExamSeat,
+  AdmitCard,
+  ExamMark,
+  TeacherRemark,
 } from './types/exam.types';
-
-const CACHE_TTL = 120;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class ExamsService {
@@ -22,12 +28,17 @@ export class ExamsService {
     private readonly redisService: RedisService,
   ) {}
 
-  private cacheKey(schoolId: string) { return `exams:${schoolId}`; }
+  private cacheKey(schoolId: string) {
+    return `exams:${schoolId}`;
+  }
 
   // Exams
   async findAllExams(schoolId: string, academicYearId?: string): Promise<Exam[]> {
-    return this.redisService.getOrSet(`${this.cacheKey(schoolId)}:list:${academicYearId}`, CACHE_TTL, () =>
-      this.examsRepo.findAllExams(schoolId, academicYearId));
+    return this.redisService.getOrSet(
+      `${this.cacheKey(schoolId)}:list:${academicYearId}`,
+      CacheTTL.MEDIUM,
+      () => this.examsRepo.findAllExams(schoolId, academicYearId),
+    );
   }
 
   async findExamById(id: string, schoolId: string): Promise<Exam> {
@@ -37,7 +48,12 @@ export class ExamsService {
   }
 
   async createExam(dto: CreateExamDto, schoolId: string, createdBy: string): Promise<Exam> {
-    const exam = await this.examsRepo.createExam({ id: generateId(), school_id: schoolId, created_by: createdBy, ...dto });
+    const exam = await this.examsRepo.createExam({
+      id: generateId(),
+      school_id: schoolId,
+      created_by: createdBy,
+      ...dto,
+    });
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return exam;
   }
@@ -68,14 +84,20 @@ export class ExamsService {
 
   async createPolicy(dto: CreateExamPolicyDto, schoolId: string): Promise<ExamPolicy> {
     return this.examsRepo.createPolicy({
-      id: generateId(), school_id: schoolId, ...dto,
+      id: generateId(),
+      school_id: schoolId,
+      ...dto,
       passing_marks: dto.passing_marks?.toString(),
       total_marks: dto.total_marks?.toString(),
       marking_system: dto.marking_system as 'MARKS' | 'GRADES' | 'PERCENTAGE' | undefined,
     });
   }
 
-  async updatePolicy(id: string, schoolId: string, dto: Partial<CreateExamPolicyDto>): Promise<ExamPolicy> {
+  async updatePolicy(
+    id: string,
+    schoolId: string,
+    dto: Partial<CreateExamPolicyDto>,
+  ): Promise<ExamPolicy> {
     await this.findPolicyById(id, schoolId);
     return this.examsRepo.updatePolicy(id, schoolId, {
       ...dto,
@@ -101,11 +123,18 @@ export class ExamsService {
     return entry;
   }
 
-  async createTimetable(dto: CreateExamTimetableDto, schoolId: string): Promise<ExamTimetableEntry> {
+  async createTimetable(
+    dto: CreateExamTimetableDto,
+    schoolId: string,
+  ): Promise<ExamTimetableEntry> {
     return this.examsRepo.createTimetable({ id: generateId(), school_id: schoolId, ...dto });
   }
 
-  async updateTimetable(id: string, schoolId: string, dto: Partial<CreateExamTimetableDto>): Promise<ExamTimetableEntry> {
+  async updateTimetable(
+    id: string,
+    schoolId: string,
+    dto: Partial<CreateExamTimetableDto>,
+  ): Promise<ExamTimetableEntry> {
     await this.findTimetableById(id, schoolId);
     return this.examsRepo.updateTimetable(id, schoolId, dto);
   }
@@ -120,7 +149,11 @@ export class ExamsService {
     return this.examsRepo.findExamStudents(examId, schoolId);
   }
 
-  async registerStudents(examId: string, studentIds: string[], schoolId: string): Promise<ExamStudent[]> {
+  async registerStudents(
+    examId: string,
+    studentIds: string[],
+    schoolId: string,
+  ): Promise<ExamStudent[]> {
     await this.findExamById(examId, schoolId);
     const entries = studentIds.map((studentId, i) => ({
       id: generateId(),
@@ -132,7 +165,12 @@ export class ExamsService {
     return this.examsRepo.registerStudents(entries);
   }
 
-  async updateStudentEligibility(examId: string, studentId: string, schoolId: string, isEligible: boolean): Promise<ExamStudent> {
+  async updateStudentEligibility(
+    examId: string,
+    studentId: string,
+    schoolId: string,
+    isEligible: boolean,
+  ): Promise<ExamStudent> {
     return this.examsRepo.updateStudentEligibility(examId, studentId, schoolId, isEligible);
   }
 
@@ -155,7 +193,11 @@ export class ExamsService {
     return this.examsRepo.createRoom({ id: generateId(), school_id: schoolId, ...dto });
   }
 
-  async updateRoom(id: string, schoolId: string, dto: Partial<CreateExamRoomDto>): Promise<ExamRoom> {
+  async updateRoom(
+    id: string,
+    schoolId: string,
+    dto: Partial<CreateExamRoomDto>,
+  ): Promise<ExamRoom> {
     await this.findRoomById(id, schoolId);
     return this.examsRepo.updateRoom(id, schoolId, dto);
   }
@@ -180,7 +222,8 @@ export class ExamsService {
     if (!rooms.length) return [];
 
     const seats: ExamSeat[] = [];
-    let roomIdx = 0, seatNum = 1;
+    let roomIdx = 0,
+      seatNum = 1;
 
     for (const student of students) {
       if (seatNum > Number(rooms[roomIdx].capacity)) {
@@ -189,9 +232,13 @@ export class ExamsService {
         if (roomIdx >= rooms.length) break;
       }
       const seat = await this.examsRepo.assignSeat({
-        id: generateId(), school_id: schoolId, exam_id: dto.exam_id,
-        exam_room_id: rooms[roomIdx].id, student_id: student.student_id,
-        seat_number: `${rooms[roomIdx].room_name}-${String(seatNum).padStart(2, '0')}`, date: dto.date,
+        id: generateId(),
+        school_id: schoolId,
+        exam_id: dto.exam_id,
+        exam_room_id: rooms[roomIdx].id,
+        student_id: student.student_id,
+        seat_number: `${rooms[roomIdx].room_name}-${String(seatNum).padStart(2, '0')}`,
+        date: dto.date,
       });
       seats.push(seat);
       seatNum++;
@@ -210,22 +257,37 @@ export class ExamsService {
 
     const count = await this.examsRepo.countAdmitCards(examId, schoolId);
     return this.examsRepo.createAdmitCard({
-      id: generateId(), school_id: schoolId, exam_id: examId, student_id: studentId,
+      id: generateId(),
+      school_id: schoolId,
+      exam_id: examId,
+      student_id: studentId,
       admit_card_number: `AC-${String(count + 1).padStart(6, '0')}`,
     });
   }
 
-  async generateClassAdmitCards(examId: string, studentIds: string[], schoolId: string): Promise<AdmitCard[]> {
+  async generateClassAdmitCards(
+    examId: string,
+    studentIds: string[],
+    schoolId: string,
+  ): Promise<AdmitCard[]> {
     const cards: AdmitCard[] = [];
     for (const sid of studentIds) cards.push(await this.generateAdmitCard(examId, sid, schoolId));
     return cards;
   }
 
-  async getStudentAdmitCard(examId: string, studentId: string, schoolId: string): Promise<AdmitCard | null> {
+  async getStudentAdmitCard(
+    examId: string,
+    studentId: string,
+    schoolId: string,
+  ): Promise<AdmitCard | null> {
     return (await this.examsRepo.findAdmitCardByStudent(examId, studentId, schoolId)) ?? null;
   }
 
-  async getClassAdmitCards(examId: string, classSectionId: string, schoolId: string): Promise<AdmitCard[]> {
+  async getClassAdmitCards(
+    examId: string,
+    classSectionId: string,
+    schoolId: string,
+  ): Promise<AdmitCard[]> {
     return this.examsRepo.findAdmitCardsByClass(examId, classSectionId, schoolId);
   }
 
@@ -236,14 +298,25 @@ export class ExamsService {
   }
 
   // Marks
-  async submitBulkMarks(dto: BulkExamMarksDto, schoolId: string, createdBy: string): Promise<ExamMark[]> {
+  async submitBulkMarks(
+    dto: BulkExamMarksDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<ExamMark[]> {
     const results: ExamMark[] = [];
     for (const entry of dto.entries) {
       const mark = await this.examsRepo.upsertMark({
-        id: generateId(), school_id: schoolId, exam_id: dto.exam_id, student_id: entry.student_id,
-        subject_id: dto.subject_id, class_section_id: dto.class_section_id, total_marks: String(dto.total_marks),
+        id: generateId(),
+        school_id: schoolId,
+        exam_id: dto.exam_id,
+        student_id: entry.student_id,
+        subject_id: dto.subject_id,
+        class_section_id: dto.class_section_id,
+        total_marks: String(dto.total_marks),
         marks_obtained: entry.marks_obtained != null ? String(entry.marks_obtained) : undefined,
-        is_absent: entry.is_absent ?? false, grade: entry.grade, created_by: createdBy,
+        is_absent: entry.is_absent ?? false,
+        grade: entry.grade,
+        created_by: createdBy,
       });
       results.push(mark);
     }
@@ -251,39 +324,81 @@ export class ExamsService {
     return results;
   }
 
-  async getExamMarks(examId: string, schoolId: string, classSectionId?: string, subjectId?: string): Promise<ExamMark[]> {
+  async getExamMarks(
+    examId: string,
+    schoolId: string,
+    classSectionId?: string,
+    subjectId?: string,
+  ): Promise<ExamMark[]> {
     return this.examsRepo.findMarksByExam(examId, schoolId, classSectionId, subjectId);
   }
 
   // Remarks
-  async addRemark(dto: TeacherRemarkDto, schoolId: string, teacherId: string): Promise<TeacherRemark> {
-    return this.examsRepo.createRemark({ id: generateId(), school_id: schoolId, teacher_id: teacherId, ...dto });
+  async addRemark(
+    dto: TeacherRemarkDto,
+    schoolId: string,
+    teacherId: string,
+  ): Promise<TeacherRemark> {
+    return this.examsRepo.createRemark({
+      id: generateId(),
+      school_id: schoolId,
+      teacher_id: teacherId,
+      ...dto,
+    });
   }
 
-  async getRemarks(schoolId: string, examId?: string, studentId?: string): Promise<TeacherRemark[]> {
+  async getRemarks(
+    schoolId: string,
+    examId?: string,
+    studentId?: string,
+  ): Promise<TeacherRemark[]> {
     return this.examsRepo.findRemarks(schoolId, examId, studentId);
   }
 
   // Mark Sheets
-  async getMarkSheetForStudent(studentId: string, examId: string, schoolId: string): Promise<ExamMark[]> {
+  async getMarkSheetForStudent(
+    studentId: string,
+    examId: string,
+    schoolId: string,
+  ): Promise<ExamMark[]> {
     return this.examsRepo.getMarkSheetForStudent(studentId, examId, schoolId);
   }
 
-  async getMarkSheetForClass(classSectionId: string, examId: string, schoolId: string): Promise<ExamMark[]> {
+  async getMarkSheetForClass(
+    classSectionId: string,
+    examId: string,
+    schoolId: string,
+  ): Promise<ExamMark[]> {
     return this.examsRepo.getMarkSheetForClass(classSectionId, examId, schoolId);
   }
 
-  async getAnnualMarkSheet(studentId: string, schoolId: string, academicYearId: string): Promise<ExamMark[]> {
+  async getAnnualMarkSheet(
+    studentId: string,
+    schoolId: string,
+    academicYearId: string,
+  ): Promise<ExamMark[]> {
     return this.examsRepo.getAnnualMarksForStudent(studentId, schoolId, academicYearId);
   }
 
-  async getClassAnnualMarkSheet(classSectionId: string, schoolId: string, academicYearId: string): Promise<ExamMark[]> {
+  async getClassAnnualMarkSheet(
+    classSectionId: string,
+    schoolId: string,
+    academicYearId: string,
+  ): Promise<ExamMark[]> {
     return this.examsRepo.getAnnualMarksForClass(classSectionId, schoolId, academicYearId);
   }
 
-  async enqueuePdf(jobType: string, params: Record<string, string>, schoolId: string): Promise<{ jobId: string }> {
+  async enqueuePdf(
+    jobType: string,
+    params: Record<string, string>,
+    schoolId: string,
+  ): Promise<{ jobId: string }> {
     const jobId = generateId();
-    await this.redisService.setex(`export_job:marksheet:${jobId}`, 86400, JSON.stringify({ jobId, status: 'PENDING', jobType, params, schoolId }));
+    await this.redisService.setex(
+      `export_job:marksheet:${jobId}`,
+      86400,
+      JSON.stringify({ jobId, status: 'PENDING', jobType, params, schoolId }),
+    );
     return { jobId };
   }
 }

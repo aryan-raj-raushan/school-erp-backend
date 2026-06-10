@@ -15,13 +15,20 @@ import { UpdateStaffDto } from './dto/update-staff.dto';
 import { FilterStaffDto } from './dto/filter-staff.dto';
 import { StaffMember, BulkJobResult } from './types/staff.types';
 import { SchoolRole } from '../../shared/enums';
+import { CacheTTL, JobTTL } from '../../shared/constants';
 
-const CACHE_TTL = 120;
-const INVITE_TTL = 7 * 24 * 60 * 60; // 7 days
-const BULK_JOB_TTL = 24 * 60 * 60;    // 24 hours
 const TEMP_PASSWORD = 'TrueSkul@123';
 
-const TEMPLATE_HEADERS = ['first_name', 'last_name', 'dial_code', 'phone_number', 'email', 'role', 'gender', 'date_of_birth'];
+const TEMPLATE_HEADERS = [
+  'first_name',
+  'last_name',
+  'dial_code',
+  'phone_number',
+  'email',
+  'role',
+  'gender',
+  'date_of_birth',
+];
 
 @Injectable()
 export class StaffService {
@@ -34,10 +41,13 @@ export class StaffService {
     return `staff:${schoolId}`;
   }
 
-  async findAll(schoolId: string, filters: FilterStaffDto): Promise<PaginationResponse<StaffMember>> {
+  async findAll(
+    schoolId: string,
+    filters: FilterStaffDto,
+  ): Promise<PaginationResponse<StaffMember>> {
     const { page = 1, limit = 20 } = filters;
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.MEDIUM, async () => {
       const [items, total] = await Promise.all([
         this.staffRepo.findAll(schoolId, filters),
         this.staffRepo.count(schoolId, filters),
@@ -48,14 +58,18 @@ export class StaffService {
 
   async findById(id: string, schoolId: string): Promise<StaffMember> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.MEDIUM, async () => {
       const member = await this.staffRepo.findById(id, schoolId);
       if (!member) throw new NotFoundException(`Staff member with id '${id}' not found`);
       return member;
     });
   }
 
-  async create(dto: CreateStaffDto, schoolId: string, createdBy: string): Promise<{ staff: StaffMember; inviteToken: string }> {
+  async create(
+    dto: CreateStaffDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<{ staff: StaffMember; inviteToken: string }> {
     const existing = await this.staffRepo.findByPhone(dto.phone_number, dto.dial_code, schoolId);
     if (existing) {
       throw new ConflictException('A staff member with this phone number already exists');
@@ -137,11 +151,19 @@ export class StaffService {
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
-  async bulkImport(fileBuffer: Buffer, schoolId: string, createdBy: string): Promise<{ jobId: string }> {
+  async bulkImport(
+    fileBuffer: Buffer,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<{ jobId: string }> {
     const jobId = generateId();
     const jobKey = `bulk_job:staff:${jobId}`;
 
-    await this.redisService.setex(jobKey, BULK_JOB_TTL, JSON.stringify({ jobId, status: 'PENDING' }));
+    await this.redisService.setex(
+      jobKey,
+      JobTTL.BULK_JOB_SECONDS,
+      JSON.stringify({ jobId, status: 'PENDING' }),
+    );
 
     setImmediate(() => this.processBulkImport(jobId, jobKey, fileBuffer, schoolId, createdBy));
 
@@ -172,7 +194,11 @@ export class StaffService {
 
   private async generateInviteToken(userId: string, schoolId: string): Promise<string> {
     const token = generateId();
-    await this.redisService.setex(`invite:${token}`, INVITE_TTL, JSON.stringify({ userId, schoolId }));
+    await this.redisService.setex(
+      `invite:${token}`,
+      JobTTL.INVITE_SECONDS,
+      JSON.stringify({ userId, schoolId }),
+    );
     return token;
   }
 
@@ -183,7 +209,11 @@ export class StaffService {
     schoolId: string,
     createdBy: string,
   ): Promise<void> {
-    await this.redisService.setex(jobKey, BULK_JOB_TTL, JSON.stringify({ jobId, status: 'PROCESSING' }));
+    await this.redisService.setex(
+      jobKey,
+      JobTTL.BULK_JOB_SECONDS,
+      JSON.stringify({ jobId, status: 'PROCESSING' }),
+    );
 
     const errors: string[] = [];
     let created = 0;
@@ -196,36 +226,52 @@ export class StaffService {
       if (!sheet) {
         await this.redisService.setex(
           jobKey,
-          BULK_JOB_TTL,
+          JobTTL.BULK_JOB_SECONDS,
           JSON.stringify({ jobId, status: 'FAILED', errors: ['No worksheet found in file'] }),
         );
         return;
       }
 
-      const rows: any[] = [];
+      const rows: unknown[][] = [];
       sheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return; // skip header
-        rows.push(row.values);
+        rows.push(row.values as unknown[]);
       });
 
       const password_hash = await hashPassword(TEMP_PASSWORD);
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        const [, first_name, last_name, dial_code, phone_number, email, role, gender, date_of_birth] = row;
+        const [
+          ,
+          first_name,
+          last_name,
+          dial_code,
+          phone_number,
+          email,
+          role,
+          gender,
+          date_of_birth,
+        ] = row;
 
         if (!first_name || !phone_number || !dial_code || !role) {
-          errors.push(`Row ${i + 2}: missing required fields (first_name, dial_code, phone_number, role)`);
+          errors.push(
+            `Row ${i + 2}: missing required fields (first_name, dial_code, phone_number, role)`,
+          );
           continue;
         }
 
-        if (!Object.values(SchoolRole).includes(role)) {
+        if (!Object.values(SchoolRole).includes(String(role) as SchoolRole)) {
           errors.push(`Row ${i + 2}: invalid role '${role}'`);
           continue;
         }
 
         try {
-          const existing = await this.staffRepo.findByPhone(String(phone_number), String(dial_code), schoolId);
+          const existing = await this.staffRepo.findByPhone(
+            String(phone_number),
+            String(dial_code),
+            schoolId,
+          );
           if (existing) {
             errors.push(`Row ${i + 2}: phone number '${phone_number}' already exists`);
             continue;
@@ -240,9 +286,9 @@ export class StaffService {
             dial_code: String(dial_code),
             phone_number: String(phone_number),
             email: email ? String(email) : undefined,
-            role: role as SchoolRole,
+            role: String(role) as SchoolRole,
             gender: gender ? String(gender) : undefined,
-            date_of_birth: date_of_birth ? new Date(date_of_birth) : undefined,
+            date_of_birth: date_of_birth ? new Date(String(date_of_birth)) : undefined,
             password_hash,
           });
           created++;
@@ -255,7 +301,7 @@ export class StaffService {
 
       await this.redisService.setex(
         jobKey,
-        BULK_JOB_TTL,
+        JobTTL.BULK_JOB_SECONDS,
         JSON.stringify({
           jobId,
           status: 'COMPLETED',
@@ -269,7 +315,7 @@ export class StaffService {
     } catch (err) {
       await this.redisService.setex(
         jobKey,
-        BULK_JOB_TTL,
+        JobTTL.BULK_JOB_SECONDS,
         JSON.stringify({ jobId, status: 'FAILED', errors: [(err as Error).message] }),
       );
     }

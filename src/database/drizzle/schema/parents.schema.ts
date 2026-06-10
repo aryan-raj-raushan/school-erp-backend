@@ -11,6 +11,7 @@ export const parents = pgTable('parents', {
   last_name: varchar('last_name', { length: 100 }),
   dial_code: varchar('dial_code', { length: 10 }).notNull().default('+91'),
   phone_number: varchar('phone_number', { length: 15 }).notNull(),
+  alternate_phone: varchar('alternate_phone', { length: 15 }),
   email: varchar('email', { length: 150 }),
   occupation: varchar('occupation', { length: 100 }),
   annual_income: varchar('annual_income', { length: 50 }),
@@ -36,5 +37,6 @@ export const parentStudentLinks = pgTable('parent_student_links', {
     .references(() => students.id, { onDelete: 'cascade' }),
   relation: varchar('relation', { length: 20 }).notNull(),
   is_primary: boolean('is_primary').default(false).notNull(),
+  can_pickup: boolean('can_pickup').default(true).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });

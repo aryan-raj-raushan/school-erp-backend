@@ -9,7 +9,7 @@ import { sections } from './sections.schema';
 import { subjects } from './subjects.schema';
 import { students } from './students.schema';
 import { studentDocuments } from './student-documents.schema';
-import { studentParents } from './student-parents.schema';
+import { parents, parentStudentLinks } from './parents.schema';
 import { subscriptions } from './subscriptions.schema';
 import { subscriptionPayments } from './subscription-payments.schema';
 import { promotionLogs } from './promotion-logs.schema';
@@ -104,7 +104,7 @@ export const studentsRelations = relations(students, ({ one, many }) => ({
   class: one(classes, { fields: [students.class_id], references: [classes.id] }),
   section: one(sections, { fields: [students.section_id], references: [sections.id] }),
   documents: many(studentDocuments),
-  parents: many(studentParents),
+  parentLinks: many(parentStudentLinks),
 }));
 
 export const studentDocumentsRelations = relations(studentDocuments, ({ one }) => ({
@@ -112,9 +112,15 @@ export const studentDocumentsRelations = relations(studentDocuments, ({ one }) =
   student: one(students, { fields: [studentDocuments.student_id], references: [students.id] }),
 }));
 
-export const studentParentsRelations = relations(studentParents, ({ one }) => ({
-  school: one(schools, { fields: [studentParents.school_id], references: [schools.id] }),
-  student: one(students, { fields: [studentParents.student_id], references: [students.id] }),
+export const parentsRelations = relations(parents, ({ one, many }) => ({
+  school: one(schools, { fields: [parents.school_id], references: [schools.id] }),
+  studentLinks: many(parentStudentLinks),
+}));
+
+export const parentStudentLinksRelations = relations(parentStudentLinks, ({ one }) => ({
+  school: one(schools, { fields: [parentStudentLinks.school_id], references: [schools.id] }),
+  parent: one(parents, { fields: [parentStudentLinks.parent_id], references: [parents.id] }),
+  student: one(students, { fields: [parentStudentLinks.student_id], references: [students.id] }),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({

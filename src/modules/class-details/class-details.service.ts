@@ -7,8 +7,7 @@ import { CreateClassDetailDto } from './dto/create-class-detail.dto';
 import { UpdateClassDetailDto } from './dto/update-class-detail.dto';
 import { FilterClassDetailDto } from './dto/filter-class-detail.dto';
 import { ClassDetail } from './types/class-detail.types';
-
-const CACHE_TTL = 300;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class ClassDetailsService {
@@ -21,9 +20,12 @@ export class ClassDetailsService {
     return `class_details:${schoolId}`;
   }
 
-  async findAll(schoolId: string, filters: FilterClassDetailDto): Promise<PaginationResponse<ClassDetail>> {
+  async findAll(
+    schoolId: string,
+    filters: FilterClassDetailDto,
+  ): Promise<PaginationResponse<ClassDetail>> {
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.classDetailsRepo.findAll(schoolId, filters),
         this.classDetailsRepo.count(schoolId, filters),
@@ -34,14 +36,18 @@ export class ClassDetailsService {
 
   async findById(id: string, schoolId: string): Promise<ClassDetail> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const detail = await this.classDetailsRepo.findById(id, schoolId);
       if (!detail) throw new NotFoundException(`Class detail with id '${id}' not found`);
       return detail;
     });
   }
 
-  async create(dto: CreateClassDetailDto, schoolId: string, createdBy: string): Promise<ClassDetail> {
+  async create(
+    dto: CreateClassDetailDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<ClassDetail> {
     const detail = await this.classDetailsRepo.create({
       id: generateId(),
       school_id: schoolId,

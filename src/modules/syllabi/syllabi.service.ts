@@ -7,8 +7,7 @@ import { CreateSyllabusDto } from './dto/create-syllabus.dto';
 import { UpdateSyllabusDto } from './dto/update-syllabus.dto';
 import { FilterSyllabusDto } from './dto/filter-syllabus.dto';
 import { Syllabus, SyllabusWithAttachments } from './types/syllabus.types';
-
-const CACHE_TTL = 300;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class SyllabiService {
@@ -21,9 +20,12 @@ export class SyllabiService {
     return `syllabi:${schoolId}`;
   }
 
-  async findAll(schoolId: string, filters: FilterSyllabusDto): Promise<PaginationResponse<Syllabus>> {
+  async findAll(
+    schoolId: string,
+    filters: FilterSyllabusDto,
+  ): Promise<PaginationResponse<Syllabus>> {
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.syllabiRepo.findAll(schoolId, filters),
         this.syllabiRepo.count(schoolId, filters),
@@ -34,14 +36,18 @@ export class SyllabiService {
 
   async findById(id: string, schoolId: string): Promise<SyllabusWithAttachments> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const syllabus = await this.syllabiRepo.findWithAttachments(id, schoolId);
       if (!syllabus) throw new NotFoundException(`Syllabus with id '${id}' not found`);
       return syllabus;
     });
   }
 
-  async create(dto: CreateSyllabusDto, schoolId: string, createdBy: string): Promise<SyllabusWithAttachments> {
+  async create(
+    dto: CreateSyllabusDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<SyllabusWithAttachments> {
     const { attachments, ...rest } = dto;
     const syllabusId = generateId();
 
@@ -54,14 +60,23 @@ export class SyllabiService {
     });
 
     const savedAttachments = await this.syllabiRepo.createAttachments(
-      (attachments ?? []).map((a) => ({ id: generateId(), syllabus_id: syllabusId, school_id: schoolId, ...a })),
+      (attachments ?? []).map((a) => ({
+        id: generateId(),
+        syllabus_id: syllabusId,
+        school_id: schoolId,
+        ...a,
+      })),
     );
 
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return { ...syllabus, attachments: savedAttachments };
   }
 
-  async update(id: string, schoolId: string, dto: UpdateSyllabusDto): Promise<SyllabusWithAttachments> {
+  async update(
+    id: string,
+    schoolId: string,
+    dto: UpdateSyllabusDto,
+  ): Promise<SyllabusWithAttachments> {
     await this.findById(id, schoolId);
     const { attachments, ...rest } = dto;
 
@@ -79,7 +94,11 @@ export class SyllabiService {
     return { ...updated, attachments: newAttachments };
   }
 
-  async removeAttachment(syllabusId: string, attachmentId: string, schoolId: string): Promise<void> {
+  async removeAttachment(
+    syllabusId: string,
+    attachmentId: string,
+    schoolId: string,
+  ): Promise<void> {
     await this.findById(syllabusId, schoolId);
     await this.syllabiRepo.deleteAttachmentById(attachmentId);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);

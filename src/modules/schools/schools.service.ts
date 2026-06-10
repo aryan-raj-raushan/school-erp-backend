@@ -3,10 +3,8 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
-  Inject,
   BadRequestException,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
 import { SchoolsRepository } from './schools.repository';
 import { AuthRepository } from '../auth/auth.repository';
 import { RedisService } from '../redis/redis.service';
@@ -18,12 +16,7 @@ import { UpdateSchoolDto } from './dto/update-school.dto';
 import { SchoolFilterDto } from './dto/school-filter.dto';
 import { School } from './types/school.types';
 import { CompanyRole } from '../../shared/enums';
-import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
-import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { companyUserSchools } from '../../database/drizzle/schema';
-
-const CACHE_TTL = 300;
-const SCHOOLS_TTL = 3600;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class SchoolsService {
@@ -31,7 +24,6 @@ export class SchoolsService {
     private readonly schoolsRepo: SchoolsRepository,
     private readonly authRepo: AuthRepository,
     private readonly redisService: RedisService,
-    @Inject(DRIZZLE_ORM) private readonly db: DrizzleDB,
   ) {}
 
   // BUG-003/004/005: returns null for SUPER_ADMIN (= all access), array for others
@@ -42,14 +34,10 @@ export class SchoolsService {
     let ids = await this.redisService.smembers(key);
 
     if (ids.length === 0) {
-      const rows = await this.db
-        .select({ school_id: companyUserSchools.school_id })
-        .from(companyUserSchools)
-        .where(eq(companyUserSchools.user_id, userId));
-      ids = rows.map((r) => r.school_id);
+      ids = await this.schoolsRepo.findSchoolIdsByCompanyUserId(userId);
       if (ids.length > 0) {
         await this.redisService.sadd(key, ...ids);
-        await this.redisService.expire(key, SCHOOLS_TTL);
+        await this.redisService.expire(key, CacheTTL.HOUR);
       }
     }
 
@@ -63,10 +51,14 @@ export class SchoolsService {
     }
   }
 
-  async findAll(filters: SchoolFilterDto, userId: string, role: string): Promise<PaginationResponse<School>> {
+  async findAll(
+    filters: SchoolFilterDto,
+    userId: string,
+    role: string,
+  ): Promise<PaginationResponse<School>> {
     const allowedIds = await this.getPermittedSchoolIds(userId, role);
     const cacheKey = `schools:list:${userId}:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(cacheKey, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(cacheKey, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.schoolsRepo.findAll(filters, allowedIds ?? undefined),
         this.schoolsRepo.count(filters, allowedIds ?? undefined),
@@ -78,7 +70,7 @@ export class SchoolsService {
   async findById(id: string, userId: string, role: string): Promise<School> {
     await this.assertSchoolAccess(id, userId, role);
     const cacheKey = `schools:${id}`;
-    return this.redisService.getOrSet(cacheKey, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(cacheKey, CacheTTL.LONG, async () => {
       const school = await this.schoolsRepo.findById(id);
       if (!school) throw new NotFoundException(`School with id '${id}' not found`);
       return school;
@@ -99,7 +91,14 @@ export class SchoolsService {
       throw new BadRequestException('admin_first_name is required when admin_email is provided');
     }
 
-    const { admin_first_name, admin_last_name, admin_phone, admin_email, admin_dial_code, ...schoolData } = dto;
+    const {
+      admin_first_name,
+      admin_last_name,
+      admin_phone,
+      admin_email,
+      admin_dial_code,
+      ...schoolData
+    } = dto;
 
     const school = await this.schoolsRepo.create({
       id: generateId(),

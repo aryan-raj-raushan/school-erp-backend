@@ -7,8 +7,7 @@ import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { FilterDepartmentDto } from './dto/filter-department.dto';
 import { Department } from './types/department.types';
-
-const CACHE_TTL = 300;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class DepartmentsService {
@@ -21,9 +20,12 @@ export class DepartmentsService {
     return `departments:${schoolId}`;
   }
 
-  async findAll(schoolId: string, filters: FilterDepartmentDto): Promise<PaginationResponse<Department>> {
+  async findAll(
+    schoolId: string,
+    filters: FilterDepartmentDto,
+  ): Promise<PaginationResponse<Department>> {
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.departmentsRepo.findAll(schoolId, filters),
         this.departmentsRepo.count(schoolId, filters),
@@ -34,7 +36,7 @@ export class DepartmentsService {
 
   async findById(id: string, schoolId: string): Promise<Department> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const dept = await this.departmentsRepo.findById(id, schoolId);
       if (!dept) throw new NotFoundException(`Department with id '${id}' not found`);
       return dept;

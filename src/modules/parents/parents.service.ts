@@ -8,10 +8,16 @@ import { CreateParentDto } from './dto/create-parent.dto';
 import { UpdateParentDto } from './dto/update-parent.dto';
 import { FilterParentDto } from './dto/filter-parent.dto';
 import { Parent, BulkJobResult } from './types/parent.types';
+import { CacheTTL, JobTTL } from '../../shared/constants';
 
-const CACHE_TTL = 120;
-const BULK_JOB_TTL = 24 * 60 * 60;
-const TEMPLATE_HEADERS = ['first_name', 'last_name', 'dial_code', 'phone_number', 'email', 'occupation'];
+const TEMPLATE_HEADERS = [
+  'first_name',
+  'last_name',
+  'dial_code',
+  'phone_number',
+  'email',
+  'occupation',
+];
 
 @Injectable()
 export class ParentsService {
@@ -27,7 +33,7 @@ export class ParentsService {
   async findAll(schoolId: string, filters: FilterParentDto): Promise<PaginationResponse<Parent>> {
     const { page = 1, limit = 20 } = filters;
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.MEDIUM, async () => {
       const [items, total] = await Promise.all([
         this.parentsRepo.findAll(schoolId, filters),
         this.parentsRepo.count(schoolId, filters),
@@ -38,7 +44,7 @@ export class ParentsService {
 
   async findById(id: string, schoolId: string): Promise<Parent> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.MEDIUM, async () => {
       const parent = await this.parentsRepo.findById(id, schoolId);
       if (!parent) throw new NotFoundException(`Parent with id '${id}' not found`);
       return parent;
@@ -49,7 +55,12 @@ export class ParentsService {
     const existing = await this.parentsRepo.findByPhone(dto.phone_number, dto.dial_code, schoolId);
     if (existing) throw new ConflictException('A parent with this phone number already exists');
 
-    const parent = await this.parentsRepo.create({ id: generateId(), school_id: schoolId, created_by: createdBy, ...dto });
+    const parent = await this.parentsRepo.create({
+      id: generateId(),
+      school_id: schoolId,
+      created_by: createdBy,
+      ...dto,
+    });
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return parent;
   }
@@ -67,7 +78,12 @@ export class ParentsService {
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
   }
 
-  async linkStudent(parentId: string, studentId: string, schoolId: string, relation = 'GUARDIAN'): Promise<void> {
+  async linkStudent(
+    parentId: string,
+    studentId: string,
+    schoolId: string,
+    relation = 'GUARDIAN',
+  ): Promise<void> {
     await this.findById(parentId, schoolId);
     await this.parentsRepo.linkStudent(generateId(), parentId, studentId, schoolId, relation);
   }
@@ -81,14 +97,29 @@ export class ParentsService {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Parent Import');
     sheet.columns = TEMPLATE_HEADERS.map((h) => ({ header: h, key: h, width: 20 }));
-    sheet.addRow({ first_name: 'Rakesh', last_name: 'Sharma', dial_code: '+91', phone_number: '9876543210', email: 'rakesh@example.com', occupation: 'Engineer' });
+    sheet.addRow({
+      first_name: 'Rakesh',
+      last_name: 'Sharma',
+      dial_code: '+91',
+      phone_number: '9876543210',
+      email: 'rakesh@example.com',
+      occupation: 'Engineer',
+    });
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
-  async bulkImport(fileBuffer: Buffer, schoolId: string, createdBy: string): Promise<{ jobId: string }> {
+  async bulkImport(
+    fileBuffer: Buffer,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<{ jobId: string }> {
     const jobId = generateId();
     const jobKey = `bulk_job:parent:${jobId}`;
-    await this.redisService.setex(jobKey, BULK_JOB_TTL, JSON.stringify({ jobId, status: 'PENDING' }));
+    await this.redisService.setex(
+      jobKey,
+      JobTTL.BULK_JOB_SECONDS,
+      JSON.stringify({ jobId, status: 'PENDING' }),
+    );
     setImmediate(() => this.processBulk(jobId, jobKey, fileBuffer, schoolId, createdBy));
     return { jobId };
   }
@@ -99,8 +130,18 @@ export class ParentsService {
     return JSON.parse(raw) as BulkJobResult;
   }
 
-  private async processBulk(jobId: string, jobKey: string, fileBuffer: Buffer, schoolId: string, createdBy: string): Promise<void> {
-    await this.redisService.setex(jobKey, BULK_JOB_TTL, JSON.stringify({ jobId, status: 'PROCESSING' }));
+  private async processBulk(
+    jobId: string,
+    jobKey: string,
+    fileBuffer: Buffer,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<void> {
+    await this.redisService.setex(
+      jobKey,
+      JobTTL.BULK_JOB_SECONDS,
+      JSON.stringify({ jobId, status: 'PROCESSING' }),
+    );
     const errors: string[] = [];
     let created = 0;
 
@@ -109,12 +150,18 @@ export class ParentsService {
       await workbook.xlsx.load(fileBuffer as unknown as ExcelJS.Buffer);
       const sheet = workbook.getWorksheet(1);
       if (!sheet) {
-        await this.redisService.setex(jobKey, BULK_JOB_TTL, JSON.stringify({ jobId, status: 'FAILED', errors: ['No worksheet found'] }));
+        await this.redisService.setex(
+          jobKey,
+          JobTTL.BULK_JOB_SECONDS,
+          JSON.stringify({ jobId, status: 'FAILED', errors: ['No worksheet found'] }),
+        );
         return;
       }
 
-      const rows: any[] = [];
-      sheet.eachRow((row, rowNumber) => { if (rowNumber > 1) rows.push(row.values); });
+      const rows: unknown[][] = [];
+      sheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) rows.push(row.values as unknown[]);
+      });
 
       for (let i = 0; i < rows.length; i++) {
         const [, first_name, last_name, dial_code, phone_number, email, occupation] = rows[i];
@@ -123,17 +170,52 @@ export class ParentsService {
           continue;
         }
         try {
-          const existing = await this.parentsRepo.findByPhone(String(phone_number), String(dial_code), schoolId);
-          if (existing) { errors.push(`Row ${i + 2}: phone '${phone_number}' already exists`); continue; }
-          await this.parentsRepo.create({ id: generateId(), school_id: schoolId, created_by: createdBy, first_name: String(first_name), last_name: last_name ? String(last_name) : undefined, dial_code: String(dial_code), phone_number: String(phone_number), email: email ? String(email) : undefined, occupation: occupation ? String(occupation) : undefined });
+          const existing = await this.parentsRepo.findByPhone(
+            String(phone_number),
+            String(dial_code),
+            schoolId,
+          );
+          if (existing) {
+            errors.push(`Row ${i + 2}: phone '${phone_number}' already exists`);
+            continue;
+          }
+          await this.parentsRepo.create({
+            id: generateId(),
+            school_id: schoolId,
+            created_by: createdBy,
+            first_name: String(first_name),
+            last_name: last_name ? String(last_name) : undefined,
+            dial_code: String(dial_code),
+            phone_number: String(phone_number),
+            email: email ? String(email) : undefined,
+            occupation: occupation ? String(occupation) : undefined,
+          });
           created++;
-        } catch { errors.push(`Row ${i + 2}: failed to create`); }
+        } catch {
+          errors.push(`Row ${i + 2}: failed to create`);
+        }
       }
 
       await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
-      await this.redisService.setex(jobKey, BULK_JOB_TTL, JSON.stringify({ jobId, status: 'COMPLETED', total: rows.length, created, failed: errors.length, errors, completedAt: new Date().toISOString() }));
+      await this.redisService.setex(
+        jobKey,
+        JobTTL.BULK_JOB_SECONDS,
+        JSON.stringify({
+          jobId,
+          status: 'COMPLETED',
+          total: rows.length,
+          created,
+          failed: errors.length,
+          errors,
+          completedAt: new Date().toISOString(),
+        }),
+      );
     } catch (err) {
-      await this.redisService.setex(jobKey, BULK_JOB_TTL, JSON.stringify({ jobId, status: 'FAILED', errors: [(err as Error).message] }));
+      await this.redisService.setex(
+        jobKey,
+        JobTTL.BULK_JOB_SECONDS,
+        JSON.stringify({ jobId, status: 'FAILED', errors: [(err as Error).message] }),
+      );
     }
   }
 }

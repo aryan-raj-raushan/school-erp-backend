@@ -1,28 +1,33 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
 import { PromotionsRepository } from './promotions.repository';
+import { RedisService } from '../redis/redis.service';
+import { generateId } from '../../utils/uuid.utils';
 import { PromoteStudentsDto } from './dto/promote-students.dto';
 import { PromotionFilterDto } from './dto/promotion-filter.dto';
 import { PromotionLog, NewPromotionLog } from './types/promotion.types';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { PromotionStatus } from '../../shared/enums';
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class PromotionsService {
   private readonly logger = new Logger(PromotionsService.name);
 
-  constructor(private readonly promotionsRepo: PromotionsRepository) {}
+  constructor(
+    private readonly promotionsRepo: PromotionsRepository,
+    private readonly redisService: RedisService,
+  ) {}
 
   async bulkPromote(
     schoolId: string,
     dto: PromoteStudentsDto,
     promotedBy: string,
   ): Promise<{ batchId: string; promoted: number; failed: number; logs: PromotionLog[] }> {
-    const batchId = uuidv4();
+    const batchId = generateId();
     const isBulk = dto.promotions.length > 1;
 
     const logRecords: NewPromotionLog[] = dto.promotions.map((item) => ({
-      id: uuidv4(),
+      id: generateId(),
       school_id: schoolId,
       student_id: item.student_id,
       from_academic_year_id: dto.from_academic_year_id,
@@ -70,6 +75,7 @@ export class PromotionsService {
       }
     }
 
+    await this.redisService.delByPattern(`promotions:${schoolId}:*`);
     return { batchId, promoted, failed, logs };
   }
 
@@ -77,11 +83,13 @@ export class PromotionsService {
     schoolId: string,
     filters: PromotionFilterDto,
   ): Promise<PaginationResponse<PromotionLog>> {
-    const [data, total] = await Promise.all([
-      this.promotionsRepo.findAll(schoolId, filters),
-      this.promotionsRepo.count(schoolId, filters),
-    ]);
-
-    return PaginationResponse.of(data, total, filters);
+    const key = `promotions:${schoolId}:list:${JSON.stringify(filters)}`;
+    return this.redisService.getOrSet(key, CacheTTL.MEDIUM, async () => {
+      const [data, total] = await Promise.all([
+        this.promotionsRepo.findAll(schoolId, filters),
+        this.promotionsRepo.count(schoolId, filters),
+      ]);
+      return PaginationResponse.of(data, total, filters);
+    });
   }
 }

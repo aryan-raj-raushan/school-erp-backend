@@ -6,8 +6,7 @@ import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 import { UpdateAcademicYearDto } from './dto/update-academic-year.dto';
 import { AcademicYear } from './types/academic-year.types';
-
-const CACHE_TTL = 300;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class AcademicYearsService {
@@ -26,7 +25,7 @@ export class AcademicYearsService {
     limit: number,
   ): Promise<PaginationResponse<AcademicYear>> {
     const key = `${this.cacheKey(schoolId)}:list:${page}:${limit}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.academicYearsRepo.findAll(schoolId, page, limit),
         this.academicYearsRepo.count(schoolId),
@@ -37,7 +36,7 @@ export class AcademicYearsService {
 
   async findById(id: string, schoolId: string): Promise<AcademicYear> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const academicYear = await this.academicYearsRepo.findById(id, schoolId);
       if (!academicYear) {
         throw new NotFoundException(`Academic year with id '${id}' not found`);
@@ -48,7 +47,7 @@ export class AcademicYearsService {
 
   async findCurrent(schoolId: string): Promise<AcademicYear> {
     const key = `${this.cacheKey(schoolId)}:current`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const academicYear = await this.academicYearsRepo.findCurrent(schoolId);
       if (!academicYear) {
         throw new NotFoundException(`No current academic year set for this school`);
@@ -77,11 +76,7 @@ export class AcademicYearsService {
     return academicYear;
   }
 
-  async update(
-    id: string,
-    schoolId: string,
-    dto: UpdateAcademicYearDto,
-  ): Promise<AcademicYear> {
+  async update(id: string, schoolId: string, dto: UpdateAcademicYearDto): Promise<AcademicYear> {
     await this.findById(id, schoolId);
     if (dto.is_enabled) {
       await this.academicYearsRepo.disableAll(schoolId);

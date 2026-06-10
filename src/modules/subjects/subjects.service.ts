@@ -7,8 +7,7 @@ import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { SubjectFilterDto } from './dto/subject-filter.dto';
 import { Subject } from './types/subject.types';
-
-const CACHE_TTL = 300;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class SubjectsService {
@@ -21,12 +20,9 @@ export class SubjectsService {
     return `subjects:${schoolId}:${classId ?? 'all'}`;
   }
 
-  async findAll(
-    schoolId: string,
-    filters: SubjectFilterDto,
-  ): Promise<PaginationResponse<Subject>> {
+  async findAll(schoolId: string, filters: SubjectFilterDto): Promise<PaginationResponse<Subject>> {
     const key = `${this.cacheKey(schoolId, filters.class_id)}:list:${filters.page ?? 1}:${filters.limit ?? 20}:${filters.search ?? ''}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.subjectsRepo.findAll(schoolId, filters),
         this.subjectsRepo.count(schoolId, filters),
@@ -37,7 +33,7 @@ export class SubjectsService {
 
   async findById(id: string, schoolId: string): Promise<Subject> {
     const key = `subjects:${schoolId}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const subject = await this.subjectsRepo.findById(id, schoolId);
       if (!subject) {
         throw new NotFoundException(`Subject with id '${id}' not found`);
@@ -46,11 +42,7 @@ export class SubjectsService {
     });
   }
 
-  async create(
-    dto: CreateSubjectDto,
-    schoolId: string,
-    createdBy: string,
-  ): Promise<Subject> {
+  async create(dto: CreateSubjectDto, schoolId: string, createdBy: string): Promise<Subject> {
     const subject = await this.subjectsRepo.create({
       id: generateId(),
       school_id: schoolId,
@@ -63,11 +55,7 @@ export class SubjectsService {
     return subject;
   }
 
-  async update(
-    id: string,
-    schoolId: string,
-    dto: UpdateSubjectDto,
-  ): Promise<Subject> {
+  async update(id: string, schoolId: string, dto: UpdateSubjectDto): Promise<Subject> {
     await this.findById(id, schoolId);
     const updated = await this.subjectsRepo.update(id, schoolId, dto);
     await this.redisService.delByPattern(`subjects:${schoolId}:*`);

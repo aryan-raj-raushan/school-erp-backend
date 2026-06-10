@@ -7,8 +7,7 @@ import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { ClassFilterDto } from './dto/class-filter.dto';
 import { Class, ClassSectionView } from './types/class.types';
-
-const CACHE_TTL = 300;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class ClassesService {
@@ -21,9 +20,12 @@ export class ClassesService {
     return `classes:${schoolId}:${academicYearId ?? 'all'}`;
   }
 
-  async findAll(schoolId: string, filters: ClassFilterDto): Promise<PaginationResponse<ClassSectionView>> {
+  async findAll(
+    schoolId: string,
+    filters: ClassFilterDto,
+  ): Promise<PaginationResponse<ClassSectionView>> {
     const key = `${this.cacheKey(schoolId, filters.academic_year_id)}:list:${filters.page ?? 1}:${filters.limit ?? 20}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.classesRepo.findAll(schoolId, filters),
         this.classesRepo.count(schoolId, filters),
@@ -34,7 +36,7 @@ export class ClassesService {
 
   async findById(id: string, schoolId: string): Promise<Class> {
     const key = `classes:${schoolId}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const cls = await this.classesRepo.findById(id, schoolId);
       if (!cls) throw new NotFoundException(`Class with id '${id}' not found`);
       return cls;
@@ -42,7 +44,12 @@ export class ClassesService {
   }
 
   async create(dto: CreateClassDto, schoolId: string, createdBy: string): Promise<Class> {
-    const cls = await this.classesRepo.create({ id: generateId(), school_id: schoolId, created_by: createdBy, ...dto });
+    const cls = await this.classesRepo.create({
+      id: generateId(),
+      school_id: schoolId,
+      created_by: createdBy,
+      ...dto,
+    });
     await this.redisService.delByPattern(`classes:${schoolId}:*`);
     return cls;
   }

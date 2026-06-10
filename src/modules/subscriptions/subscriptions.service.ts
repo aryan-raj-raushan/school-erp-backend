@@ -1,5 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { SubscriptionsRepository } from './subscriptions.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
@@ -12,19 +11,13 @@ import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
 import { SubscriptionFilterDto } from './dto/subscription-filter.dto';
 import { Subscription, SubscriptionPayment } from './types/subscription.types';
 import { CompanyRole, SubscriptionPlan } from '../../shared/enums';
-import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
-import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { companyUserSchools } from '../../database/drizzle/schema';
-
-const CACHE_TTL = 120;
-const SCHOOLS_TTL = 3600;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class SubscriptionsService {
   constructor(
     private readonly subscriptionsRepo: SubscriptionsRepository,
     private readonly redisService: RedisService,
-    @Inject(DRIZZLE_ORM) private readonly db: DrizzleDB,
   ) {}
 
   // BUG-008/009/010: tenant isolation helpers
@@ -35,14 +28,10 @@ export class SubscriptionsService {
     let ids = await this.redisService.smembers(key);
 
     if (ids.length === 0) {
-      const rows = await this.db
-        .select({ school_id: companyUserSchools.school_id })
-        .from(companyUserSchools)
-        .where(eq(companyUserSchools.user_id, userId));
-      ids = rows.map((r) => r.school_id);
+      ids = await this.subscriptionsRepo.findSchoolIdsByCompanyUserId(userId);
       if (ids.length > 0) {
         await this.redisService.sadd(key, ...ids);
-        await this.redisService.expire(key, SCHOOLS_TTL);
+        await this.redisService.expire(key, CacheTTL.HOUR);
       }
     }
 
@@ -56,7 +45,11 @@ export class SubscriptionsService {
     }
   }
 
-  async findAll(filters: SubscriptionFilterDto, userId: string, role: string): Promise<PaginationResponse<Subscription>> {
+  async findAll(
+    filters: SubscriptionFilterDto,
+    userId: string,
+    role: string,
+  ): Promise<PaginationResponse<Subscription>> {
     const permitted = await this.getPermittedSchoolIds(userId, role);
 
     // For non-SUPER_ADMIN, force filter to their permitted schools only
@@ -73,7 +66,7 @@ export class SubscriptionsService {
     }
 
     const cacheKey = `subscriptions:list:${userId}:${JSON.stringify(scopedFilters)}`;
-    return this.redisService.getOrSet(cacheKey, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(cacheKey, CacheTTL.MEDIUM, async () => {
       const [items, total] = await Promise.all([
         this.subscriptionsRepo.findAll(scopedFilters, permitted ?? undefined),
         this.subscriptionsRepo.count(scopedFilters, permitted ?? undefined),
@@ -117,7 +110,12 @@ export class SubscriptionsService {
     return sub;
   }
 
-  async update(id: string, dto: UpdateSubscriptionDto, userId: string, role: string): Promise<Subscription> {
+  async update(
+    id: string,
+    dto: UpdateSubscriptionDto,
+    userId: string,
+    role: string,
+  ): Promise<Subscription> {
     await this.findById(id, userId, role);
     const updated = await this.subscriptionsRepo.update(id, {
       ...dto,
@@ -130,7 +128,12 @@ export class SubscriptionsService {
     return updated;
   }
 
-  async cancel(id: string, dto: CancelSubscriptionDto, userId: string, role: string): Promise<Subscription> {
+  async cancel(
+    id: string,
+    dto: CancelSubscriptionDto,
+    userId: string,
+    role: string,
+  ): Promise<Subscription> {
     const sub = await this.findById(id, userId, role);
     const updated = await this.subscriptionsRepo.update(id, {
       status: 'CANCELLED',
@@ -141,7 +144,11 @@ export class SubscriptionsService {
     return updated;
   }
 
-  async getPayments(subscriptionId: string, userId: string, role: string): Promise<SubscriptionPayment[]> {
+  async getPayments(
+    subscriptionId: string,
+    userId: string,
+    role: string,
+  ): Promise<SubscriptionPayment[]> {
     await this.findById(subscriptionId, userId, role);
     return this.subscriptionsRepo.findPayments(subscriptionId);
   }

@@ -24,7 +24,8 @@
     "load": "npm run load:smoke",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
-    "start:migrate": "drizzle-kit push && node dist/main"
+    "start:migrate": "drizzle-kit push && node dist/main",
+    "prepare": "husky"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
@@ -83,7 +84,9 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
+    "lint-staged": "^17.0.7",
     "prettier": "^3.3.3",
     "source-map-support": "^0.5.21",
     "ts-jest": "^29.2.3",
@@ -91,6 +94,12 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.5.4"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --max-warnings 0 --fix",
+      "prettier --write"
+    ]
   },
   "jest": {
     "moduleFileExtensions": [

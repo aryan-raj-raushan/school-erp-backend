@@ -7,8 +7,7 @@ import { CreateHolidayDto } from './dto/create-holiday.dto';
 import { UpdateHolidayDto } from './dto/update-holiday.dto';
 import { FilterHolidayDto } from './dto/filter-holiday.dto';
 import { Holiday } from './types/holiday.types';
-
-const CACHE_TTL = 300;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class HolidaysService {
@@ -25,7 +24,7 @@ export class HolidaysService {
     const { page = 1, limit = 20, ...rest } = filters;
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify({ ...rest, page, limit })}`;
 
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.holidaysRepo.findAll(schoolId, rest, page, limit),
         this.holidaysRepo.count(schoolId, rest),
@@ -36,7 +35,7 @@ export class HolidaysService {
 
   async findById(id: string, schoolId: string): Promise<Holiday> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const holiday = await this.holidaysRepo.findById(id, schoolId);
       if (!holiday) {
         throw new NotFoundException(`Holiday with id '${id}' not found`);

@@ -7,8 +7,7 @@ import { CreateClassTypeDto } from './dto/create-class-type.dto';
 import { UpdateClassTypeDto } from './dto/update-class-type.dto';
 import { FilterClassTypeDto } from './dto/filter-class-type.dto';
 import { ClassType } from './types/class-type.types';
-
-const CACHE_TTL = 300;
+import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
 export class ClassTypesService {
@@ -21,9 +20,12 @@ export class ClassTypesService {
     return `class_types:${schoolId}`;
   }
 
-  async findAll(schoolId: string, filters: FilterClassTypeDto): Promise<PaginationResponse<ClassType>> {
+  async findAll(
+    schoolId: string,
+    filters: FilterClassTypeDto,
+  ): Promise<PaginationResponse<ClassType>> {
     const key = `${this.cacheKey(schoolId)}:list:${JSON.stringify(filters)}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.classTypesRepo.findAll(schoolId, filters),
         this.classTypesRepo.count(schoolId, filters),
@@ -34,7 +36,7 @@ export class ClassTypesService {
 
   async findById(id: string, schoolId: string): Promise<ClassType> {
     const key = `${this.cacheKey(schoolId)}:${id}`;
-    return this.redisService.getOrSet(key, CACHE_TTL, async () => {
+    return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const ct = await this.classTypesRepo.findById(id, schoolId);
       if (!ct) throw new NotFoundException(`Class type with id '${id}' not found`);
       return ct;
