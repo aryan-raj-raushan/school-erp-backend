@@ -4,9 +4,12 @@ import { admissionEnquiries } from './admission-enquiries.schema';
 
 export const enquiryActionEnum = pgEnum('enquiry_action', [
   'NEW_ENQUIRY',
-  'NEXT_FOLLOW_UP_UPDATE',
+  'FOLLOW_UP_UPDATED',
   'ADMISSION_CONFIRMED',
   'ENQUIRY_REJECTED',
+  'REMARKS_UPDATED',
+  'TEACHER_ASSIGNED',
+  'NEXT_FOLLOW_UP_UPDATE',
 ]);
 
 export const enquiryHistory = pgTable('enquiry_history', {
