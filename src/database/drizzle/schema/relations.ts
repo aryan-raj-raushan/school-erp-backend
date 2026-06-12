@@ -7,7 +7,7 @@ import { academicYears } from './academic-years.schema';
 import { classes } from './classes.schema';
 import { sections } from './sections.schema';
 import { subjects } from './subjects.schema';
-import { students } from './students.schema';
+import { studentAcademicInfo, students } from './students.schema';
 import { studentDocuments } from './student-documents.schema';
 import { parents, parentStudentLinks } from './parents.schema';
 import { subscriptions } from './subscriptions.schema';
@@ -95,17 +95,61 @@ export const subjectsRelations = relations(subjects, ({ one }) => ({
   class: one(classes, { fields: [subjects.class_id], references: [classes.id] }),
 }));
 
-export const studentsRelations = relations(students, ({ one, many }) => ({
-  school: one(schools, { fields: [students.school_id], references: [schools.id] }),
-  academicYear: one(academicYears, {
-    fields: [students.academic_year_id],
-    references: [academicYears.id],
+export const studentAcademicInfoRelations = relations(
+  studentAcademicInfo,
+  ({ one }) => ({
+    student: one(students, {
+      fields: [studentAcademicInfo.student_id],
+      references: [students.id],
+    }),
+
+    academicYear: one(academicYears, {
+      fields: [studentAcademicInfo.academic_year_id],
+      references: [academicYears.id],
+    }),
+
+    class: one(classes, {
+      fields: [studentAcademicInfo.class_id],
+      references: [classes.id],
+    }),
+
+    section: one(sections, {
+      fields: [studentAcademicInfo.section_id],
+      references: [sections.id],
+    }),
+
+    school: one(schools, {
+      fields: [studentAcademicInfo.school_id],
+      references: [schools.id],
+    }),
   }),
-  class: one(classes, { fields: [students.class_id], references: [classes.id] }),
-  section: one(sections, { fields: [students.section_id], references: [sections.id] }),
+);
+
+export const studentsRelations = relations(students, ({ one, many }) => ({
+  school: one(schools, {
+    fields: [students.school_id],
+    references: [schools.id],
+  }),
+
+  // New relation
+  academicInfo: many(studentAcademicInfo),
+
   documents: many(studentDocuments),
+
   parentLinks: many(parentStudentLinks),
 }));
+
+// export const studentsRelations = relations(students, ({ one, many }) => ({
+//   school: one(schools, { fields: [students.school_id], references: [schools.id] }),
+//   academicYear: one(academicYears, {
+//     fields: [students.academic_year_id],
+//     references: [academicYears.id],
+//   }),
+//   class: one(classes, { fields: [students.class_id], references: [classes.id] }),
+//   section: one(sections, { fields: [students.section_id], references: [sections.id] }),
+//   documents: many(studentDocuments),
+//   parentLinks: many(parentStudentLinks),
+// }));
 
 export const studentDocumentsRelations = relations(studentDocuments, ({ one }) => ({
   school: one(schools, { fields: [studentDocuments.school_id], references: [schools.id] }),

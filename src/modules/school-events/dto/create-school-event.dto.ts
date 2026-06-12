@@ -7,6 +7,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
+
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SchoolEventType } from '@shared/enums/holiday-events.enum';
 import { REGEX } from '@utils/regex.utils';

@@ -1,152 +1,152 @@
 import {
   IsString,
-  IsNotEmpty,
   IsOptional,
   IsEnum,
-  IsUUID,
   IsDateString,
-  Matches,
+  IsBoolean,
+  IsNumberString,
   MaxLength,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { REGEX } from '../../../utils/regex.utils';
-import { StringUtils } from '../../../utils/string.utils';
-import { Gender, BloodGroup } from '../../../shared/enums/gender.enum';
-import { StudentStatus } from '../../../shared/enums/status.enum';
+import { Type } from 'class-transformer';
+import {
+  BloodGroup,
+  Category,
+  DocumentFileType,
+  Gender,
+  ParentRelation,
+  Qualification,
+  Religion,
+  StudentStatus,
+} from '@shared/enums/student.enum';
+
+// ─── Sub-DTOs ─────────────────────────────────────────────────────────────────
+
+export class StudentAcademicInfoDto {
+  @ApiProperty() @IsString() academic_year_id: string;
+  @ApiProperty() @IsString() class_id: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() section_id?: string;
+  @ApiProperty() @IsString() admission_number: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() registration_number?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() roll_number?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() joining_date?: string;
+}
+
+export class StudentPreviousAcademicsDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() previous_school_name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() previous_class?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() passing_year?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() total_marks?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() grade?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() board?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() tc_number?: string;
+}
+
+export class StudentAddressDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() address?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() city?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() state?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() pincode?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() country?: string;
+}
+
+export class StudentHostelInfoDto {
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() hostel_required?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() hostel_name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() room_number?: string;
+}
+
+export class StudentParentDto {
+  @ApiProperty({ enum: ParentRelation }) @IsEnum(ParentRelation) relation: ParentRelation;
+  @ApiProperty() @IsString() @MaxLength(100) first_name: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) last_name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() email?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() dial_code?: string;
+  @ApiProperty() @IsString() phone_number: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() alternate_phone?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() occupation?: string;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(Qualification) qualification?: Qualification;
+  @ApiPropertyOptional() @IsOptional() @IsString() annual_income?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() aadhaar_number?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() profile_image?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() is_primary?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() can_pickup?: boolean;
+}
+
+export class StudentDocumentDto {
+  @ApiProperty({ enum: DocumentType }) @IsEnum(DocumentType) document_name: DocumentType;
+  @ApiProperty({ enum: DocumentFileType }) @IsEnum(DocumentFileType) file_type: DocumentFileType;
+  @ApiProperty() @IsString() document_link: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() original_filename?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() remarks?: string;
+}
+
+// ─── Main Create DTO ──────────────────────────────────────────────────────────
 
 export class CreateStudentDto {
-  @ApiProperty({ example: 'Rahul' })
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
-  first_name: string;
+  // Basic Info
+  @ApiProperty() @IsString() @MaxLength(100) first_name: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) last_name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() date_of_birth?: string;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(Gender) gender?: Gender;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(BloodGroup) blood_group?: BloodGroup;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(Religion) religion?: Religion;
+  @ApiPropertyOptional() @IsOptional() @IsEnum(Category) category?: Category;
+  @ApiPropertyOptional() @IsOptional() @IsString() caste?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() nationality?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(12) aadhaar_number?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() id_card_number?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumberString() height_cm?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumberString() weight_kg?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() profile_image?: string;
 
-  @ApiPropertyOptional({ example: 'Sharma' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
-  last_name?: string;
+  // Contact
+  @ApiPropertyOptional() @IsOptional() @IsString() dial_code?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() phone_number?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() email?: string;
 
-  @ApiProperty({ example: 'DPS/2024/00001' })
-  @IsString()
-  @IsNotEmpty()
-  @Matches(REGEX.ADMISSION_NO, { message: 'Invalid admission number format' })
-  @Transform(({ value }) => StringUtils.trim(value)?.toUpperCase())
-  admission_number: string;
-
-  @ApiPropertyOptional({ example: '42' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  roll_number?: string;
-
-  @ApiProperty({ example: 'uuid-of-academic-year' })
-  @IsUUID()
-  @IsNotEmpty()
-  academic_year_id: string;
-
-  @ApiProperty({ example: 'uuid-of-class' })
-  @IsUUID()
-  @IsNotEmpty()
-  class_id: string;
-
-  @ApiPropertyOptional({ example: 'uuid-of-section' })
-  @IsOptional()
-  @IsUUID()
-  section_id?: string;
-
-  @ApiPropertyOptional({ example: '2010-05-15' })
-  @IsOptional()
-  @IsDateString()
-  date_of_birth?: string;
-
-  @ApiPropertyOptional({ enum: Gender })
-  @IsOptional()
-  @IsEnum(Gender)
-  gender?: Gender;
-
-  @ApiPropertyOptional({ enum: BloodGroup })
-  @IsOptional()
-  @IsEnum(BloodGroup)
-  blood_group?: BloodGroup;
-
-  @ApiPropertyOptional({ example: 'Hindu' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  @Transform(({ value }) => StringUtils.trim(value))
-  religion?: string;
-
-  @ApiPropertyOptional({ example: 'General' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  @Transform(({ value }) => StringUtils.trim(value))
-  caste?: string;
-
-  @ApiPropertyOptional({ example: 'Indian', default: 'Indian' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  nationality?: string;
-
-  @ApiPropertyOptional({ example: '123456789012' })
-  @IsOptional()
-  @Matches(REGEX.AADHAAR, { message: 'Aadhaar must be 12 digits' })
-  aadhaar_number?: string;
-
-  @ApiPropertyOptional({ example: '123 Main Street, Sector 5' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  @Transform(({ value }) => StringUtils.sanitize(StringUtils.trim(value)))
-  address?: string;
-
-  @ApiPropertyOptional({ example: 'New Delhi' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
-  city?: string;
-
-  @ApiPropertyOptional({ example: 'Delhi' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
-  state?: string;
-
-  @ApiPropertyOptional({ example: '110001' })
-  @IsOptional()
-  @Matches(REGEX.PINCODE_IN, { message: 'Invalid Indian pincode' })
-  pincode?: string;
-
-  @ApiPropertyOptional({ example: '+91' })
-  @IsOptional()
-  @Matches(REGEX.DIAL_CODE, { message: 'Invalid dial code' })
-  dial_code?: string;
-
-  @ApiPropertyOptional({ example: '9876543210' })
-  @IsOptional()
-  @Matches(REGEX.PHONE_IN, { message: 'Invalid Indian mobile number' })
-  phone_number?: string;
-
-  @ApiPropertyOptional({ example: 'rahul.sharma@example.com' })
-  @IsOptional()
-  @Matches(REGEX.EMAIL, { message: 'Invalid email address' })
-  @Transform(({ value }) => StringUtils.trim(value)?.toLowerCase())
-  email?: string;
-
-  @ApiPropertyOptional({ example: '2024-04-01' })
-  @IsOptional()
-  @IsDateString()
-  admission_date?: string;
-
-  @ApiPropertyOptional({ enum: StudentStatus, default: StudentStatus.ACTIVE })
+  // Status
+  @ApiPropertyOptional({ enum: StudentStatus })
   @IsOptional()
   @IsEnum(StudentStatus)
   status?: StudentStatus;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() is_enabled?: boolean;
+
+  // Sub-sections
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => StudentAcademicInfoDto)
+  academic_info?: StudentAcademicInfoDto;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => StudentPreviousAcademicsDto)
+  previous_academics?: StudentPreviousAcademicsDto;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => StudentAddressDto)
+  address?: StudentAddressDto;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => StudentHostelInfoDto)
+  hostel_info?: StudentHostelInfoDto;
+  @ApiPropertyOptional({ type: [StudentParentDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudentParentDto)
+  parents?: StudentParentDto[];
+  @ApiPropertyOptional({ type: [StudentDocumentDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudentDocumentDto)
+  documents?: StudentDocumentDto[];
 }
+
+export class UpdateStudentDto extends CreateStudentDto {}

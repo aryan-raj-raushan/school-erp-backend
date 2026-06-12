@@ -16,3 +16,8 @@ export const REDI_HOLIDAY_EVENTS_KEY = {
   ITEM_TTL: 300,
   SCHOOL_EVENTS:(schoolId:string)=> `school_events:${schoolId}`,
 };
+
+export const REDIS_STUDENT_KEY = {
+  CACHE_TTL: 120,
+  STUDENT: (schoolId: string)=>`students:${schoolId}`,
+}

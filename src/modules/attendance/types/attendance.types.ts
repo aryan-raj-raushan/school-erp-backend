@@ -6,8 +6,8 @@ export type NewAttendance = InferInsertModel<typeof attendances>;
 
 export interface EnrichedAttendanceRecord extends Attendance {
   student_name: string;
-  roll_number: string | null;
-  admission_number: string;
+  roll_number?: string | null;
+  admission_number?: string;
   marked_by_username: string | null;
 }
 
@@ -29,8 +29,8 @@ export interface DailyAttendanceReport {
 export interface StudentMonthSummary {
   student_id: string;
   student_name: string;
-  roll_number: string | null;
-  admission_number: string;
+  roll_number?: string | null;
+  admission_number?: string;
   total_days: number;
   present: number;
   absent: number;
@@ -64,8 +64,8 @@ export interface MarkAttendanceResponse {
 export interface DefaulterRecord {
   student_id: string;
   studentName: string;
-  rollNo: string | null;
-  admissionNo: string;
+  rollNo?: string | null;
+  admissionNo?: string;
   total_days: number;
   total_present: number;
   total_absent: number;

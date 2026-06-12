@@ -158,8 +158,8 @@ export class AttendanceService {
         {
           student_id: string;
           student_name: string;
-          roll_number: string | null;
-          admission_number: string;
+          roll_number?: string | null;
+          admission_number?: string;
           present: number;
           absent: number;
           total: number;
@@ -170,8 +170,8 @@ export class AttendanceService {
           studentMap.set(r.student_id, {
             student_id: r.student_id,
             student_name: r.student_name,
-            roll_number: r.roll_number,
-            admission_number: r.admission_number,
+            // roll_number: r.roll_number,
+            // admission_number: r.admission_number,
             present: 0,
             absent: 0,
             total: 0,
