@@ -7,7 +7,7 @@ export * from './classes.schema';
 export * from './sections.schema';
 export * from './subjects.schema';
 export * from './students.schema';
-export * from './student-documents.schema';
+// export * from './student-documents.schema';
 export * from './subscriptions.schema';
 export * from './subscription-payments.schema';
 export * from './promotion-logs.schema';

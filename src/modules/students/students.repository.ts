@@ -1,67 +1,66 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, ilike, or, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, sql, SQL } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { students } from '../../database/drizzle/schema/students.schema';
-import { studentDocuments } from '../../database/drizzle/schema/student-documents.schema';
-import { parents, parentStudentLinks } from '../../database/drizzle/schema/parents.schema';
 import {
-  Student,
-  NewStudent,
-  StudentDocument,
-  NewStudentDocument,
-  StudentParentView,
-  CreateParentRepoData,
-  UpdateParentRepoData,
+  students,
+  studentAcademicInfo,
+  studentPreviousAcademics,
+  studentAddresses,
+  studentHostelInfo,
+  studentParents,
+  studentDocuments,
+  schoolStudentCounters,
+} from '../../database/drizzle/schema/students.schema';
+import { classes } from '../../database/drizzle/schema/classes.schema';
+import { sections } from '../../database/drizzle/schema/sections.schema';
+import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
+import { schools } from '../../database/drizzle/schema/schools.schema';
+import {
+  Student, NewStudent,
+  StudentAcademicInfo, NewStudentAcademicInfo,
+  StudentPreviousAcademics, NewStudentPreviousAcademics,
+  StudentAddress, NewStudentAddress,
+  StudentHostelInfo, NewStudentHostelInfo,
+  StudentParent, NewStudentParent,
+  StudentDocument, NewStudentDocument,
+  StudentFilters,
+  StudentListItem,
 } from './types/student.types';
-import { StudentFilterDto } from './dto/student-filter.dto';
 
 @Injectable()
 export class StudentsRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
-  async findAll(schoolId: string, filters: StudentFilterDto): Promise<Student[]> {
-    const conditions = [eq(students.school_id, schoolId), eq(students.deleted, false)];
+  // ─── System Number ──────────────────────────────────────────────────────────
 
-    if (filters.search) {
-      const term = `%${filters.search}%`;
-      conditions.push(
-        or(
-          ilike(students.first_name, term),
-          ilike(students.last_name, term),
-          ilike(students.admission_number, term),
-        )!,
-      );
-    }
-    if (filters.class_id) {
-      conditions.push(eq(students.class_id, filters.class_id));
-    }
-    if (filters.section_id) {
-      conditions.push(eq(students.section_id, filters.section_id));
-    }
-    if (filters.academic_year_id) {
-      conditions.push(eq(students.academic_year_id, filters.academic_year_id));
-    }
-    if (filters.status) {
-      conditions.push(eq(students.status, filters.status));
-    }
-    if (filters.gender) {
-      conditions.push(eq(students.gender, filters.gender));
-    }
-
-    const limit = filters.limit ?? 20;
-    const offset = ((filters.page ?? 1) - 1) * limit;
-
-    return this.db
-      .select()
-      .from(students)
-      .where(and(...conditions))
-      .limit(limit)
-      .offset(offset);
+  async nextSystemNumber(schoolId: string): Promise<number> {
+    // Upsert counter and return incremented value
+    const [row] = await this.db
+      .insert(schoolStudentCounters)
+      .values({ school_id: schoolId, last_number: 1 })
+      .onConflictDoUpdate({
+        target: schoolStudentCounters.school_id,
+        set: {
+          last_number: sql`${schoolStudentCounters.last_number} + 1`,
+          updated_at: new Date(),
+        },
+      })
+      .returning({ last_number: schoolStudentCounters.last_number });
+    return row.last_number;
   }
 
-  async count(schoolId: string, filters: StudentFilterDto): Promise<number> {
-    const conditions = [eq(students.school_id, schoolId), eq(students.deleted, false)];
+  // ─── Students ───────────────────────────────────────────────────────────────
+
+  async findAll(schoolId: string, filters: StudentFilters): Promise<StudentListItem[]> {
+    const conditions: SQL[] = [
+      eq(students.school_id, schoolId),
+      eq(students.deleted, false),
+    ];
+
+    if (filters.status) conditions.push(eq(students.status, filters.status as any));
+    if (filters.gender) conditions.push(eq(students.gender, filters.gender as any));
+    if (filters.is_enabled !== undefined) conditions.push(eq(students.is_enabled, filters.is_enabled));
 
     if (filters.search) {
       const term = `%${filters.search}%`;
@@ -69,31 +68,54 @@ export class StudentsRepository {
         or(
           ilike(students.first_name, term),
           ilike(students.last_name, term),
-          ilike(students.admission_number, term),
-        )!,
+          ilike(students.phone_number, term),
+          ilike(students.email, term),
+          ilike(students.aadhaar_number, term),
+        ) as SQL,
       );
     }
-    if (filters.class_id) {
-      conditions.push(eq(students.class_id, filters.class_id));
-    }
-    if (filters.section_id) {
-      conditions.push(eq(students.section_id, filters.section_id));
-    }
-    if (filters.academic_year_id) {
-      conditions.push(eq(students.academic_year_id, filters.academic_year_id));
-    }
-    if (filters.status) {
-      conditions.push(eq(students.status, filters.status));
-    }
-    if (filters.gender) {
-      conditions.push(eq(students.gender, filters.gender));
-    }
 
-    const [{ count }] = await this.db
-      .select({ count: sql<number>`count(*)` })
+    // Academic info filters (join-based)
+    const acaConditions: SQL[] = [eq(studentAcademicInfo.student_id, students.id), eq(studentAcademicInfo.is_current, true)];
+    if (filters.academic_year_id) acaConditions.push(eq(studentAcademicInfo.academic_year_id, filters.academic_year_id));
+    if (filters.class_id) acaConditions.push(eq(studentAcademicInfo.class_id, filters.class_id));
+    if (filters.section_id) acaConditions.push(eq(studentAcademicInfo.section_id, filters.section_id));
+
+    // If academic filters present, do inner join; otherwise left join
+    const hasAcaFilter = filters.academic_year_id || filters.class_id || filters.section_id;
+
+    return this.db
+      .select({
+        id: students.id,
+        system_number: students.system_number,
+        first_name: students.first_name,
+        last_name: students.last_name,
+        gender: students.gender,
+        date_of_birth: students.date_of_birth,
+        profile_image: students.profile_image,
+        status: students.status,
+        is_enabled: students.is_enabled,
+        phone_number: students.phone_number,
+        email: students.email,
+        academic_year_id: studentAcademicInfo.academic_year_id,
+        class_id: studentAcademicInfo.class_id,
+        section_id: studentAcademicInfo.section_id,
+        admission_number: studentAcademicInfo.admission_number,
+        roll_number: studentAcademicInfo.roll_number,
+        class_name: classes.name,
+        section_name: sections.name,
+        academic_year_name: academicYears.name,
+      })
       .from(students)
-      .where(and(...conditions));
-    return Number(count);
+      [hasAcaFilter ? 'innerJoin' : 'leftJoin'](
+        studentAcademicInfo,
+        and(...acaConditions),
+      )
+      .leftJoin(classes, eq(studentAcademicInfo.class_id, classes.id))
+      .leftJoin(sections, eq(studentAcademicInfo.section_id, sections.id))
+      .leftJoin(academicYears, eq(studentAcademicInfo.academic_year_id, academicYears.id))
+      .where(and(...conditions))
+      .orderBy(students.first_name) as Promise<StudentListItem[]>;
   }
 
   async findById(id: string, schoolId: string): Promise<Student | undefined> {
@@ -102,23 +124,6 @@ export class StudentsRepository {
       .from(students)
       .where(
         and(eq(students.id, id), eq(students.school_id, schoolId), eq(students.deleted, false)),
-      );
-    return row;
-  }
-
-  async findByAdmissionNumber(
-    schoolId: string,
-    admissionNumber: string,
-  ): Promise<Student | undefined> {
-    const [row] = await this.db
-      .select()
-      .from(students)
-      .where(
-        and(
-          eq(students.school_id, schoolId),
-          eq(students.admission_number, admissionNumber),
-          eq(students.deleted, false),
-        ),
       );
     return row;
   }
@@ -140,238 +145,251 @@ export class StudentsRepository {
   async softDelete(id: string, schoolId: string): Promise<void> {
     await this.db
       .update(students)
-      .set({ deleted: true, is_active: false, updated_at: new Date() })
+      .set({ deleted: true, updated_at: new Date() })
       .where(and(eq(students.id, id), eq(students.school_id, schoolId)));
   }
 
-  // Document methods
+  // ─── Academic Info ──────────────────────────────────────────────────────────
+
+  async findCurrentAcademicInfo(studentId: string, schoolId: string): Promise<StudentAcademicInfo | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(studentAcademicInfo)
+      .where(and(
+        eq(studentAcademicInfo.student_id, studentId),
+        eq(studentAcademicInfo.school_id, schoolId),
+        eq(studentAcademicInfo.is_current, true),
+        eq(studentAcademicInfo.deleted, false),
+      ));
+    return row;
+  }
+
+  async findAllAcademicInfo(studentId: string, schoolId: string): Promise<StudentAcademicInfo[]> {
+    return this.db
+      .select()
+      .from(studentAcademicInfo)
+      .where(and(
+        eq(studentAcademicInfo.student_id, studentId),
+        eq(studentAcademicInfo.school_id, schoolId),
+        eq(studentAcademicInfo.deleted, false),
+      ));
+  }
+
+  async upsertAcademicInfo(data: NewStudentAcademicInfo): Promise<StudentAcademicInfo> {
+    // Mark all existing as not current first
+    await this.db
+      .update(studentAcademicInfo)
+      .set({ is_current: false })
+      .where(and(
+        eq(studentAcademicInfo.student_id, data.student_id),
+        eq(studentAcademicInfo.school_id, data.school_id!),
+      ));
+
+    const [row] = await this.db.insert(studentAcademicInfo).values(data).returning();
+    return row;
+  }
+
+  async updateAcademicInfo(id: string, schoolId: string, data: Partial<NewStudentAcademicInfo>): Promise<StudentAcademicInfo> {
+    const [row] = await this.db
+      .update(studentAcademicInfo)
+      .set({ ...data, updated_at: new Date() })
+      .where(and(eq(studentAcademicInfo.id, id), eq(studentAcademicInfo.school_id, schoolId)))
+      .returning();
+    return row;
+  }
+
+  // ─── Previous Academics ─────────────────────────────────────────────────────
+
+  async findPreviousAcademics(studentId: string, schoolId: string): Promise<StudentPreviousAcademics | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(studentPreviousAcademics)
+      .where(and(
+        eq(studentPreviousAcademics.student_id, studentId),
+        eq(studentPreviousAcademics.school_id, schoolId),
+        eq(studentPreviousAcademics.deleted, false),
+      ));
+    return row;
+  }
+
+  async upsertPreviousAcademics(data: NewStudentPreviousAcademics): Promise<StudentPreviousAcademics> {
+    const existing = await this.findPreviousAcademics(data.student_id, data.school_id!);
+    if (existing) {
+      const [row] = await this.db
+        .update(studentPreviousAcademics)
+        .set({ ...data, updated_at: new Date() })
+        .where(eq(studentPreviousAcademics.id, existing.id))
+        .returning();
+      return row;
+    }
+    const [row] = await this.db.insert(studentPreviousAcademics).values(data).returning();
+    return row;
+  }
+
+  // ─── Address ────────────────────────────────────────────────────────────────
+
+  async findAddress(studentId: string, schoolId: string): Promise<StudentAddress | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(studentAddresses)
+      .where(and(
+        eq(studentAddresses.student_id, studentId),
+        eq(studentAddresses.school_id, schoolId),
+        eq(studentAddresses.deleted, false),
+      ));
+    return row;
+  }
+
+  async upsertAddress(data: NewStudentAddress): Promise<StudentAddress> {
+    const existing = await this.findAddress(data.student_id, data.school_id!);
+    if (existing) {
+      const [row] = await this.db
+        .update(studentAddresses)
+        .set({ ...data, updated_at: new Date() })
+        .where(eq(studentAddresses.id, existing.id))
+        .returning();
+      return row;
+    }
+    const [row] = await this.db.insert(studentAddresses).values(data).returning();
+    return row;
+  }
+
+  // ─── Hostel Info ────────────────────────────────────────────────────────────
+
+  async findHostelInfo(studentId: string, schoolId: string): Promise<StudentHostelInfo | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(studentHostelInfo)
+      .where(and(
+        eq(studentHostelInfo.student_id, studentId),
+        eq(studentHostelInfo.school_id, schoolId),
+        eq(studentHostelInfo.deleted, false),
+      ));
+    return row;
+  }
+
+  async upsertHostelInfo(data: NewStudentHostelInfo): Promise<StudentHostelInfo> {
+    const existing = await this.findHostelInfo(data.student_id, data.school_id!);
+    if (existing) {
+      const [row] = await this.db
+        .update(studentHostelInfo)
+        .set({ ...data, updated_at: new Date() })
+        .where(eq(studentHostelInfo.id, existing.id))
+        .returning();
+      return row;
+    }
+    const [row] = await this.db.insert(studentHostelInfo).values(data).returning();
+    return row;
+  }
+
+  // ─── Parents ────────────────────────────────────────────────────────────────
+
+  async findParents(studentId: string, schoolId: string): Promise<StudentParent[]> {
+    return this.db
+      .select()
+      .from(studentParents)
+      .where(and(
+        eq(studentParents.student_id, studentId),
+        eq(studentParents.school_id, schoolId),
+        eq(studentParents.deleted, false),
+      ));
+  }
+
+  async replaceParents(studentId: string, schoolId: string, data: NewStudentParent[]): Promise<StudentParent[]> {
+    // Soft-delete existing
+    await this.db
+      .update(studentParents)
+      .set({ deleted: true, updated_at: new Date() })
+      .where(and(eq(studentParents.student_id, studentId), eq(studentParents.school_id, schoolId)));
+
+    if (!data.length) return [];
+    return this.db.insert(studentParents).values(data).returning();
+  }
+
+  // ─── Documents ──────────────────────────────────────────────────────────────
 
   async findDocuments(studentId: string, schoolId: string): Promise<StudentDocument[]> {
     return this.db
       .select()
       .from(studentDocuments)
-      .where(
-        and(
-          eq(studentDocuments.student_id, studentId),
-          eq(studentDocuments.school_id, schoolId),
-          eq(studentDocuments.deleted, false),
-        ),
-      );
+      .where(and(
+        eq(studentDocuments.student_id, studentId),
+        eq(studentDocuments.school_id, schoolId),
+        eq(studentDocuments.deleted, false),
+      ));
   }
 
-  async findDocumentById(
-    id: string,
-    studentId: string,
-    schoolId: string,
-  ): Promise<StudentDocument | undefined> {
-    const [row] = await this.db
-      .select()
-      .from(studentDocuments)
-      .where(
-        and(
-          eq(studentDocuments.id, id),
-          eq(studentDocuments.student_id, studentId),
-          eq(studentDocuments.school_id, schoolId),
-          eq(studentDocuments.deleted, false),
-        ),
-      );
-    return row;
+  async addDocuments(data: NewStudentDocument[]): Promise<StudentDocument[]> {
+    if (!data.length) return [];
+    return this.db.insert(studentDocuments).values(data).returning();
   }
 
-  async createDocument(data: NewStudentDocument): Promise<StudentDocument> {
-    const [row] = await this.db.insert(studentDocuments).values(data).returning();
-    return row;
-  }
-
-  async softDeleteDocument(id: string, studentId: string, schoolId: string): Promise<void> {
+  async deleteDocument(id: string, studentId: string, schoolId: string): Promise<void> {
     await this.db
       .update(studentDocuments)
-      .set({ deleted: true })
-      .where(
-        and(
-          eq(studentDocuments.id, id),
-          eq(studentDocuments.student_id, studentId),
-          eq(studentDocuments.school_id, schoolId),
-        ),
-      );
+      .set({ deleted: true, updated_at: new Date() })
+      .where(and(
+        eq(studentDocuments.id, id),
+        eq(studentDocuments.student_id, studentId),
+        eq(studentDocuments.school_id, schoolId),
+      ));
   }
 
-  // Parent methods
+  async replaceDocuments(studentId: string, schoolId: string, data: NewStudentDocument[]): Promise<StudentDocument[]> {
+    await this.db
+      .update(studentDocuments)
+      .set({ deleted: true, updated_at: new Date() })
+      .where(and(eq(studentDocuments.student_id, studentId), eq(studentDocuments.school_id, schoolId)));
 
-  private parentViewSelect() {
-    return {
-      id: parents.id,
-      link_id: parentStudentLinks.id,
-      school_id: parents.school_id,
-      student_id: parentStudentLinks.student_id,
-      first_name: parents.first_name,
-      last_name: parents.last_name,
-      dial_code: parents.dial_code,
-      phone_number: parents.phone_number,
-      alternate_phone: parents.alternate_phone,
-      email: parents.email,
-      occupation: parents.occupation,
-      annual_income: parents.annual_income,
-      aadhaar_number: parents.aadhaar_number,
-      profile_image: parents.profile_image,
-      is_active: parents.is_active,
-      relation: parentStudentLinks.relation,
-      is_primary: parentStudentLinks.is_primary,
-      can_pickup: parentStudentLinks.can_pickup,
-      created_at: parents.created_at,
-      updated_at: parents.updated_at,
-    };
+    if (!data.length) return [];
+    return this.db.insert(studentDocuments).values(data).returning();
   }
 
-  async findParents(studentId: string, schoolId: string): Promise<StudentParentView[]> {
-    return this.db
-      .select(this.parentViewSelect())
-      .from(parentStudentLinks)
-      .innerJoin(parents, eq(parentStudentLinks.parent_id, parents.id))
-      .where(
-        and(
-          eq(parentStudentLinks.student_id, studentId),
-          eq(parentStudentLinks.school_id, schoolId),
-          eq(parents.deleted, false),
-        ),
-      );
-  }
+  // ─── ID Card data ───────────────────────────────────────────────────────────
 
-  async findParentById(
-    id: string,
-    studentId: string,
-    schoolId: string,
-  ): Promise<StudentParentView | undefined> {
+  async findStudentForIdCard(studentId: string, schoolId: string) {
     const [row] = await this.db
-      .select(this.parentViewSelect())
-      .from(parentStudentLinks)
-      .innerJoin(parents, eq(parentStudentLinks.parent_id, parents.id))
-      .where(
-        and(
-          eq(parents.id, id),
-          eq(parentStudentLinks.student_id, studentId),
-          eq(parentStudentLinks.school_id, schoolId),
-          eq(parents.deleted, false),
-        ),
-      );
+      .select({
+        // Student
+        id: students.id,
+        system_number: students.system_number,
+        first_name: students.first_name,
+        last_name: students.last_name,
+        profile_image: students.profile_image,
+        gender: students.gender,
+        blood_group: students.blood_group,
+        phone_number: students.phone_number,
+        // Academic
+        admission_number: studentAcademicInfo.admission_number,
+        roll_number: studentAcademicInfo.roll_number,
+        class_name: classes.name,
+        section_name: sections.name,
+        // Address (joined separately below)
+        // School
+        school_name: schools.name,
+        school_address: schools.address,
+        school_city: schools.city,
+        school_logo: schools.logo_url,
+        school_phone: schools.contact_number,
+        school_email: schools.email,
+        school_website: schools.website,
+      })
+      .from(students)
+      .leftJoin(studentAcademicInfo, and(
+        eq(studentAcademicInfo.student_id, students.id),
+        eq(studentAcademicInfo.is_current, true),
+      ))
+      .leftJoin(classes, eq(studentAcademicInfo.class_id, classes.id))
+      .leftJoin(sections, eq(studentAcademicInfo.section_id, sections.id))
+      .leftJoin(schools, eq(students.school_id, schools.id))
+      .where(and(eq(students.id, studentId), eq(students.school_id, schoolId), eq(students.deleted, false)));
+
     return row;
   }
 
-  async createParent(data: CreateParentRepoData): Promise<StudentParentView> {
-    let [existing] = await this.db
-      .select()
-      .from(parents)
-      .where(
-        and(
-          eq(parents.phone_number, data.phone_number),
-          eq(parents.dial_code, data.dial_code),
-          eq(parents.school_id, data.school_id),
-          eq(parents.deleted, false),
-        ),
-      );
-
-    if (!existing) {
-      [existing] = await this.db
-        .insert(parents)
-        .values({
-          id: data.id,
-          school_id: data.school_id,
-          first_name: data.first_name,
-          last_name: data.last_name,
-          dial_code: data.dial_code,
-          phone_number: data.phone_number,
-          alternate_phone: data.alternate_phone,
-          email: data.email,
-          occupation: data.occupation,
-          annual_income: data.annual_income,
-          aadhaar_number: data.aadhaar_number,
-          created_by: data.created_by,
-        })
-        .returning();
-    }
-
-    const [link] = await this.db
-      .insert(parentStudentLinks)
-      .values({
-        id: data.link_id,
-        school_id: data.school_id,
-        parent_id: existing.id,
-        student_id: data.student_id,
-        relation: data.relation,
-        is_primary: data.is_primary ?? false,
-        can_pickup: data.can_pickup ?? true,
-      })
-      .returning();
-
-    return {
-      id: existing.id,
-      link_id: link.id,
-      school_id: existing.school_id,
-      student_id: data.student_id,
-      first_name: existing.first_name,
-      last_name: existing.last_name ?? null,
-      dial_code: existing.dial_code,
-      phone_number: existing.phone_number,
-      alternate_phone: existing.alternate_phone ?? null,
-      email: existing.email ?? null,
-      occupation: existing.occupation ?? null,
-      annual_income: existing.annual_income ?? null,
-      aadhaar_number: existing.aadhaar_number ?? null,
-      profile_image: existing.profile_image ?? null,
-      is_active: existing.is_active,
-      relation: link.relation,
-      is_primary: link.is_primary,
-      can_pickup: link.can_pickup,
-      created_at: existing.created_at,
-      updated_at: existing.updated_at ?? null,
-    };
-  }
-
-  async updateParent(
-    id: string,
-    studentId: string,
-    schoolId: string,
-    data: UpdateParentRepoData,
-  ): Promise<StudentParentView> {
-    const { relation, is_primary, can_pickup, ...parentFields } = data;
-
-    if (Object.keys(parentFields).length > 0) {
-      await this.db
-        .update(parents)
-        .set({ ...parentFields, updated_at: new Date() })
-        .where(and(eq(parents.id, id), eq(parents.school_id, schoolId)));
-    }
-
-    const linkUpdate: Partial<typeof parentStudentLinks.$inferInsert> = {};
-    if (relation !== undefined) linkUpdate.relation = relation;
-    if (is_primary !== undefined) linkUpdate.is_primary = is_primary;
-    if (can_pickup !== undefined) linkUpdate.can_pickup = can_pickup;
-
-    if (Object.keys(linkUpdate).length > 0) {
-      await this.db
-        .update(parentStudentLinks)
-        .set(linkUpdate)
-        .where(
-          and(
-            eq(parentStudentLinks.parent_id, id),
-            eq(parentStudentLinks.student_id, studentId),
-            eq(parentStudentLinks.school_id, schoolId),
-          ),
-        );
-    }
-
-    return (await this.findParentById(id, studentId, schoolId))!;
-  }
-
-  async unlinkParent(id: string, studentId: string, schoolId: string): Promise<void> {
-    await this.db
-      .delete(parentStudentLinks)
-      .where(
-        and(
-          eq(parentStudentLinks.parent_id, id),
-          eq(parentStudentLinks.student_id, studentId),
-          eq(parentStudentLinks.school_id, schoolId),
-        ),
-      );
+  async findStudentForPickupCard(studentId: string, schoolId: string) {
+    const studentData = await this.findStudentForIdCard(studentId, schoolId);
+    const parents = await this.findParents(studentId, schoolId);
+    return { student: studentData, parents };
   }
 }

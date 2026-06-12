@@ -61,16 +61,16 @@ export class PromotionsRepository {
     toSectionId: string | undefined,
     toRollNumber: string | undefined,
   ): Promise<void> {
-    await this.db
-      .update(students)
-      .set({
-        academic_year_id: toAcademicYearId,
-        class_id: toClassId,
-        section_id: toSectionId ?? null,
-        roll_number: toRollNumber ?? null,
-        updated_at: new Date(),
-      })
-      .where(and(eq(students.id, studentId), eq(students.school_id, schoolId)));
+    // await this.db
+    //   .update(students)
+    //   .set({
+    //     academic_year_id: toAcademicYearId,
+    //     class_id: toClassId,
+    //     section_id: toSectionId ?? null,
+    //     roll_number: toRollNumber ?? null,
+    //     updated_at: new Date(),
+    //   })
+    //   .where(and(eq(students.id, studentId), eq(students.school_id, schoolId)));
   }
 
   async updateLogStatus(id: string, status: string): Promise<void> {

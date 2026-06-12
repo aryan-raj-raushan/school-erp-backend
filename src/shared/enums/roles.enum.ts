@@ -31,6 +31,7 @@ export const VIEW_ROLES = [
   SchoolRole.CLASS_TEACHER,
 ];
 
+
 export const ALL_SCHOOL_ROLES = [
   SchoolRole.SCHOOL_ADMIN,
   SchoolRole.PRINCIPAL,

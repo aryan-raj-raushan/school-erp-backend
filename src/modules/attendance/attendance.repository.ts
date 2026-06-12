@@ -178,8 +178,8 @@ export class AttendanceRepository {
         created_at: attendances.created_at,
         updated_at: attendances.updated_at,
         student_name: sql<string>`concat(${students.first_name}, ' ', ${students.last_name})`,
-        roll_number: students.roll_number,
-        admission_number: students.admission_number,
+        // roll_number: students.roll_number,
+        // admission_number: students.admission_number,
         marked_by_username: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
       })
       .from(attendances)
@@ -210,8 +210,8 @@ export class AttendanceRepository {
         created_at: attendances.created_at,
         updated_at: attendances.updated_at,
         student_name: sql<string>`concat(${students.first_name}, ' ', ${students.last_name})`,
-        roll_number: students.roll_number,
-        admission_number: students.admission_number,
+        // roll_number: students.roll_number,
+        // admission_number: students.admission_number,
         marked_by_username: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
       })
       .from(attendances)
@@ -246,8 +246,8 @@ export class AttendanceRepository {
       .select({
         student_id: attendances.student_id,
         student_name: sql<string>`concat(${students.first_name}, ' ', ${students.last_name})`,
-        roll_number: students.roll_number,
-        admission_number: students.admission_number,
+        // roll_number: students.roll_number,
+        // admission_number: students.admission_number,
         total: sql<number>`count(*)`,
         present: sql<number>`sum(case when ${attendances.status} = 'PRESENT' then 1 else 0 end)`,
         absent: sql<number>`sum(case when ${attendances.status} = 'ABSENT' then 1 else 0 end)`,
@@ -255,7 +255,7 @@ export class AttendanceRepository {
       .from(attendances)
       .innerJoin(students, eq(attendances.student_id, students.id))
       .where(and(...conditions))
-      .groupBy(attendances.student_id, students.first_name, students.last_name, students.roll_number, students.admission_number);
+      // .groupBy(attendances.student_id, students.first_name, students.last_name, students.roll_number, students.admission_number);
 
     return results
       .filter((r) => {
@@ -270,8 +270,8 @@ export class AttendanceRepository {
         return {
           student_id: r.student_id,
           studentName: r.student_name,
-          rollNo: r.roll_number,
-          admissionNo: r.admission_number,
+          // rollNo: r.roll_number,
+          // admissionNo: r.admission_number,
           total_days: total,
           total_present: present,
           total_absent: Number(r.absent),

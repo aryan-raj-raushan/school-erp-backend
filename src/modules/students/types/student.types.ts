@@ -1,75 +1,74 @@
 import { InferSelectModel, InferInsertModel } from 'drizzle-orm';
-import { students } from '../../../database/drizzle/schema/students.schema';
-import { studentDocuments } from '../../../database/drizzle/schema/student-documents.schema';
-import { parents, parentStudentLinks } from '../../../database/drizzle/schema/parents.schema';
+import {
+  students,
+  studentAcademicInfo,
+  studentPreviousAcademics,
+  studentAddresses,
+  studentHostelInfo,
+  studentParents,
+  studentDocuments,
+} from '../../../database/drizzle/schema/students.schema';
 
 export type Student = InferSelectModel<typeof students>;
 export type NewStudent = InferInsertModel<typeof students>;
+
+export type StudentAcademicInfo = InferSelectModel<typeof studentAcademicInfo>;
+export type NewStudentAcademicInfo = InferInsertModel<typeof studentAcademicInfo>;
+
+export type StudentPreviousAcademics = InferSelectModel<typeof studentPreviousAcademics>;
+export type NewStudentPreviousAcademics = InferInsertModel<typeof studentPreviousAcademics>;
+
+export type StudentAddress = InferSelectModel<typeof studentAddresses>;
+export type NewStudentAddress = InferInsertModel<typeof studentAddresses>;
+
+export type StudentHostelInfo = InferSelectModel<typeof studentHostelInfo>;
+export type NewStudentHostelInfo = InferInsertModel<typeof studentHostelInfo>;
+
+export type StudentParent = InferSelectModel<typeof studentParents>;
+export type NewStudentParent = InferInsertModel<typeof studentParents>;
+
 export type StudentDocument = InferSelectModel<typeof studentDocuments>;
 export type NewStudentDocument = InferInsertModel<typeof studentDocuments>;
-export type Parent = InferSelectModel<typeof parents>;
-export type NewParent = InferInsertModel<typeof parents>;
-export type ParentStudentLink = InferSelectModel<typeof parentStudentLinks>;
 
-export interface StudentParentView {
+export interface StudentFull {
+  student: Student;
+  academicInfo: StudentAcademicInfo | null;
+  previousAcademics: StudentPreviousAcademics | null;
+  address: StudentAddress | null;
+  hostelInfo: StudentHostelInfo | null;
+  parents: StudentParent[];
+  documents: StudentDocument[];
+}
+
+export interface StudentListItem {
   id: string;
-  link_id: string;
-  school_id: string;
-  student_id: string;
+  system_number: number;
   first_name: string;
   last_name: string | null;
-  dial_code: string;
-  phone_number: string;
-  alternate_phone: string | null;
-  email: string | null;
-  occupation: string | null;
-  annual_income: string | null;
-  aadhaar_number: string | null;
+  gender: string | null;
+  date_of_birth: string | null;
   profile_image: string | null;
-  is_active: boolean;
-  relation: string;
-  is_primary: boolean;
-  can_pickup: boolean;
-  created_at: Date;
-  updated_at: Date | null;
+  status: string;
+  is_enabled: boolean;
+  phone_number: string | null;
+  email: string | null;
+  // joined from academic info
+  academic_year_id: string | null;
+  class_id: string | null;
+  section_id: string | null;
+  admission_number: string | null;
+  roll_number: string | null;
+  class_name: string | null;
+  section_name: string | null;
+  academic_year_name: string | null;
 }
 
-export interface CreateParentRepoData {
-  id: string;
-  link_id: string;
-  school_id: string;
-  student_id: string;
-  first_name: string;
-  last_name?: string;
-  dial_code: string;
-  phone_number: string;
-  alternate_phone?: string;
-  email?: string;
-  occupation?: string;
-  annual_income?: string;
-  aadhaar_number?: string;
-  relation: string;
-  is_primary?: boolean;
-  can_pickup?: boolean;
-  created_by?: string;
-}
-
-export interface UpdateParentRepoData {
-  first_name?: string;
-  last_name?: string;
-  dial_code?: string;
-  phone_number?: string;
-  alternate_phone?: string;
-  email?: string;
-  occupation?: string;
-  annual_income?: string;
-  aadhaar_number?: string;
-  relation?: string;
-  is_primary?: boolean;
-  can_pickup?: boolean;
-}
-
-export interface StudentWithRelations extends Student {
-  documents?: StudentDocument[];
-  parents?: StudentParentView[];
+export interface StudentFilters {
+  academic_year_id?: string;
+  class_id?: string;
+  section_id?: string;
+  status?: string;
+  gender?: string;
+  search?: string;
+  is_enabled?: boolean;
 }
