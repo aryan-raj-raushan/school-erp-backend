@@ -37,9 +37,12 @@ import { SyllabiModule } from './modules/syllabi/syllabi.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { ClassTypesModule } from './modules/class-types/class-types.module';
 import { TimetableModule } from './modules/timetable/timetable.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
+import { RolesModule } from './modules/roles/roles.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
@@ -90,10 +93,13 @@ import { AdmissionModule } from '@modules/admission/admission.module';
     SchoolEventsModule,
     AdmissionModule,
     TimetableModule,
+    PermissionsModule,
+    RolesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useValue: new TimeoutInterceptor(30_000) },
@@ -101,8 +107,6 @@ import { AdmissionModule } from '@modules/admission/admission.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(TenantMiddleware)
-      .forRoutes({ path: '*', method: RequestMethod.ALL });
+    consumer.apply(TenantMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL });
   }
 }

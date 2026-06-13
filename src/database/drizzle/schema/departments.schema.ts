@@ -8,6 +8,7 @@ export const departments = pgTable('departments', {
     .references(() => schools.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 100 }).notNull(),
   code: varchar('code', { length: 20 }),
+  address: varchar('address', { length: 255 }),
   description: text('description'),
   is_active: boolean('is_active').default(true).notNull(),
   deleted: boolean('deleted').default(false).notNull(),

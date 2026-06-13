@@ -16,11 +16,11 @@ import { SubjectsService } from './subjects.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { SubjectFilterDto } from './dto/subject-filter.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Subjects')
 @ApiBearerAuth('access-token')
@@ -29,41 +29,21 @@ export class SubjectsController {
   constructor(private readonly subjectsService: SubjectsService) {}
 
   @Get()
-  @Roles(
-    SchoolRole.SCHOOL_ADMIN,
-    SchoolRole.PRINCIPAL,
-    SchoolRole.VICE_PRINCIPAL,
-    SchoolRole.TEACHER,
-    SchoolRole.CLASS_TEACHER,
-  )
   @ApiOperation({ summary: 'List all subjects, optionally filtered by classId, search' })
-  async findAll(
-    @GetSchoolId() schoolId: string,
-    @Query() filters: SubjectFilterDto,
-  ) {
+  async findAll(@GetSchoolId() schoolId: string, @Query() filters: SubjectFilterDto) {
     const data = await this.subjectsService.findAll(schoolId, filters);
     return ApiResponse.success(data.items, 'Subjects fetched successfully', data.meta);
   }
 
   @Get(':id')
-  @Roles(
-    SchoolRole.SCHOOL_ADMIN,
-    SchoolRole.PRINCIPAL,
-    SchoolRole.VICE_PRINCIPAL,
-    SchoolRole.TEACHER,
-    SchoolRole.CLASS_TEACHER,
-  )
   @ApiOperation({ summary: 'Get subject by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.subjectsService.findById(id, schoolId);
     return ApiResponse.success(data, 'Subject fetched successfully');
   }
 
   @Post()
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.subjects.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new subject' })
   async create(
@@ -76,7 +56,7 @@ export class SubjectsController {
   }
 
   @Patch(':id')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.subjects.update)
   @ApiOperation({ summary: 'Update a subject' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -88,13 +68,10 @@ export class SubjectsController {
   }
 
   @Delete(':id')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.subjects.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft delete a subject' })
-  async remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     await this.subjectsService.remove(id, schoolId);
     return ApiResponse.noContent('Subject deleted successfully');
   }

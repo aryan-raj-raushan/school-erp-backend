@@ -1,23 +1,26 @@
 import {
-  Controller, Get, Post, Patch, Delete,
-  Body, Param, Query, ParseUUIDPipe, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { DepartmentsService } from './departments.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { FilterDepartmentDto } from './dto/filter-department.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const ALL_SCHOOL_ROLES = [
-  SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER, SchoolRole.ACCOUNTANT, SchoolRole.LIBRARIAN,
-];
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Departments')
 @ApiBearerAuth('access-token')
@@ -26,7 +29,7 @@ export class DepartmentsController {
   constructor(private readonly departmentsService: DepartmentsService) {}
 
   @Post()
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.departments.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a department' })
   async create(
@@ -39,7 +42,7 @@ export class DepartmentsController {
   }
 
   @Get()
-  @Roles(...ALL_SCHOOL_ROLES)
+  @Permissions(PERMISSION_REGISTRY.departments.view)
   @ApiOperation({ summary: 'List departments' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterDepartmentDto) {
     const data = await this.departmentsService.findAll(schoolId, filters);
@@ -47,18 +50,15 @@ export class DepartmentsController {
   }
 
   @Get(':id')
-  @Roles(...ALL_SCHOOL_ROLES)
+  @Permissions(PERMISSION_REGISTRY.departments.view)
   @ApiOperation({ summary: 'Get department by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.departmentsService.findById(id, schoolId);
     return ApiResponse.success(data, 'Department fetched successfully');
   }
 
   @Patch(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.departments.update)
   @ApiOperation({ summary: 'Update a department' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -70,7 +70,7 @@ export class DepartmentsController {
   }
 
   @Delete(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.departments.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a department' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {

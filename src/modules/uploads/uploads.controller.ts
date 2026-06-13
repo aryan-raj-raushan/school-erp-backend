@@ -19,7 +19,7 @@ import { ApiResponse } from '../../shared/responses/api-response';
 import { GetCurrentUser } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { SchoolRole, CompanyRole } from '../../shared/enums';
+import { CompanyRole } from '../../shared/enums';
 import { JwtPayload } from '../../shared/types/jwt-payload.types';
 
 const TEN_MB = 10 * 1024 * 1024;
@@ -31,7 +31,6 @@ export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
 
   @Post('image')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @UseInterceptors(FileInterceptor('file', { storage: undefined }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload image to S3' })
@@ -48,7 +47,9 @@ export class UploadsController {
     },
   })
   async uploadImage(
-    @UploadedFile(new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: TEN_MB })] }))
+    @UploadedFile(
+      new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: TEN_MB })] }),
+    )
     file: Express.Multer.File,
     @Body() body: { reference_id?: string; reference_type?: string; document_type?: string },
     @GetSchoolId() schoolId: string,
@@ -66,7 +67,6 @@ export class UploadsController {
   }
 
   @Post('document')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @UseInterceptors(FileInterceptor('file', { storage: undefined }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload document to S3' })
@@ -83,7 +83,9 @@ export class UploadsController {
     },
   })
   async uploadDocument(
-    @UploadedFile(new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: TEN_MB })] }))
+    @UploadedFile(
+      new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: TEN_MB })] }),
+    )
     file: Express.Multer.File,
     @Body() body: { reference_id?: string; reference_type?: string; document_type?: string },
     @GetSchoolId() schoolId: string,
@@ -101,9 +103,9 @@ export class UploadsController {
   }
 
   @Delete()
-  @Roles(SchoolRole.SCHOOL_ADMIN, CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
+  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Delete file from S3' })
+  @ApiOperation({ summary: 'Delete file from S3 (company admin only)' })
   async deleteFile(
     @Body() dto: DeleteUploadDto,
     @GetSchoolId() schoolId: string,

@@ -15,22 +15,16 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
-import { AttendanceFilterDto, StudentAttendanceFilterDto, DefaultersFilterDto } from './dto/attendance-filter.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import {
+  AttendanceFilterDto,
+  StudentAttendanceFilterDto,
+  DefaultersFilterDto,
+} from './dto/attendance-filter.dto';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const MARK_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER];
-const VIEW_ROLES = [
-  SchoolRole.SCHOOL_ADMIN,
-  SchoolRole.PRINCIPAL,
-  SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER,
-  SchoolRole.CLASS_TEACHER,
-  SchoolRole.ACCOUNTANT,
-];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Attendance')
 @ApiBearerAuth('access-token')
@@ -39,7 +33,7 @@ export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post()
-  @Roles(...MARK_ROLES)
+  @Permissions(PERMISSION_REGISTRY.attendance.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Mark attendance — single or bulk' })
   async mark(
@@ -52,7 +46,6 @@ export class AttendanceController {
   }
 
   @Get('daily')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Daily attendance report for a class section' })
   @ApiQuery({ name: 'class_section_id', required: true })
   @ApiQuery({ name: 'date', required: true })
@@ -66,7 +59,6 @@ export class AttendanceController {
   }
 
   @Get('monthly')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Monthly attendance summary per student' })
   @ApiQuery({ name: 'class_section_id', required: true })
   @ApiQuery({ name: 'year', required: true, type: Number })
@@ -77,12 +69,16 @@ export class AttendanceController {
     @Query('year') year: string,
     @Query('month') month: string,
   ) {
-    const data = await this.attendanceService.getMonthlySummary(schoolId, classSectionId, Number(year), Number(month));
+    const data = await this.attendanceService.getMonthlySummary(
+      schoolId,
+      classSectionId,
+      Number(year),
+      Number(month),
+    );
     return ApiResponse.success(data, 'Monthly attendance summary fetched successfully');
   }
 
   @Get('defaulters')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Students below attendance threshold' })
   async getDefaulters(@GetSchoolId() schoolId: string, @Query() filters: DefaultersFilterDto) {
     const data = await this.attendanceService.getDefaulters(schoolId, filters);
@@ -90,7 +86,7 @@ export class AttendanceController {
   }
 
   @Get('export')
-  @Roles(...VIEW_ROLES)
+  @Permissions(PERMISSION_REGISTRY.reports.export)
   @ApiOperation({ summary: 'Enqueue attendance export job' })
   async enqueueExport(@GetSchoolId() schoolId: string, @Query() filters: AttendanceFilterDto) {
     const data = await this.attendanceService.enqueueExport(schoolId, filters);
@@ -98,7 +94,6 @@ export class AttendanceController {
   }
 
   @Get('students/:studentId')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Student attendance history with pagination' })
   async getStudentHistory(
     @Param('studentId', ParseUUIDPipe) studentId: string,
@@ -106,23 +101,29 @@ export class AttendanceController {
     @Query() filters: StudentAttendanceFilterDto,
   ) {
     const data = await this.attendanceService.getStudentHistory(studentId, schoolId, filters);
-    return ApiResponse.success({ records: data.items, stats: data.stats }, 'Student attendance fetched successfully', data.meta);
+    return ApiResponse.success(
+      { records: data.items, stats: data.stats },
+      'Student attendance fetched successfully',
+      data.meta,
+    );
   }
 
   @Get('students/:studentId/summary')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Overall + monthly summary for a student' })
   async getStudentSummary(
     @Param('studentId', ParseUUIDPipe) studentId: string,
     @GetSchoolId() schoolId: string,
     @Query('academic_year_id') academicYearId?: string,
   ) {
-    const data = await this.attendanceService.getStudentSummary(studentId, schoolId, academicYearId);
+    const data = await this.attendanceService.getStudentSummary(
+      studentId,
+      schoolId,
+      academicYearId,
+    );
     return ApiResponse.success(data, 'Student attendance summary fetched successfully');
   }
 
   @Get('classSection/:id')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Section attendance overview — date range' })
   @ApiQuery({ name: 'from_date', required: true })
   @ApiQuery({ name: 'to_date', required: true })
@@ -132,12 +133,16 @@ export class AttendanceController {
     @Query('from_date') from_date: string,
     @Query('to_date') to_date: string,
   ) {
-    const data = await this.attendanceService.getSectionAttendance(schoolId, id, from_date, to_date);
+    const data = await this.attendanceService.getSectionAttendance(
+      schoolId,
+      id,
+      from_date,
+      to_date,
+    );
     return ApiResponse.success(data, 'Section attendance fetched successfully');
   }
 
   @Get('classSection/:id/date/:date')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Section attendance for a specific date' })
   async getSectionAttendanceByDate(
     @Param('id', ParseUUIDPipe) id: string,
@@ -149,7 +154,6 @@ export class AttendanceController {
   }
 
   @Get(':attendanceId')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Get single attendance record by ID' })
   async findOne(
     @Param('attendanceId', ParseUUIDPipe) attendanceId: string,
@@ -160,7 +164,6 @@ export class AttendanceController {
   }
 
   @Get()
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: "Get today's / specific-date attendance" })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: AttendanceFilterDto) {
     const data = await this.attendanceService.findAll(schoolId, filters);
@@ -168,7 +171,7 @@ export class AttendanceController {
   }
 
   @Put(':attendanceId')
-  @Roles(...MARK_ROLES)
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
   @ApiOperation({ summary: 'Update an attendance record' })
   async update(
     @Param('attendanceId', ParseUUIDPipe) attendanceId: string,
@@ -180,7 +183,7 @@ export class AttendanceController {
   }
 
   @Delete(':attendanceId')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete an attendance record' })
   async remove(

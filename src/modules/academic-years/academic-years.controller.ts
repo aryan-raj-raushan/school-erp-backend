@@ -16,11 +16,11 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { AcademicYearsService } from './academic-years.service';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 import { UpdateAcademicYearDto } from './dto/update-academic-year.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Academic Years')
 @ApiBearerAuth('access-token')
@@ -28,16 +28,8 @@ import { SchoolRole } from '../../shared/enums';
 export class AcademicYearsController {
   constructor(private readonly academicYearsService: AcademicYearsService) {}
 
+  // Read routes — no role/permission gate; any authenticated school user needs this data
   @Get()
-  @Roles(
-    SchoolRole.SCHOOL_ADMIN,
-    SchoolRole.PRINCIPAL,
-    SchoolRole.VICE_PRINCIPAL,
-    SchoolRole.TEACHER,
-    SchoolRole.CLASS_TEACHER,
-    SchoolRole.ACCOUNTANT,
-    SchoolRole.LIBRARIAN,
-  )
   @ApiOperation({ summary: 'List all academic years for the school' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -51,15 +43,6 @@ export class AcademicYearsController {
   }
 
   @Get('current')
-  @Roles(
-    SchoolRole.SCHOOL_ADMIN,
-    SchoolRole.PRINCIPAL,
-    SchoolRole.VICE_PRINCIPAL,
-    SchoolRole.TEACHER,
-    SchoolRole.CLASS_TEACHER,
-    SchoolRole.ACCOUNTANT,
-    SchoolRole.LIBRARIAN,
-  )
   @ApiOperation({ summary: 'Get current academic year for the school' })
   async findCurrent(@GetSchoolId() schoolId: string) {
     const data = await this.academicYearsService.findCurrent(schoolId);
@@ -67,26 +50,14 @@ export class AcademicYearsController {
   }
 
   @Get(':id')
-  @Roles(
-    SchoolRole.SCHOOL_ADMIN,
-    SchoolRole.PRINCIPAL,
-    SchoolRole.VICE_PRINCIPAL,
-    SchoolRole.TEACHER,
-    SchoolRole.CLASS_TEACHER,
-    SchoolRole.ACCOUNTANT,
-    SchoolRole.LIBRARIAN,
-  )
   @ApiOperation({ summary: 'Get academic year by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.academicYearsService.findById(id, schoolId);
     return ApiResponse.success(data, 'Academic year fetched successfully');
   }
 
   @Post()
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.academic_years.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new academic year' })
   async create(
@@ -99,7 +70,7 @@ export class AcademicYearsController {
   }
 
   @Patch(':id')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.academic_years.update)
   @ApiOperation({ summary: 'Update an academic year' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -111,13 +82,10 @@ export class AcademicYearsController {
   }
 
   @Post(':id/set-current')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.academic_years.update)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Set an academic year as the current active year' })
-  async setCurrent(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async setCurrent(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.academicYearsService.setCurrent(id, schoolId);
     return ApiResponse.success(data, 'Current academic year updated successfully');
   }

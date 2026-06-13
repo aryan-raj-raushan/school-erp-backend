@@ -17,14 +17,11 @@ import { CreateFeeMasterTypeDto } from './dto/create-fee-master-type.dto';
 import { UpdateFeeMasterTypeDto } from './dto/update-fee-master-type.dto';
 import { CreateFeeDto, BulkCreateFeeDto } from './dto/create-fee.dto';
 import { ManualPaymentDto } from './dto/manual-payment.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.ACCOUNTANT];
-const VIEW_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.ACCOUNTANT, SchoolRole.VICE_PRINCIPAL];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Fees')
 @ApiBearerAuth('access-token')
@@ -34,7 +31,7 @@ export class FeesController {
 
   // Master Types
   @Post('master-types')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.fees.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create fee master type' })
   async createMasterType(
@@ -47,7 +44,6 @@ export class FeesController {
   }
 
   @Get('master-types')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'List fee master types' })
   async findAllMasterTypes(@GetSchoolId() schoolId: string) {
     const data = await this.feesService.findAllMasterTypes(schoolId);
@@ -55,7 +51,7 @@ export class FeesController {
   }
 
   @Patch('master-types/:id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.fees.update)
   @ApiOperation({ summary: 'Update fee master type' })
   async updateMasterType(
     @Param('id', ParseUUIDPipe) id: string,
@@ -67,7 +63,7 @@ export class FeesController {
   }
 
   @Delete('master-types/:id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.fees.update)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete fee master type' })
   async deleteMasterType(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
@@ -77,7 +73,7 @@ export class FeesController {
 
   // Fee Receipts
   @Post('single')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.fees.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create single fee record' })
   async createSingle(
@@ -90,7 +86,7 @@ export class FeesController {
   }
 
   @Post('bulk')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.fees.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bulk create fee records' })
   async createBulk(
@@ -103,20 +99,15 @@ export class FeesController {
   }
 
   @Get('parent')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.ACCOUNTANT)
   @ApiOperation({ summary: 'Get fees for parent view' })
   @ApiQuery({ name: 'student_id', required: false })
-  async getParentFees(
-    @GetSchoolId() schoolId: string,
-    @Query('student_id') studentId?: string,
-  ) {
+  async getParentFees(@GetSchoolId() schoolId: string, @Query('student_id') studentId?: string) {
     const studentIds = studentId ? [studentId] : [];
     const data = await this.feesService.getParentFees(schoolId, studentIds);
     return ApiResponse.success(data.items, 'Fees fetched successfully', data.meta);
   }
 
   @Get('parent/receipt/:id')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.ACCOUNTANT)
   @ApiOperation({ summary: 'Get fee receipt for parent' })
   async getParentReceipt(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.feesService.findReceiptById(id, schoolId);
@@ -124,16 +115,19 @@ export class FeesController {
   }
 
   @Post(':receiptId/order')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.fees.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create payment order for a receipt' })
-  async createOrder(@Param('receiptId', ParseUUIDPipe) receiptId: string, @GetSchoolId() schoolId: string) {
+  async createOrder(
+    @Param('receiptId', ParseUUIDPipe) receiptId: string,
+    @GetSchoolId() schoolId: string,
+  ) {
     const data = await this.feesService.createPaymentOrder(receiptId, schoolId);
     return ApiResponse.created(data, 'Payment order created successfully');
   }
 
   @Post(':receiptId/manual-payment')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.fees.approve)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Record manual payment' })
   async recordManualPayment(
@@ -147,7 +141,6 @@ export class FeesController {
   }
 
   @Get()
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Get all fee records' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -158,12 +151,16 @@ export class FeesController {
     @Query('limit') limit?: string,
     @Query('student_id') studentId?: string,
   ) {
-    const data = await this.feesService.findAllReceipts(schoolId, Number(page) || 1, Number(limit) || 20, studentId);
+    const data = await this.feesService.findAllReceipts(
+      schoolId,
+      Number(page) || 1,
+      Number(limit) || 20,
+      studentId,
+    );
     return ApiResponse.success(data.items, 'Fee records fetched successfully', data.meta);
   }
 
   @Get('receipt/:id')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Get fee receipt by ID' })
   async findReceipt(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.feesService.findReceiptById(id, schoolId);

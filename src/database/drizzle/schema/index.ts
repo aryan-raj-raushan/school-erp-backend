@@ -1,4 +1,7 @@
 export * from './schools.schema';
+export * from './permissions.schema';
+export * from './roles.schema';
+export * from './role-permissions.schema';
 export * from './company-users.schema';
 export * from './company-user-schools.schema';
 export * from './school-users.schema';

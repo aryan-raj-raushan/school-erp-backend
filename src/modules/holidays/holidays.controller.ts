@@ -16,23 +16,11 @@ import { HolidaysService } from './holidays.service';
 import { CreateHolidayDto } from './dto/create-holiday.dto';
 import { UpdateHolidayDto } from './dto/update-holiday.dto';
 import { FilterHolidayDto } from './dto/filter-holiday.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const ALL_SCHOOL_ROLES = [
-  SchoolRole.SCHOOL_ADMIN,
-  SchoolRole.PRINCIPAL,
-  SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER,
-  SchoolRole.CLASS_TEACHER,
-  SchoolRole.ACCOUNTANT,
-  SchoolRole.LIBRARIAN,
-];
-
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Holidays')
 @ApiBearerAuth('access-token')
@@ -41,7 +29,7 @@ export class HolidaysController {
   constructor(private readonly holidaysService: HolidaysService) {}
 
   @Post()
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.holidays.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a holiday' })
   async create(
@@ -54,7 +42,6 @@ export class HolidaysController {
   }
 
   @Get()
-  @Roles(...ALL_SCHOOL_ROLES)
   @ApiOperation({ summary: 'List holidays with optional filters' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterHolidayDto) {
     const data = await this.holidaysService.findAll(schoolId, filters);
@@ -62,7 +49,7 @@ export class HolidaysController {
   }
 
   @Patch(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.holidays.update)
   @ApiOperation({ summary: 'Update a holiday' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -74,7 +61,7 @@ export class HolidaysController {
   }
 
   @Delete(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.holidays.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a holiday' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {

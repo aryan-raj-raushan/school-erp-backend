@@ -1,20 +1,26 @@
 import {
-  Controller, Get, Post, Put, Delete,
-  Body, Param, Query, ParseUUIDPipe, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AcademicsService } from './academics.service';
 import { CreateHomeworkDto } from './dto/create-homework.dto';
 import { BulkMarkSubmissionsDto, UpdateSubmissionDto } from './dto/submission.dto';
 import { CreateStudyMaterialDto } from './dto/create-study-material.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const TEACHER_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER];
-const VIEW_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Homework')
 @ApiBearerAuth('access-token')
@@ -23,15 +29,22 @@ export class HomeworkController {
   constructor(private readonly academicsService: AcademicsService) {}
 
   @Post()
-  @Roles(...TEACHER_ROLES)
+  @Permissions(PERMISSION_REGISTRY.homework.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a homework assignment' })
-  async create(@Body() dto: CreateHomeworkDto, @GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
-    return ApiResponse.created(await this.academicsService.createHomework(dto, schoolId, userId), 'Homework created successfully');
+  async create(
+    @Body() dto: CreateHomeworkDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    return ApiResponse.created(
+      await this.academicsService.createHomework(dto, schoolId, userId),
+      'Homework created successfully',
+    );
   }
 
   @Get()
-  @Roles(...VIEW_ROLES)
+  @Permissions(PERMISSION_REGISTRY.homework.view)
   @ApiOperation({ summary: 'List homework assignments with filters' })
   @ApiQuery({ name: 'class_id', required: false })
   @ApiQuery({ name: 'class_detail_id', required: false })
@@ -54,21 +67,31 @@ export class HomeworkController {
   }
 
   @Get(':id')
-  @Roles(...VIEW_ROLES)
+  @Permissions(PERMISSION_REGISTRY.homework.view)
   @ApiOperation({ summary: 'Get a single homework assignment with attachments' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
-    return ApiResponse.success(await this.academicsService.getHomeworkWithAttachments(id, schoolId), 'Homework fetched successfully');
+    return ApiResponse.success(
+      await this.academicsService.getHomeworkWithAttachments(id, schoolId),
+      'Homework fetched successfully',
+    );
   }
 
   @Put(':id')
-  @Roles(...TEACHER_ROLES)
+  @Permissions(PERMISSION_REGISTRY.homework.update)
   @ApiOperation({ summary: 'Update homework assignment' })
-  async update(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string, @Body() dto: Partial<CreateHomeworkDto>) {
-    return ApiResponse.success(await this.academicsService.updateHomework(id, schoolId, dto), 'Homework updated successfully');
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetSchoolId() schoolId: string,
+    @Body() dto: Partial<CreateHomeworkDto>,
+  ) {
+    return ApiResponse.success(
+      await this.academicsService.updateHomework(id, schoolId, dto),
+      'Homework updated successfully',
+    );
   }
 
   @Delete(':id')
-  @Roles(...TEACHER_ROLES)
+  @Permissions(PERMISSION_REGISTRY.homework.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft-delete homework assignment' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
@@ -77,32 +100,60 @@ export class HomeworkController {
   }
 
   @Post(':homeworkId/submissions')
-  @Roles(...TEACHER_ROLES)
+  @Permissions(PERMISSION_REGISTRY.homework.update)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Bulk mark homework submissions (teacher)' })
-  async bulkMarkSubmissions(@Param('homeworkId', ParseUUIDPipe) hwId: string, @GetSchoolId() schoolId: string, @Body() dto: BulkMarkSubmissionsDto) {
-    return ApiResponse.created(await this.academicsService.bulkMarkSubmissions(hwId, dto, schoolId), 'Submissions marked');
+  async bulkMarkSubmissions(
+    @Param('homeworkId', ParseUUIDPipe) hwId: string,
+    @GetSchoolId() schoolId: string,
+    @Body() dto: BulkMarkSubmissionsDto,
+  ) {
+    return ApiResponse.created(
+      await this.academicsService.bulkMarkSubmissions(hwId, dto, schoolId),
+      'Submissions marked',
+    );
   }
 
   @Get(':homeworkId/submissions')
-  @Roles(...TEACHER_ROLES)
+  @Permissions(PERMISSION_REGISTRY.homework.view)
   @ApiOperation({ summary: 'List all submissions for homework' })
-  async getSubmissions(@Param('homeworkId', ParseUUIDPipe) hwId: string, @GetSchoolId() schoolId: string) {
-    return ApiResponse.success(await this.academicsService.getSubmissions(hwId, schoolId), 'Submissions fetched');
+  async getSubmissions(
+    @Param('homeworkId', ParseUUIDPipe) hwId: string,
+    @GetSchoolId() schoolId: string,
+  ) {
+    return ApiResponse.success(
+      await this.academicsService.getSubmissions(hwId, schoolId),
+      'Submissions fetched',
+    );
   }
 
   @Get(':homeworkId/submissions/:studentId')
-  @Roles(...VIEW_ROLES)
+  @Permissions(PERMISSION_REGISTRY.homework.view)
   @ApiOperation({ summary: 'Get submission for specific student' })
-  async getStudentSubmission(@Param('homeworkId', ParseUUIDPipe) hwId: string, @Param('studentId', ParseUUIDPipe) sid: string, @GetSchoolId() schoolId: string) {
-    return ApiResponse.success(await this.academicsService.getStudentSubmission(hwId, sid, schoolId), 'Submission fetched');
+  async getStudentSubmission(
+    @Param('homeworkId', ParseUUIDPipe) hwId: string,
+    @Param('studentId', ParseUUIDPipe) sid: string,
+    @GetSchoolId() schoolId: string,
+  ) {
+    return ApiResponse.success(
+      await this.academicsService.getStudentSubmission(hwId, sid, schoolId),
+      'Submission fetched',
+    );
   }
 
   @Put(':homeworkId/submissions/:studentId')
-  @Roles(...TEACHER_ROLES)
+  @Permissions(PERMISSION_REGISTRY.homework.update)
   @ApiOperation({ summary: 'Update student submission' })
-  async updateSubmission(@Param('homeworkId', ParseUUIDPipe) hwId: string, @Param('studentId', ParseUUIDPipe) sid: string, @GetSchoolId() schoolId: string, @Body() dto: UpdateSubmissionDto) {
-    return ApiResponse.success(await this.academicsService.updateStudentSubmission(hwId, sid, schoolId, dto), 'Submission updated');
+  async updateSubmission(
+    @Param('homeworkId', ParseUUIDPipe) hwId: string,
+    @Param('studentId', ParseUUIDPipe) sid: string,
+    @GetSchoolId() schoolId: string,
+    @Body() dto: UpdateSubmissionDto,
+  ) {
+    return ApiResponse.success(
+      await this.academicsService.updateStudentSubmission(hwId, sid, schoolId, dto),
+      'Submission updated',
+    );
   }
 }
 
@@ -113,15 +164,22 @@ export class StudyMaterialsController {
   constructor(private readonly academicsService: AcademicsService) {}
 
   @Post()
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
+  @Permissions(PERMISSION_REGISTRY.syllabus.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Upload a study material' })
-  async create(@Body() dto: CreateStudyMaterialDto, @GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
-    return ApiResponse.created(await this.academicsService.createMaterial(dto, schoolId, userId), 'Study material uploaded');
+  async create(
+    @Body() dto: CreateStudyMaterialDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    return ApiResponse.created(
+      await this.academicsService.createMaterial(dto, schoolId, userId),
+      'Study material uploaded',
+    );
   }
 
   @Get()
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
+  @Permissions(PERMISSION_REGISTRY.syllabus.view)
   @ApiOperation({ summary: 'List study materials with filters' })
   @ApiQuery({ name: 'class_id', required: false })
   @ApiQuery({ name: 'class_detail_id', required: false })
@@ -135,27 +193,42 @@ export class StudyMaterialsController {
     @Query('academic_year_id') ayId?: string,
   ) {
     return ApiResponse.success(
-      await this.academicsService.findAllMaterials(schoolId, { class_id: classId, class_detail_id: classDetailId, subject_id: subjId, academic_year_id: ayId }),
+      await this.academicsService.findAllMaterials(schoolId, {
+        class_id: classId,
+        class_detail_id: classDetailId,
+        subject_id: subjId,
+        academic_year_id: ayId,
+      }),
       'Materials fetched',
     );
   }
 
   @Get(':id')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
+  @Permissions(PERMISSION_REGISTRY.syllabus.view)
   @ApiOperation({ summary: 'Get a single study material' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
-    return ApiResponse.success(await this.academicsService.findMaterialById(id, schoolId), 'Material fetched');
+    return ApiResponse.success(
+      await this.academicsService.findMaterialById(id, schoolId),
+      'Material fetched',
+    );
   }
 
   @Put(':id')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
+  @Permissions(PERMISSION_REGISTRY.syllabus.update)
   @ApiOperation({ summary: 'Update a study material' })
-  async update(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string, @Body() dto: Partial<CreateStudyMaterialDto>) {
-    return ApiResponse.success(await this.academicsService.updateMaterial(id, schoolId, dto), 'Material updated');
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetSchoolId() schoolId: string,
+    @Body() dto: Partial<CreateStudyMaterialDto>,
+  ) {
+    return ApiResponse.success(
+      await this.academicsService.updateMaterial(id, schoolId, dto),
+      'Material updated',
+    );
   }
 
   @Delete(':id')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
+  @Permissions(PERMISSION_REGISTRY.syllabus.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft-delete a study material' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
@@ -171,10 +244,13 @@ export class ParentHomeworkController {
   constructor(private readonly academicsService: AcademicsService) {}
 
   @Get()
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
+  @Permissions(PERMISSION_REGISTRY.homework.view)
   @ApiOperation({ summary: 'View student homework list (parent view)' })
   @ApiQuery({ name: 'class_id', required: false })
   async findAll(@GetSchoolId() schoolId: string, @Query('class_id') classId?: string) {
-    return ApiResponse.success(await this.academicsService.findAllHomework(schoolId, { class_id: classId }), 'Homework fetched');
+    return ApiResponse.success(
+      await this.academicsService.findAllHomework(schoolId, { class_id: classId }),
+      'Homework fetched',
+    );
   }
 }

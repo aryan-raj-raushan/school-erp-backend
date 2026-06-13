@@ -1,19 +1,26 @@
 import {
-  Controller, Get, Post, Patch, Delete,
-  Body, Param, Query, ParseUUIDPipe, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AdmissionSourcesService } from './admission-sources.service';
 import { CreateAdmissionSourceDto } from './dto/create-admission-source.dto';
 import { UpdateAdmissionSourceDto } from './dto/update-admission-source.dto';
 import { FilterAdmissionSourceDto } from './dto/filter-admission-source.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { ADMIN_ROLES, VIEW_ROLES } from '../../shared/enums';
-
-
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Admission Sources')
 @ApiBearerAuth('access-token')
@@ -22,7 +29,6 @@ export class AdmissionSourcesController {
   constructor(private readonly sourcesService: AdmissionSourcesService) {}
 
   @Get()
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'List all admission sources' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterAdmissionSourceDto) {
     const data = await this.sourcesService.findAll(schoolId, filters);
@@ -30,7 +36,6 @@ export class AdmissionSourcesController {
   }
 
   @Get(':id')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Get admission source by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.sourcesService.findById(id, schoolId);
@@ -38,7 +43,7 @@ export class AdmissionSourcesController {
   }
 
   @Post()
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.admissions.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create an admission source' })
   async create(
@@ -51,7 +56,7 @@ export class AdmissionSourcesController {
   }
 
   @Patch(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.admissions.update)
   @ApiOperation({ summary: 'Update an admission source' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -63,7 +68,7 @@ export class AdmissionSourcesController {
   }
 
   @Delete(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.admissions.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete an admission source' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {

@@ -31,6 +31,7 @@ import { REGEX } from '../../utils/regex.utils';
 import { SchoolsRepository } from '../schools/schools.repository';
 import { School } from '../schools/types/school.types';
 import { AuthTTL } from '../../shared/constants';
+import { PermissionsService } from '../permissions/permissions.service';
 
 @Injectable()
 export class AuthService {
@@ -40,6 +41,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   async schoolSignup(dto: SchoolSignupDto): Promise<LoginResponse> {
@@ -251,6 +253,7 @@ export class AuthService {
       phone: schoolUser.phone_number,
       role: schoolUser.role as SchoolRole,
       school_id: schoolUser.school_id,
+      custom_role_id: schoolUser.custom_role_id ?? null,
       context: AuthContext.SCHOOL,
     });
 
@@ -298,6 +301,7 @@ export class AuthService {
       phone: user.phone_number,
       role: user.role as SchoolRole,
       school_id: user.school_id,
+      custom_role_id: user.custom_role_id ?? null,
       context: AuthContext.SCHOOL,
     });
 
@@ -348,6 +352,7 @@ export class AuthService {
         phone: user.phone_number,
         role: user.role as SchoolRole,
         school_id: user.school_id,
+        custom_role_id: user.custom_role_id ?? null,
         context: AuthContext.SCHOOL,
       };
     }
@@ -379,7 +384,7 @@ export class AuthService {
     }
   }
 
-  async getMe(userId: string, context: AuthContext, role?: string) {
+  async getMe(userId: string, context: AuthContext, role?: string, schoolId?: string) {
     if (context === AuthContext.COMPANY || role === CompanyRole.SUPER_ADMIN) {
       const user = await this.authRepo.findCompanyUserProfile(userId);
       if (!user) throw new NotFoundException('User not found');
@@ -388,7 +393,18 @@ export class AuthService {
 
     const user = await this.authRepo.findSchoolUserProfile(userId);
     if (!user) throw new NotFoundException('User not found');
-    return user;
+
+    // Resolve permissions from DB (fully dynamic — no enum coupling)
+    const permissions = schoolId
+      ? await this.permissionsService.resolveUserPermissions(
+          userId,
+          schoolId,
+          user.custom_role_id,
+          user.role,
+        )
+      : [];
+
+    return { ...user, permissions };
   }
 
   async switchSchool(userId: string, schoolId: string): Promise<LoginResponse> {

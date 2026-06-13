@@ -11,21 +11,15 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
-  ParseBoolPipe,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiBearerAuth,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { StudentsService } from './students.service';
 import { CreateStudentDto, UpdateStudentDto, StudentDocumentDto } from './dto/create-student.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { ADMIN_ROLES, SchoolRole, VIEW_ROLES } from '../../shared/enums';
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Students')
 @ApiBearerAuth('access-token')
@@ -36,15 +30,22 @@ export class StudentsController {
   // ─── List ─────────────────────────────────────────────────────────────────
 
   @Get()
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'List students with filters' })
   @ApiQuery({ name: 'academic_year_id', required: false })
   @ApiQuery({ name: 'class_id', required: false })
   @ApiQuery({ name: 'section_id', required: false })
-  @ApiQuery({ name: 'status', required: false, enum: ['ACTIVE', 'INACTIVE', 'TRANSFERRED', 'GRADUATED', 'DROPPED'] })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['ACTIVE', 'INACTIVE', 'TRANSFERRED', 'GRADUATED', 'DROPPED'],
+  })
   @ApiQuery({ name: 'gender', required: false, enum: ['MALE', 'FEMALE', 'OTHER'] })
   @ApiQuery({ name: 'is_enabled', required: false, type: Boolean })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by name, phone, email, aadhaar' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Search by name, phone, email, aadhaar',
+  })
   async findAll(
     @GetSchoolId() schoolId: string,
     @Query('academic_year_id') academicYearId?: string,
@@ -73,12 +74,8 @@ export class StudentsController {
   // ─── Get Single ───────────────────────────────────────────────────────────
 
   @Get(':id')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Get full student profile' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     return ApiResponse.success(
       await this.studentsService.findById(id, schoolId),
       'Student fetched successfully',
@@ -88,7 +85,7 @@ export class StudentsController {
   // ─── Create ───────────────────────────────────────────────────────────────
 
   @Post()
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.students.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create new student with full profile' })
   async create(
@@ -105,7 +102,7 @@ export class StudentsController {
   // ─── Update ───────────────────────────────────────────────────────────────
 
   @Put(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.students.update)
   @ApiOperation({ summary: 'Update student full profile' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -121,13 +118,10 @@ export class StudentsController {
   // ─── Soft Delete ─────────────────────────────────────────────────────────
 
   @Delete(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.students.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft-delete a student' })
-  async remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     await this.studentsService.delete(id, schoolId);
     return ApiResponse.noContent('Student deleted successfully');
   }
@@ -135,12 +129,9 @@ export class StudentsController {
   // ─── Enable / Disable ────────────────────────────────────────────────────
 
   @Patch(':id/enable')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.students.update)
   @ApiOperation({ summary: 'Enable a student (set is_enabled = true)' })
-  async enable(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async enable(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     return ApiResponse.success(
       await this.studentsService.toggleEnabled(id, schoolId, true),
       'Student enabled',
@@ -148,12 +139,9 @@ export class StudentsController {
   }
 
   @Patch(':id/disable')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.students.update)
   @ApiOperation({ summary: 'Disable a student (set is_enabled = false)' })
-  async disable(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async disable(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     return ApiResponse.success(
       await this.studentsService.toggleEnabled(id, schoolId, false),
       'Student disabled',
@@ -163,7 +151,7 @@ export class StudentsController {
   // ─── Documents ───────────────────────────────────────────────────────────
 
   @Post(':id/documents')
-  @Roles(...VIEW_ROLES)
+  @Permissions(PERMISSION_REGISTRY.students.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add documents to student profile' })
   async addDocuments(
@@ -179,7 +167,7 @@ export class StudentsController {
   }
 
   @Delete(':id/documents/:docId')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.students.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a student document' })
   async deleteDocument(
@@ -194,16 +182,12 @@ export class StudentsController {
   // ─── ID Card ─────────────────────────────────────────────────────────────
 
   @Get(':id/id-card')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({
     summary: 'Get student ID card data',
     description:
       'Returns structured data to render a student identity card: name, photo, class, section, roll number, contact, address, and school details.',
   })
-  async getIdCard(
-    @Param('id', ParseUUIDPipe) studentId: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async getIdCard(@Param('id', ParseUUIDPipe) studentId: string, @GetSchoolId() schoolId: string) {
     return ApiResponse.success(
       await this.studentsService.getStudentIdCardData(studentId, schoolId),
       'Student ID card data fetched',
@@ -213,7 +197,6 @@ export class StudentsController {
   // ─── Pickup / Parent ID Card ──────────────────────────────────────────────
 
   @Get(':id/pickup-card')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({
     summary: 'Get pickup/parent ID card data',
     description:

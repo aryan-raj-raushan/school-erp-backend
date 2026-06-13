@@ -21,21 +21,11 @@ import { ParentsService } from './parents.service';
 import { CreateParentDto } from './dto/create-parent.dto';
 import { UpdateParentDto } from './dto/update-parent.dto';
 import { FilterParentDto } from './dto/filter-parent.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
-const VIEW_ROLES = [
-  SchoolRole.SCHOOL_ADMIN,
-  SchoolRole.PRINCIPAL,
-  SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER,
-  SchoolRole.CLASS_TEACHER,
-  SchoolRole.ACCOUNTANT,
-];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Parents')
 @ApiBearerAuth('access-token')
@@ -44,17 +34,20 @@ export class ParentsController {
   constructor(private readonly parentsService: ParentsService) {}
 
   @Get('bulk/template')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.view)
   @ApiOperation({ summary: 'Download parent bulk import template' })
   async getTemplate(@Res() res: Response) {
     const buffer = await this.parentsService.getBulkTemplate();
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     res.setHeader('Content-Disposition', 'attachment; filename=parent_import_template.xlsx');
     res.send(buffer);
   }
 
   @Post('bulk/import')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.create)
   @HttpCode(HttpStatus.ACCEPTED)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
@@ -69,7 +62,7 @@ export class ParentsController {
   }
 
   @Get('bulk/status/:jobId')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.view)
   @ApiOperation({ summary: 'Poll bulk parent import job status' })
   async getBulkStatus(@Param('jobId') jobId: string) {
     const data = await this.parentsService.getBulkStatus(jobId);
@@ -77,18 +70,15 @@ export class ParentsController {
   }
 
   @Get('student-detail/:id')
-  @Roles(...VIEW_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.view)
   @ApiOperation({ summary: 'Get student details by parentId' })
-  async getStudentDetail(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async getStudentDetail(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.parentsService.getStudentDetail(id, schoolId);
     return ApiResponse.success(data, 'Student details fetched successfully');
   }
 
   @Post()
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new parent' })
   async create(
@@ -101,7 +91,7 @@ export class ParentsController {
   }
 
   @Get()
-  @Roles(...VIEW_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.view)
   @ApiOperation({ summary: 'List all parents (paginated)' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterParentDto) {
     const data = await this.parentsService.findAll(schoolId, filters);
@@ -109,7 +99,7 @@ export class ParentsController {
   }
 
   @Get(':id')
-  @Roles(...VIEW_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.view)
   @ApiOperation({ summary: 'Get parent details by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.parentsService.findById(id, schoolId);
@@ -117,7 +107,7 @@ export class ParentsController {
   }
 
   @Put(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.update)
   @ApiOperation({ summary: 'Update parent details' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -129,7 +119,7 @@ export class ParentsController {
   }
 
   @Delete(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.update)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft-delete parent' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
@@ -138,7 +128,7 @@ export class ParentsController {
   }
 
   @Post(':id/link-student/:studentId')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.parents.update)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Link parent to student manually' })
   async linkStudent(

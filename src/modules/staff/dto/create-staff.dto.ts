@@ -5,7 +5,10 @@ import {
   IsEmail,
   IsEnum,
   IsDateString,
+  IsUUID,
+  IsBoolean,
   MaxLength,
+  MinLength,
   Matches,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
@@ -69,9 +72,114 @@ export class CreateStaffDto {
   @IsEnum(BloodGroup)
   blood_group?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: '123 Main St' })
   @IsOptional()
   @IsString()
   @Transform(({ value }) => StringUtils.trim(value))
   address?: string;
+
+  @ApiPropertyOptional({ example: '456 Home St' })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => StringUtils.trim(value))
+  permanent_address?: string;
+
+  @ApiPropertyOptional({ example: 'Mumbai' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Transform(({ value }) => StringUtils.trim(value))
+  city?: string;
+
+  @ApiPropertyOptional({ example: '2023-06-01' })
+  @IsOptional()
+  @IsDateString()
+  joining_date?: string;
+
+  @ApiPropertyOptional({ example: 'EMP-001' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  @Transform(({ value }) => StringUtils.trim(value))
+  employee_code?: string;
+
+  @ApiPropertyOptional({ description: 'Department ID (UUID)' })
+  @IsOptional()
+  @IsUUID()
+  department_id?: string;
+
+  @ApiPropertyOptional({ description: 'Custom role ID used as designation (UUID)' })
+  @IsOptional()
+  @IsUUID()
+  custom_role_id?: string;
+
+  @ApiPropertyOptional({ example: 'Ram Kumar' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Transform(({ value }) => StringUtils.trim(value))
+  father_name?: string;
+
+  @ApiPropertyOptional({ example: 'Suresh Kumar' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Transform(({ value }) => StringUtils.trim(value))
+  husband_name?: string;
+
+  @ApiPropertyOptional({ description: 'Reporting manager staff ID (UUID)' })
+  @IsOptional()
+  @IsUUID()
+  reporting_to_id?: string;
+
+  @ApiPropertyOptional({ example: 'RFID-12345' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  @Transform(({ value }) => StringUtils.trim(value))
+  rfid_card_number?: string;
+
+  @ApiPropertyOptional({ example: 'M.Ed, B.Sc' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  @Transform(({ value }) => StringUtils.trim(value))
+  qualification?: string;
+
+  @ApiPropertyOptional({ example: 'Delhi Public School' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  @Transform(({ value }) => StringUtils.trim(value))
+  previous_employer?: string;
+
+  @ApiPropertyOptional({ example: 'Senior Teacher' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Transform(({ value }) => StringUtils.trim(value))
+  previous_role?: string;
+
+  @ApiPropertyOptional({ example: '5 years' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Transform(({ value }) => StringUtils.trim(value))
+  total_experience?: string;
+
+  @ApiPropertyOptional({ example: 'profile-image-s3-url' })
+  @IsOptional()
+  @IsString()
+  profile_image?: string;
+
+  @ApiPropertyOptional({ example: 'Secret@123', description: 'Initial login password' })
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string;
+
+  @ApiPropertyOptional({ example: true, description: 'Whether the account is enabled' })
+  @IsOptional()
+  @IsBoolean()
+  is_active?: boolean;
 }

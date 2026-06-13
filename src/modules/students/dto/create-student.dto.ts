@@ -15,6 +15,7 @@ import {
   BloodGroup,
   Category,
   DocumentFileType,
+  DocumentType,
   Gender,
   ParentRelation,
   Qualification,

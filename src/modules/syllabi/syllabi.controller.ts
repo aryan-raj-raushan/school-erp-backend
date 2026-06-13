@@ -16,23 +16,11 @@ import { SyllabiService } from './syllabi.service';
 import { CreateSyllabusDto } from './dto/create-syllabus.dto';
 import { UpdateSyllabusDto } from './dto/update-syllabus.dto';
 import { FilterSyllabusDto } from './dto/filter-syllabus.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const ALL_SCHOOL_ROLES = [
-  SchoolRole.SCHOOL_ADMIN,
-  SchoolRole.PRINCIPAL,
-  SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER,
-  SchoolRole.CLASS_TEACHER,
-  SchoolRole.ACCOUNTANT,
-  SchoolRole.LIBRARIAN,
-];
-
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Syllabi')
 @ApiBearerAuth('access-token')
@@ -41,7 +29,7 @@ export class SyllabiController {
   constructor(private readonly syllabiService: SyllabiService) {}
 
   @Post()
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.syllabus.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a syllabus with optional file attachments' })
   async create(
@@ -54,7 +42,7 @@ export class SyllabiController {
   }
 
   @Get()
-  @Roles(...ALL_SCHOOL_ROLES)
+  @Permissions(PERMISSION_REGISTRY.syllabus.view)
   @ApiOperation({ summary: 'List syllabi with optional filters' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterSyllabusDto) {
     const data = await this.syllabiService.findAll(schoolId, filters);
@@ -62,19 +50,18 @@ export class SyllabiController {
   }
 
   @Get(':id')
-  @Roles(...ALL_SCHOOL_ROLES)
+  @Permissions(PERMISSION_REGISTRY.syllabus.view)
   @ApiOperation({ summary: 'Get syllabus with attachments by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.syllabiService.findById(id, schoolId);
     return ApiResponse.success(data, 'Syllabus fetched successfully');
   }
 
   @Patch(':id')
-  @Roles(...ADMIN_ROLES)
-  @ApiOperation({ summary: 'Update a syllabus (pass attachments array to replace all attachments)' })
+  @Permissions(PERMISSION_REGISTRY.syllabus.update)
+  @ApiOperation({
+    summary: 'Update a syllabus (pass attachments array to replace all attachments)',
+  })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @GetSchoolId() schoolId: string,
@@ -85,7 +72,7 @@ export class SyllabiController {
   }
 
   @Delete(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.syllabus.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a syllabus' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
