@@ -75,7 +75,7 @@ export class StaffService {
       throw new ConflictException('A staff member with this phone number already exists');
     }
 
-    const password_hash = await hashPassword(TEMP_PASSWORD);
+    const password_hash = await hashPassword(dto.password ?? TEMP_PASSWORD);
     const id = generateId();
 
     const staff = await this.staffRepo.create({
@@ -83,6 +83,7 @@ export class StaffService {
       school_id: schoolId,
       created_by: createdBy,
       password_hash,
+      is_active: dto.is_active ?? true,
       dial_code: dto.dial_code,
       phone_number: dto.phone_number,
       first_name: dto.first_name,
@@ -93,6 +94,21 @@ export class StaffService {
       date_of_birth: dto.date_of_birth ? new Date(dto.date_of_birth) : undefined,
       blood_group: dto.blood_group,
       address: dto.address,
+      permanent_address: dto.permanent_address,
+      city: dto.city,
+      joining_date: dto.joining_date ? new Date(dto.joining_date) : undefined,
+      employee_code: dto.employee_code,
+      department_id: dto.department_id,
+      custom_role_id: dto.custom_role_id,
+      father_name: dto.father_name,
+      husband_name: dto.husband_name,
+      reporting_to_id: dto.reporting_to_id,
+      rfid_card_number: dto.rfid_card_number,
+      qualification: dto.qualification,
+      previous_employer: dto.previous_employer,
+      previous_role: dto.previous_role,
+      total_experience: dto.total_experience,
+      profile_image: dto.profile_image,
     });
 
     const inviteToken = await this.generateInviteToken(id, schoolId);
@@ -106,6 +122,7 @@ export class StaffService {
     const updated = await this.staffRepo.update(id, schoolId, {
       ...dto,
       date_of_birth: dto.date_of_birth ? new Date(dto.date_of_birth) : undefined,
+      joining_date: dto.joining_date ? new Date(dto.joining_date) : undefined,
     });
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return updated;

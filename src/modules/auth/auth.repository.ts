@@ -3,7 +3,13 @@ import { eq, and } from 'drizzle-orm';
 
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { companyUsers, schoolUsers, companyUserSchools, schools } from '../../database/drizzle/schema';
+import {
+  companyUsers,
+  schoolUsers,
+  companyUserSchools,
+  schools,
+  schoolRoleEnum,
+} from '../../database/drizzle/schema';
 import { CompanyRole } from '../../shared/enums';
 
 @Injectable()
@@ -51,15 +57,12 @@ export class AuthRepository {
     password_hash: string;
     role: CompanyRole;
   }) {
-    const [user] = await this.db
-      .insert(companyUsers)
-      .values(data)
-      .returning({
-        id: companyUsers.id,
-        email: companyUsers.email,
-        role: companyUsers.role,
-        first_name: companyUsers.first_name,
-      });
+    const [user] = await this.db.insert(companyUsers).values(data).returning({
+      id: companyUsers.id,
+      email: companyUsers.email,
+      role: companyUsers.role,
+      first_name: companyUsers.first_name,
+    });
     return user;
   }
 
@@ -150,7 +153,7 @@ export class AuthRepository {
   }) {
     const [user] = await this.db
       .insert(schoolUsers)
-      .values({ ...data, role: data.role as any })
+      .values({ ...data, role: data.role as (typeof schoolRoleEnum.enumValues)[number] })
       .returning({
         id: schoolUsers.id,
         school_id: schoolUsers.school_id,
@@ -170,7 +173,11 @@ export class AuthRepository {
       .where(eq(schoolUsers.id, userId));
   }
 
-  async findSchoolUserByPhoneExists(phone_number: string, dial_code: string, school_id: string): Promise<boolean> {
+  async findSchoolUserByPhoneExists(
+    phone_number: string,
+    dial_code: string,
+    school_id: string,
+  ): Promise<boolean> {
     const [row] = await this.db
       .select({ id: schoolUsers.id })
       .from(schoolUsers)
@@ -243,6 +250,7 @@ export class AuthRepository {
         role: schoolUsers.role,
         school_id: schoolUsers.school_id,
         profile_image: schoolUsers.profile_image,
+        custom_role_id: schoolUsers.custom_role_id,
         created_at: schoolUsers.created_at,
       })
       .from(schoolUsers)

@@ -1,23 +1,26 @@
 import {
-  Controller, Get, Post, Patch, Delete,
-  Body, Param, Query, ParseUUIDPipe, HttpCode, HttpStatus,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseUUIDPipe,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ClassTypesService } from './class-types.service';
 import { CreateClassTypeDto } from './dto/create-class-type.dto';
 import { UpdateClassTypeDto } from './dto/update-class-type.dto';
 import { FilterClassTypeDto } from './dto/filter-class-type.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const ALL_SCHOOL_ROLES = [
-  SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER, SchoolRole.ACCOUNTANT, SchoolRole.LIBRARIAN,
-];
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Class Types')
 @ApiBearerAuth('access-token')
@@ -26,7 +29,7 @@ export class ClassTypesController {
   constructor(private readonly classTypesService: ClassTypesService) {}
 
   @Post()
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.classes.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a class type' })
   async create(
@@ -39,7 +42,6 @@ export class ClassTypesController {
   }
 
   @Get()
-  @Roles(...ALL_SCHOOL_ROLES)
   @ApiOperation({ summary: 'List class types' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterClassTypeDto) {
     const data = await this.classTypesService.findAll(schoolId, filters);
@@ -47,18 +49,14 @@ export class ClassTypesController {
   }
 
   @Get(':id')
-  @Roles(...ALL_SCHOOL_ROLES)
   @ApiOperation({ summary: 'Get class type by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.classTypesService.findById(id, schoolId);
     return ApiResponse.success(data, 'Class type fetched successfully');
   }
 
   @Patch(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.classes.update)
   @ApiOperation({ summary: 'Update a class type' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -70,7 +68,7 @@ export class ClassTypesController {
   }
 
   @Delete(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.classes.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a class type' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {

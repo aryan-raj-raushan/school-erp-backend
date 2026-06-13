@@ -23,14 +23,6 @@ export enum AuthContext {
 }
 
 export const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
-export const VIEW_ROLES = [
-  SchoolRole.SCHOOL_ADMIN,
-  SchoolRole.PRINCIPAL,
-  SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER,
-  SchoolRole.CLASS_TEACHER,
-];
-
 
 export const ALL_SCHOOL_ROLES = [
   SchoolRole.SCHOOL_ADMIN,
@@ -41,3 +33,6 @@ export const ALL_SCHOOL_ROLES = [
   SchoolRole.ACCOUNTANT,
   SchoolRole.LIBRARIAN,
 ];
+
+// VIEW_ROLES = all school staff — fine-grained access via @Permissions() on each route
+export const VIEW_ROLES = ALL_SCHOOL_ROLES;

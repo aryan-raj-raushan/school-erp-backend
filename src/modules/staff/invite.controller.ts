@@ -3,11 +3,11 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { StaffService } from './staff.service';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 class VerifyTokenDto {
   @ApiProperty()
@@ -32,7 +32,7 @@ export class InviteController {
   }
 
   @Post('resend/:userId')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.staff.update)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend a school user invitation' })
   async resendInvite(

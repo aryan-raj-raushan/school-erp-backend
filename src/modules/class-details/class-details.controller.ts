@@ -16,23 +16,11 @@ import { ClassDetailsService } from './class-details.service';
 import { CreateClassDetailDto } from './dto/create-class-detail.dto';
 import { UpdateClassDetailDto } from './dto/update-class-detail.dto';
 import { FilterClassDetailDto } from './dto/filter-class-detail.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const ALL_SCHOOL_ROLES = [
-  SchoolRole.SCHOOL_ADMIN,
-  SchoolRole.PRINCIPAL,
-  SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER,
-  SchoolRole.CLASS_TEACHER,
-  SchoolRole.ACCOUNTANT,
-  SchoolRole.LIBRARIAN,
-];
-
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Class Details')
 @ApiBearerAuth('access-token')
@@ -41,7 +29,7 @@ export class ClassDetailsController {
   constructor(private readonly classDetailsService: ClassDetailsService) {}
 
   @Post()
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.classes.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create class detail (year/semester config)' })
   async create(
@@ -54,7 +42,7 @@ export class ClassDetailsController {
   }
 
   @Get()
-  @Roles(...ALL_SCHOOL_ROLES)
+  @Permissions(PERMISSION_REGISTRY.classes.view)
   @ApiOperation({ summary: 'List class details with optional filters' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterClassDetailDto) {
     const data = await this.classDetailsService.findAll(schoolId, filters);
@@ -62,18 +50,15 @@ export class ClassDetailsController {
   }
 
   @Get(':id')
-  @Roles(...ALL_SCHOOL_ROLES)
+  @Permissions(PERMISSION_REGISTRY.classes.view)
   @ApiOperation({ summary: 'Get class detail by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.classDetailsService.findById(id, schoolId);
     return ApiResponse.success(data, 'Class detail fetched successfully');
   }
 
   @Patch(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.classes.update)
   @ApiOperation({ summary: 'Update a class detail' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -85,7 +70,7 @@ export class ClassDetailsController {
   }
 
   @Delete(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.classes.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a class detail' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {

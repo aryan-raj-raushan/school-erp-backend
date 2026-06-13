@@ -6,6 +6,7 @@ export interface JwtPayload {
   phone?: string;
   role: CompanyRole | SchoolRole;
   school_id?: string;
+  custom_role_id?: string | null;
   context: AuthContext;
   iat?: number;
   exp?: number;

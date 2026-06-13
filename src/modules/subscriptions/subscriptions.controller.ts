@@ -21,7 +21,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { CompanyRole, SchoolRole } from '../../shared/enums';
+import { CompanyRole } from '../../shared/enums';
 import { JwtPayload } from '../../shared/types/jwt-payload.types';
 
 @ApiTags('Subscriptions')
@@ -33,16 +33,12 @@ export class SubscriptionsController {
   @Get()
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
   @ApiOperation({ summary: 'List all subscriptions (company admin)' })
-  async findAll(
-    @Query() filters: SubscriptionFilterDto,
-    @GetCurrentUser() user: JwtPayload,
-  ) {
+  async findAll(@Query() filters: SubscriptionFilterDto, @GetCurrentUser() user: JwtPayload) {
     const data = await this.subscriptionsService.findAll(filters, user.sub, user.role as string);
     return ApiResponse.success(data.items, 'Subscriptions fetched', data.meta);
   }
 
   @Get('my')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.ACCOUNTANT)
   @ApiOperation({ summary: 'Get own school active subscription' })
   async findMine(@GetSchoolId() schoolId: string) {
     const data = await this.subscriptionsService.findBySchoolId(schoolId);
@@ -52,10 +48,7 @@ export class SubscriptionsController {
   @Get(':id')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
   @ApiOperation({ summary: 'Get subscription by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetCurrentUser() user: JwtPayload,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetCurrentUser() user: JwtPayload) {
     const data = await this.subscriptionsService.findById(id, user.sub, user.role as string);
     return ApiResponse.success(data);
   }
@@ -64,10 +57,7 @@ export class SubscriptionsController {
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create subscription for a school' })
-  async create(
-    @Body() dto: CreateSubscriptionDto,
-    @GetCurrentUser() user: JwtPayload,
-  ) {
+  async create(@Body() dto: CreateSubscriptionDto, @GetCurrentUser() user: JwtPayload) {
     const data = await this.subscriptionsService.create(dto, user.sub, user.role as string);
     return ApiResponse.created(data, 'Subscription created');
   }
@@ -100,10 +90,7 @@ export class SubscriptionsController {
   @Get(':id/payments')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
   @ApiOperation({ summary: 'List payments for a subscription' })
-  async getPayments(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetCurrentUser() user: JwtPayload,
-  ) {
+  async getPayments(@Param('id', ParseUUIDPipe) id: string, @GetCurrentUser() user: JwtPayload) {
     const data = await this.subscriptionsService.getPayments(id, user.sub, user.role as string);
     return ApiResponse.success(data);
   }
@@ -118,7 +105,13 @@ export class SubscriptionsController {
     @GetCurrentUser() user: JwtPayload,
     @GetCurrentUserId() userId: string,
   ) {
-    const data = await this.subscriptionsService.addPayment(id, dto, userId, user.sub, user.role as string);
+    const data = await this.subscriptionsService.addPayment(
+      id,
+      dto,
+      userId,
+      user.sub,
+      user.role as string,
+    );
     return ApiResponse.created(data, 'Payment recorded');
   }
 }

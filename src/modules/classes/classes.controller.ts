@@ -16,11 +16,11 @@ import { ClassesService } from './classes.service';
 import { CreateClassDto } from './dto/create-class.dto';
 import { UpdateClassDto } from './dto/update-class.dto';
 import { ClassFilterDto } from './dto/class-filter.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Classes')
 @ApiBearerAuth('access-token')
@@ -29,41 +29,21 @@ export class ClassesController {
   constructor(private readonly classesService: ClassesService) {}
 
   @Get()
-  @Roles(
-    SchoolRole.SCHOOL_ADMIN,
-    SchoolRole.PRINCIPAL,
-    SchoolRole.VICE_PRINCIPAL,
-    SchoolRole.TEACHER,
-    SchoolRole.CLASS_TEACHER,
-  )
   @ApiOperation({ summary: 'List all classes for the school' })
-  async findAll(
-    @GetSchoolId() schoolId: string,
-    @Query() filters: ClassFilterDto,
-  ) {
+  async findAll(@GetSchoolId() schoolId: string, @Query() filters: ClassFilterDto) {
     const data = await this.classesService.findAll(schoolId, filters);
     return ApiResponse.success(data.items, 'Classes fetched successfully', data.meta);
   }
 
   @Get(':id')
-  @Roles(
-    SchoolRole.SCHOOL_ADMIN,
-    SchoolRole.PRINCIPAL,
-    SchoolRole.VICE_PRINCIPAL,
-    SchoolRole.TEACHER,
-    SchoolRole.CLASS_TEACHER,
-  )
   @ApiOperation({ summary: 'Get class by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.classesService.findById(id, schoolId);
     return ApiResponse.success(data, 'Class fetched successfully');
   }
 
   @Post()
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.classes.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new class' })
   async create(
@@ -76,7 +56,7 @@ export class ClassesController {
   }
 
   @Patch(':id')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.classes.update)
   @ApiOperation({ summary: 'Update a class' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -88,13 +68,10 @@ export class ClassesController {
   }
 
   @Delete(':id')
-  @Roles(SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL)
+  @Permissions(PERMISSION_REGISTRY.classes.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft delete a class' })
-  async remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     await this.classesService.remove(id, schoolId);
     return ApiResponse.noContent('Class deleted successfully');
   }

@@ -20,9 +20,9 @@ import { LoginSchoolDto } from './dto/login-school.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
 import { SetupPasswordDto } from './dto/setup-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { RefreshTokenGuard } from '../../common/guards/refresh-token.guard';
 import { K6 } from '../../common/decorators/k6.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
@@ -37,7 +37,9 @@ export class AuthController {
   @Public()
   @Post('school/signup')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Self-register a school + SCHOOL_ADMIN in one step. Returns tokens immediately.' })
+  @ApiOperation({
+    summary: 'Self-register a school + SCHOOL_ADMIN in one step. Returns tokens immediately.',
+  })
   async schoolSignup(@Body() dto: SchoolSignupDto) {
     const result = await this.authService.schoolSignup(dto);
     return ApiResponse.created(result, 'School registered successfully');
@@ -45,8 +47,14 @@ export class AuthController {
 
   @Public()
   @Post('company/register')
-  @ApiOperation({ summary: 'Register a company user. SUPER_ADMIN requires X-Bootstrap-Secret header.' })
-  @ApiHeader({ name: 'x-bootstrap-secret', description: 'Required when creating SUPER_ADMIN', required: false })
+  @ApiOperation({
+    summary: 'Register a company user. SUPER_ADMIN requires X-Bootstrap-Secret header.',
+  })
+  @ApiHeader({
+    name: 'x-bootstrap-secret',
+    description: 'Required when creating SUPER_ADMIN',
+    required: false,
+  })
   async registerCompany(
     @Body() dto: RegisterCompanyDto,
     @Headers('x-bootstrap-secret') bootstrapSecret?: string,
@@ -77,7 +85,8 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Unified login — company (email) or school (email/phone). Returns needs_password_setup:true + setup_token when school admin has no password set.',
+    summary:
+      'Unified login — company (email) or school (email/phone). Returns needs_password_setup:true + setup_token when school admin has no password set.',
   })
   async loginUnified(@Body() dto: LoginUnifiedDto) {
     const result = await this.authService.loginUnified(dto);
@@ -87,7 +96,9 @@ export class AuthController {
   @Public()
   @Post('school/setup-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'School admin first-time password setup using setup_token from login response' })
+  @ApiOperation({
+    summary: 'School admin first-time password setup using setup_token from login response',
+  })
   async setupPassword(@Body() dto: SetupPasswordDto) {
     const result = await this.authService.setupPassword(dto);
     return ApiResponse.success(result, 'Password set successfully');
@@ -120,10 +131,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Logout — invalidates all refresh tokens for user' })
-  async logout(
-    @GetCurrentUser() user: { sub: string; token_id?: string },
-    @Req() req: Request,
-  ) {
+  async logout(@GetCurrentUser() user: { sub: string; token_id?: string }, @Req() req: Request) {
     const authHeader = req.headers['authorization'] ?? '';
     const rawToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
     await this.authService.logout(user.sub, user.token_id ?? '', rawToken);
@@ -132,12 +140,13 @@ export class AuthController {
 
   @Get('me')
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Get current authenticated user profile' })
+  @ApiOperation({ summary: 'Get current authenticated user profile with permissions' })
   async getMe(
     @GetCurrentUserId() userId: string,
-    @GetCurrentUser() user: { context: AuthContext; role: string },
+    @GetCurrentUser() user: { context: AuthContext; role: string; school_id?: string },
+    @GetSchoolId() schoolId: string,
   ) {
-    const profile = await this.authService.getMe(userId, user.context, user.role);
+    const profile = await this.authService.getMe(userId, user.context, user.role, schoolId);
     return ApiResponse.success(profile);
   }
 }

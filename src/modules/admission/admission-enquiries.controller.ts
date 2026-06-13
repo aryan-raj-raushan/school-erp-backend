@@ -17,17 +17,11 @@ import { CreateAdmissionEnquiryDto } from './dto/create-admission-enquiry.dto';
 import { UpdateAdmissionEnquiryDto } from './dto/update-admission-enquiry.dto';
 import { FilterAdmissionEnquiryDto } from './dto/filter-admission-enquiry.dto';
 import { CreateEnquiryHistoryDto } from './dto/create-enquiry-history.dto';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
-import { SchoolRole } from '../../shared/enums';
-
-const ADMIN_ROLES = [SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL];
-const VIEW_ROLES = [
-  SchoolRole.SCHOOL_ADMIN, SchoolRole.PRINCIPAL, SchoolRole.VICE_PRINCIPAL,
-  SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER,
-];
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Admission Enquiries')
 @ApiBearerAuth('access-token')
@@ -36,40 +30,28 @@ export class AdmissionEnquiriesController {
   constructor(private readonly enquiriesService: AdmissionEnquiriesService) {}
 
   @Get()
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'List all admission enquiries with filters' })
-  async findAll(
-    @GetSchoolId() schoolId: string,
-    @Query() filters: FilterAdmissionEnquiryDto,
-  ) {
+  async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterAdmissionEnquiryDto) {
     const data = await this.enquiriesService.findAll(schoolId, filters);
     return ApiResponse.success(data.items, 'Admission enquiries fetched successfully', data.meta);
   }
 
   @Get(':id')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Get admission enquiry by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.enquiriesService.findById(id, schoolId);
     return ApiResponse.success(data, 'Admission enquiry fetched successfully');
   }
 
   @Get(':id/history')
-  @Roles(...VIEW_ROLES)
   @ApiOperation({ summary: 'Get history timeline for an enquiry' })
-  async getHistory(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async getHistory(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.enquiriesService.getHistory(id, schoolId);
     return ApiResponse.success(data, 'Enquiry history fetched successfully');
   }
 
   @Post(':id/history')
-  @Roles(...ADMIN_ROLES, SchoolRole.TEACHER, SchoolRole.CLASS_TEACHER)
+  @Permissions(PERMISSION_REGISTRY.admissions.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add a history entry to an enquiry' })
   async addHistory(
@@ -83,7 +65,7 @@ export class AdmissionEnquiriesController {
   }
 
   @Post()
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.admissions.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new admission enquiry' })
   async create(
@@ -96,7 +78,7 @@ export class AdmissionEnquiriesController {
   }
 
   @Patch(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.admissions.update)
   @ApiOperation({ summary: 'Update an admission enquiry' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -109,13 +91,10 @@ export class AdmissionEnquiriesController {
   }
 
   @Delete(':id')
-  @Roles(...ADMIN_ROLES)
+  @Permissions(PERMISSION_REGISTRY.admissions.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft delete an admission enquiry' })
-  async remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     await this.enquiriesService.remove(id, schoolId);
     return ApiResponse.noContent('Admission enquiry deleted successfully');
   }

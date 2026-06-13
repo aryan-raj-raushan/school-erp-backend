@@ -18,6 +18,13 @@ export class CreateDepartmentDto {
   @Transform(({ value }) => StringUtils.trim(value))
   code?: string;
 
+  @ApiPropertyOptional({ example: '123 Main St', maxLength: 255 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  @Transform(({ value }) => StringUtils.trim(value))
+  address?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
