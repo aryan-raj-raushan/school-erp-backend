@@ -32,6 +32,8 @@ import { SchoolsRepository } from '../schools/schools.repository';
 import { School } from '../schools/types/school.types';
 import { AuthTTL } from '../../shared/constants';
 import { PermissionsService } from '../permissions/permissions.service';
+import { PermissionsRepository } from '../permissions/permissions.repository';
+import { RolesRepository } from '../roles/roles.repository';
 
 @Injectable()
 export class AuthService {
@@ -42,7 +44,32 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
     private readonly permissionsService: PermissionsService,
+    private readonly permissionsRepo: PermissionsRepository,
+    private readonly rolesRepo: RolesRepository,
   ) {}
+
+  private async seedSchoolAdminRole(schoolId: string): Promise<void> {
+    const allPerms = await this.permissionsRepo.findAll();
+    if (!allPerms.length) return;
+
+    await this.rolesRepo.upsertSystemRole({
+      id: generateId(),
+      school_id: schoolId,
+      name: 'School Admin',
+      slug: 'school_admin',
+      description: 'Full access role auto-created on school registration',
+      is_system: true,
+      is_active: true,
+    });
+
+    const roleId = await this.permissionsRepo.findRoleIdBySlug(schoolId, 'school_admin');
+    if (!roleId) return;
+
+    await this.permissionsRepo.setRolePermissions(
+      roleId,
+      allPerms.map((p) => p.id),
+    );
+  }
 
   async schoolSignup(dto: SchoolSignupDto): Promise<LoginResponse> {
     const dialCode = dto.dial_code ?? '+91';
@@ -58,6 +85,8 @@ export class AuthService {
       marking_system: dto.marking_system as School['marking_system'],
       created_by: 'self-signup',
     });
+
+    await this.seedSchoolAdminRole(school.id);
 
     const password_hash = await hashPassword(dto.password);
 

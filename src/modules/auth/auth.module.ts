@@ -8,12 +8,14 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 import { SchoolsRepository } from '../schools/schools.repository';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { RolesModule } from '../roles/roles.module';
 
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({}),
     PermissionsModule,
+    RolesModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, AuthRepository, SchoolsRepository, JwtStrategy, JwtRefreshStrategy],
