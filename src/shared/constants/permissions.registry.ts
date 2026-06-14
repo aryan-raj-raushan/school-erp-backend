@@ -31,6 +31,7 @@ export const PERMISSION_REGISTRY = {
     view: 'fees.view',
     create: 'fees.create',
     update: 'fees.update',
+    delete: 'fees.delete',
     approve: 'fees.approve',
   },
   exams: {
@@ -112,6 +113,19 @@ export const PERMISSION_REGISTRY = {
     view: 'academic_years.view',
     create: 'academic_years.create',
     update: 'academic_years.update',
+  },
+  finance: {
+    view: 'finance.view',
+    create: 'finance.create',
+    update: 'finance.update',
+    delete: 'finance.delete',
+  },
+  salary: {
+    view: 'salary.view',
+    create: 'salary.create',
+    update: 'salary.update',
+    delete: 'salary.delete',
+    process: 'salary.process',
   },
   // ← ADD NEW MODULE HERE
 } as const;

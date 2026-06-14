@@ -1,8 +1,8 @@
 export const CacheTTL = {
-  SHORT: 60, // attendance, dashboard
-  MEDIUM: 120, // students-list, staff, subscriptions, fees, academics, exams, leave, comms, parents, sections
-  LONG: 300, // student-item, classes, departments, schools, holidays, class-details, syllabi, subjects, class-types, academic-years
-  HOUR: 3600, // master-data, company-schools (rarely changes)
+  SHORT: 300, // attendance, dashboard (5 min)
+  MEDIUM: 21600, // students-list, staff, subscriptions, fees, academics, exams, leave, comms, parents, sections (6 h)
+  LONG: 21600, // student-item, classes, departments, schools, holidays, class-details, syllabi, subjects, class-types, academic-years (6 h)
+  HOUR: 21600, // master-data, company-schools (6 h)
 } as const;
 
 export const AuthTTL = {

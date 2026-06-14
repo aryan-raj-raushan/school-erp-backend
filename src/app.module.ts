@@ -49,6 +49,8 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { SchoolEventsModule } from '@modules/school-events/school-events.module';
 import { AdmissionModule } from '@modules/admission/admission.module';
+import { FinanceModule } from './modules/finance/finance.module';
+import { SalaryModule } from './modules/salary/salary.module';
 
 @Module({
   imports: [
@@ -92,6 +94,8 @@ import { AdmissionModule } from '@modules/admission/admission.module';
     ClassTypesModule,
     SchoolEventsModule,
     AdmissionModule,
+    FinanceModule,
+    SalaryModule,
     TimetableModule,
     PermissionsModule,
     RolesModule,

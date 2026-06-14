@@ -88,6 +88,8 @@ export class RolesService {
     if (!updated) throw new NotFoundException(`Role '${id}' not found`);
 
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+    // Invalidate user permission cache too — role deactivation must take effect immediately
+    await this.permissionsService.invalidateSchoolPermissionCache(schoolId);
     return updated;
   }
 
