@@ -44,3 +44,4 @@ export * from './salary-structure-templates.schema';
 export * from './salary-structure-items.schema';
 export * from './employee-salary-assignments.schema';
 export * from './salary-transactions.schema';
+export * from './certificates.schema';

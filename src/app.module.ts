@@ -51,6 +51,7 @@ import { SchoolEventsModule } from '@modules/school-events/school-events.module'
 import { AdmissionModule } from '@modules/admission/admission.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { SalaryModule } from './modules/salary/salary.module';
+import { CertificatesModule } from '@modules/cetificates/certificates.module';
 
 @Module({
   imports: [
@@ -99,6 +100,7 @@ import { SalaryModule } from './modules/salary/salary.module';
     TimetableModule,
     PermissionsModule,
     RolesModule,
+    CertificatesModule
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
