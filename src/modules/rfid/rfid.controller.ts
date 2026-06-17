@@ -1,11 +1,21 @@
-import { Body, Controller, Post, HttpCode, HttpStatus, Sse } from '@nestjs/common';
+import { Body, Controller, Get, Post, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { Observable } from 'rxjs';
+import { Type } from 'class-transformer';
+import { IsArray, IsNumber, IsString, ValidateNested } from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RfidService } from './rfid.service';
 
+class RfidScanDto {
+  @IsString() r: string;
+  @IsString() d: string;
+  @IsNumber() t1: number;
+}
+
 class RfidWebhookDto {
-  ses: { r: string; d: string; t1: number }[];
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RfidScanDto)
+  ses: RfidScanDto[];
 }
 
 @ApiTags('RFID')
@@ -25,9 +35,9 @@ export class RfidController {
   }
 
   @Public()
-  @Sse('events')
-  @ApiOperation({ summary: 'SSE stream — emits an event on every card tap' })
-  events(): Observable<MessageEvent> {
-    return this.rfidService.getEvents();
+  @Get('events')
+  @ApiOperation({ summary: 'Get recent card tap events' })
+  events() {
+    return { events: this.rfidService.getEvents() };
   }
 }
