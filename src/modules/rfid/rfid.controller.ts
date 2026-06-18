@@ -27,9 +27,9 @@ export class RfidController {
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Receive RFID card scan from device — no auth required' })
-  receive(@Body() body: RfidWebhookDto) {
+  async receive(@Body() body: RfidWebhookDto) {
     if (body?.ses?.length) {
-      this.rfidService.handleScans(body.ses);
+      await this.rfidService.handleScans(body.ses);
     }
     return { ok: true };
   }
