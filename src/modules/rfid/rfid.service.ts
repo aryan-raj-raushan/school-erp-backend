@@ -120,6 +120,17 @@ export class RfidService {
         source: 'webhook',
         received_at: new Date(receivedAt),
       });
+
+      const student = await this.rfidRepository.findStudentByRfid(rfid);
+      if (student) {
+        await this.rfidRepository.autoMarkStudentAttendance(
+          student.id,
+          student.school_id,
+          new Date(t1 || Date.now()),
+        );
+        await this.redisService.delByPattern(`attendance:${student.school_id}:*`);
+        this.logger.log(`Auto-marked attendance for student ${student.id} via RFID`);
+      }
     } catch (err) {
       this.logger.error(`Failed to persist RFID event: ${err}`);
     }

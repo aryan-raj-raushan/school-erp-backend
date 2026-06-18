@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { desc, eq, and, or, ilike } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -8,7 +9,9 @@ import {
   RfidScanEventRow,
 } from '../../database/drizzle/schema/rfid-scan-events.schema';
 import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
-import { students } from '../../database/drizzle/schema/students.schema';
+import { students, studentAcademicInfo } from '../../database/drizzle/schema/students.schema';
+import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
+import { attendances } from '../../database/drizzle/schema/attendance.schema';
 
 export type PersonRow = {
   id: string;
@@ -169,5 +172,58 @@ export class RfidRepository {
       .update(students)
       .set({ id_card_number: null })
       .where(and(eq(students.id, studentId), eq(students.school_id, schoolId)));
+  }
+
+  async autoMarkStudentAttendance(
+    studentId: string,
+    schoolId: string,
+    tapDate: Date,
+  ): Promise<void> {
+    const [currentYear] = await this.db
+      .select({ id: academicYears.id })
+      .from(academicYears)
+      .where(and(eq(academicYears.school_id, schoolId), eq(academicYears.is_current, true)))
+      .limit(1);
+
+    if (!currentYear) return;
+
+    const [academic] = await this.db
+      .select({ section_id: studentAcademicInfo.section_id })
+      .from(studentAcademicInfo)
+      .where(
+        and(
+          eq(studentAcademicInfo.student_id, studentId),
+          eq(studentAcademicInfo.academic_year_id, currentYear.id),
+        ),
+      )
+      .limit(1);
+
+    if (!academic?.section_id) return;
+
+    const dateStr = tapDate.toISOString().split('T')[0];
+
+    await this.db
+      .insert(attendances)
+      .values({
+        id: randomUUID(),
+        school_id: schoolId,
+        student_id: studentId,
+        academic_year_id: currentYear.id,
+        class_section_id: academic.section_id,
+        date: dateStr,
+        status: 'PRESENT',
+        marked_by: 'rfid-auto',
+        is_late: false,
+      })
+      .onConflictDoNothing();
+  }
+
+  async findStudentByRfid(rfidCardId: string): Promise<{ id: string; school_id: string } | null> {
+    const [row] = await this.db
+      .select({ id: students.id, school_id: students.school_id })
+      .from(students)
+      .where(and(eq(students.id_card_number, rfidCardId), eq(students.deleted, false)))
+      .limit(1);
+    return row ?? null;
   }
 }
