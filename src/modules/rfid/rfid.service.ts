@@ -130,7 +130,7 @@ export class RfidService {
         await this.rfidRepository.autoMarkStudentAttendance(
           student.id,
           student.school_id,
-          new Date(t1 || Date.now()),
+          new Date(receivedAt),
         );
         await this.redisService.delByPattern(`attendance:${student.school_id}:*`);
         this.logger.log(`Auto-marked attendance for student ${student.id} via RFID`);
