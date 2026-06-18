@@ -81,8 +81,10 @@ export class RfidService {
   ): Promise<void> {
     if (personType === 'staff') {
       await this.rfidRepository.assignToStaff(rfidCardId, personId, schoolId);
+      await this.redisService.delByPattern(`staff:${schoolId}:*`);
     } else {
       await this.rfidRepository.assignToStudent(rfidCardId, personId, schoolId);
+      await this.redisService.delByPattern(`students:${schoolId}:*`);
     }
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
   }
@@ -94,8 +96,10 @@ export class RfidService {
   ): Promise<void> {
     if (personType === 'staff') {
       await this.rfidRepository.unassignFromStaff(personId, schoolId);
+      await this.redisService.delByPattern(`staff:${schoolId}:*`);
     } else {
       await this.rfidRepository.unassignFromStudent(personId, schoolId);
+      await this.redisService.delByPattern(`students:${schoolId}:*`);
     }
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
   }
