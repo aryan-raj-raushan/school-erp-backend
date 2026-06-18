@@ -24,6 +24,7 @@ import { HolidaysModule } from './modules/holidays/holidays.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { ParentsModule } from './modules/parents/parents.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
+import { StaffAttendanceModule } from './modules/staff-attendance/staff-attendance.module';
 import { FeesModule } from './modules/fees/fees.module';
 import { ExamsModule } from './modules/exams/exams.module';
 import { AcademicsModule } from './modules/academics/academics.module';
@@ -81,6 +82,7 @@ import { RfidModule } from './modules/rfid/rfid.module';
     StaffModule,
     ParentsModule,
     AttendanceModule,
+    StaffAttendanceModule,
     FeesModule,
     ExamsModule,
     AcademicsModule,

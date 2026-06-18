@@ -46,3 +46,4 @@ export * from './employee-salary-assignments.schema';
 export * from './salary-transactions.schema';
 
 export * from './rfid-scan-events.schema';
+export * from './staff-attendance.schema';
