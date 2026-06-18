@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { RfidRepository } from './rfid.repository';
+import { RedisService } from '../redis/redis.service';
+import { CacheTTL } from '../../shared/constants';
+import { RfidRepository, PersonRow } from './rfid.repository';
 
 export type RfidScanEvent = {
   r: string;
@@ -8,6 +10,14 @@ export type RfidScanEvent = {
   t1: number;
   receivedAt: string;
 };
+
+export type EnrichedRfidEvent = RfidScanEvent & {
+  personName: string | null;
+  personType: 'staff' | 'student' | null;
+  personId: string | null;
+};
+
+export type PersonResult = PersonRow;
 
 type RfidRecord = { r?: string; rfid?: string; d?: string; device?: string; t1: number | string };
 
@@ -18,7 +28,14 @@ export class RfidService {
   private readonly logger = new Logger(RfidService.name);
   private readonly recentEvents: RfidScanEvent[] = [];
 
-  constructor(private readonly rfidRepository: RfidRepository) {}
+  constructor(
+    private readonly rfidRepository: RfidRepository,
+    private readonly redisService: RedisService,
+  ) {}
+
+  private cacheKey(schoolId: string) {
+    return `rfid:${schoolId}`;
+  }
 
   async handleScans(ses: RfidRecord[]): Promise<void> {
     for (const r of ses) {
@@ -26,8 +43,61 @@ export class RfidService {
     }
   }
 
-  getEvents(): RfidScanEvent[] {
-    return this.recentEvents;
+  async getEnrichedEvents(schoolId: string): Promise<EnrichedRfidEvent[]> {
+    const key = `${this.cacheKey(schoolId)}:persons`;
+    const persons = await this.redisService.getOrSet(key, CacheTTL.SHORT, () =>
+      this.rfidRepository.getAllPersonsWithRfid(schoolId),
+    );
+
+    const rfidMap = new Map(persons.map((p) => [p.rfid, p]));
+
+    return this.recentEvents.map((e) => {
+      const person = rfidMap.get(e.r) ?? null;
+      return {
+        ...e,
+        personName: person?.name ?? null,
+        personType: person?.type ?? null,
+        personId: person?.id ?? null,
+      };
+    });
+  }
+
+  async searchPersons(
+    q: string,
+    type: 'staff' | 'student' | 'all',
+    schoolId: string,
+  ): Promise<PersonResult[]> {
+    const key = `${this.cacheKey(schoolId)}:search:${type}:${q}`;
+    return this.redisService.getOrSet(key, CacheTTL.SHORT, () =>
+      this.rfidRepository.searchPersons(q, type, schoolId),
+    );
+  }
+
+  async assignCard(
+    rfidCardId: string,
+    personType: 'staff' | 'student',
+    personId: string,
+    schoolId: string,
+  ): Promise<void> {
+    if (personType === 'staff') {
+      await this.rfidRepository.assignToStaff(rfidCardId, personId, schoolId);
+    } else {
+      await this.rfidRepository.assignToStudent(rfidCardId, personId, schoolId);
+    }
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+  }
+
+  async unassignCard(
+    personType: 'staff' | 'student',
+    personId: string,
+    schoolId: string,
+  ): Promise<void> {
+    if (personType === 'staff') {
+      await this.rfidRepository.unassignFromStaff(personId, schoolId);
+    } else {
+      await this.rfidRepository.unassignFromStudent(personId, schoolId);
+    }
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
   }
 
   private async push(r: RfidRecord) {
