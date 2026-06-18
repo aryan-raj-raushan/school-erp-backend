@@ -12,6 +12,7 @@ import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
 import { students, studentAcademicInfo } from '../../database/drizzle/schema/students.schema';
 import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
 import { attendances } from '../../database/drizzle/schema/attendance.schema';
+import { staffAttendances } from '../../database/drizzle/schema/staff-attendance.schema';
 
 export type PersonRow = {
   id: string;
@@ -225,5 +226,30 @@ export class RfidRepository {
       .where(and(eq(students.id_card_number, rfidCardId), eq(students.deleted, false)))
       .limit(1);
     return row ?? null;
+  }
+
+  async findStaffByRfid(rfidCardId: string): Promise<{ id: string; school_id: string } | null> {
+    const [row] = await this.db
+      .select({ id: schoolUsers.id, school_id: schoolUsers.school_id })
+      .from(schoolUsers)
+      .where(and(eq(schoolUsers.rfid_card_number, rfidCardId), eq(schoolUsers.deleted, false)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async autoMarkStaffAttendance(staffId: string, schoolId: string, tapDate: Date): Promise<void> {
+    const dateStr = tapDate.toISOString().split('T')[0];
+    await this.db
+      .insert(staffAttendances)
+      .values({
+        id: randomUUID(),
+        school_id: schoolId,
+        staff_id: staffId,
+        date: dateStr,
+        status: 'PRESENT',
+        marked_by: 'rfid-auto',
+        is_late: false,
+      })
+      .onConflictDoNothing();
   }
 }

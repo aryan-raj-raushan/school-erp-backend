@@ -135,6 +135,17 @@ export class RfidService {
         await this.redisService.delByPattern(`attendance:${student.school_id}:*`);
         this.logger.log(`Auto-marked attendance for student ${student.id} via RFID`);
       }
+
+      const staff = await this.rfidRepository.findStaffByRfid(rfid);
+      if (staff) {
+        await this.rfidRepository.autoMarkStaffAttendance(
+          staff.id,
+          staff.school_id,
+          new Date(receivedAt),
+        );
+        await this.redisService.delByPattern(`staff-attendance:${staff.school_id}:*`);
+        this.logger.log(`Auto-marked attendance for staff ${staff.id} via RFID`);
+      }
     } catch (err) {
       this.logger.error(`Failed to persist RFID event: ${err}`);
     }
