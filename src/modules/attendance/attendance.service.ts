@@ -74,6 +74,7 @@ export class AttendanceService {
     }
 
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
 
     const present = results.filter((r) => r.status === 'PRESENT').length;
     const absent = results.filter((r) => r.status === 'ABSENT').length;
@@ -96,6 +97,7 @@ export class AttendanceService {
     await this.findById(id, schoolId);
     const updated = await this.attendanceRepo.update(id, schoolId, dto);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
     return updated;
   }
 
@@ -103,6 +105,7 @@ export class AttendanceService {
     await this.findById(id, schoolId);
     await this.attendanceRepo.remove(id, schoolId);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
   }
 
   async getDailyReport(

@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, boolean, timestamp, unique } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, boolean, timestamp, unique, index } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 
 export const roles = pgTable(
@@ -22,5 +22,7 @@ export const roles = pgTable(
   },
   (t) => ({
     uq_school_slug: unique('uq_roles_school_slug').on(t.school_id, t.slug),
+    idx_school: index('roles_school_id_idx').on(t.school_id),
+    idx_school_deleted: index('roles_school_deleted_idx').on(t.school_id, t.deleted),
   }),
 );

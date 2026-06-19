@@ -4,6 +4,8 @@ import { Logger } from '@nestjs/common';
 import helmet from 'helmet';
 import compression from 'compression';
 import { rateLimit } from 'express-rate-limit';
+import express from 'express';
+import { decode } from '@msgpack/msgpack';
 
 import { AppModule } from './app.module';
 import { LoadTestService } from './modules/load-test/load-test.service';
@@ -13,9 +15,33 @@ import { CustomValidationPipe } from './common/pipes/validation.pipe';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
+    bodyParser: false,
   });
 
   const logger = new Logger('Bootstrap');
+
+  // Body parsers before helmet — msgpack raw body must be buffered before any other middleware
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.headers['content-type'] === 'application/msgpack') {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk: Buffer) => chunks.push(chunk));
+      req.on('end', () => {
+        try {
+          req.body = decode(Buffer.concat(chunks));
+        } catch {
+          res
+            .status(400)
+            .json({ success: false, statusCode: 400, message: 'Invalid msgpack body' });
+          return;
+        }
+        next();
+      });
+    } else {
+      next();
+    }
+  });
 
   app.use(helmet());
   app.use(compression());
@@ -24,7 +50,8 @@ async function bootstrap() {
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    exposedHeaders: ['Content-Type'],
   });
 
   app.use(
@@ -70,10 +97,7 @@ async function bootstrap() {
       .setTitle(process.env.SWAGGER_TITLE || 'School ERP API')
       .setDescription('Multi-tenant School ERP SaaS Backend')
       .setVersion(process.env.SWAGGER_VERSION || '1.0.0')
-      .addBearerAuth(
-        { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-        'access-token',
-      )
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'access-token')
       .addTag('Auth', 'Authentication endpoints')
       .addTag('Schools', 'School management')
       .addTag('Academic Years', 'Academic year management')
@@ -105,4 +129,4 @@ async function bootstrap() {
   }
 }
 
-bootstrap();
+void bootstrap();

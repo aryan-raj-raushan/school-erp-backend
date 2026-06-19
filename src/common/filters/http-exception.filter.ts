@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { encode } from '@msgpack/msgpack';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -58,13 +59,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
     }
 
-    response.status(statusCode).json({
+    const body = {
       success: false,
       statusCode,
       message,
       errors,
       timestamp: new Date().toISOString(),
       path: request.url,
-    });
+    };
+
+    if (request.headers['accept'] === 'application/msgpack') {
+      response
+        .status(statusCode)
+        .set('Content-Type', 'application/msgpack')
+        .end(Buffer.from(encode(body)));
+    } else {
+      response.status(statusCode).json(body);
+    }
   }
 }

@@ -113,6 +113,8 @@ export class StaffService {
 
     const inviteToken = await this.generateInviteToken(id, schoolId);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
 
     return { staff, inviteToken };
   }
@@ -125,6 +127,8 @@ export class StaffService {
       joining_date: dto.joining_date ? new Date(dto.joining_date) : undefined,
     });
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
     return updated;
   }
 
@@ -132,12 +136,16 @@ export class StaffService {
     await this.findById(id, schoolId);
     await this.staffRepo.softDelete(id, schoolId);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
   }
 
   async offboard(id: string, schoolId: string): Promise<StaffMember> {
     await this.findById(id, schoolId);
     const updated = await this.staffRepo.setActiveStatus(id, schoolId, false);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
     return updated;
   }
 
@@ -146,6 +154,8 @@ export class StaffService {
     if (!member) throw new NotFoundException(`Staff member with id '${id}' not found`);
     const updated = await this.staffRepo.setActiveStatus(id, schoolId, true);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
     return updated;
   }
 

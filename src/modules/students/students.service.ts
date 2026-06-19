@@ -1,11 +1,17 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { StudentsRepository } from './students.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
-import { CreateStudentDto, UpdateStudentDto } from './dto/create-student.dto';
-import { StudentFull, StudentFilters, StudentListItem } from './types/student.types';
+import { CreateStudentDto, UpdateStudentDto, StudentDocumentDto } from './dto/create-student.dto';
+import {
+  StudentFull,
+  StudentFilters,
+  StudentListItem,
+  NewStudent,
+  NewStudentParent,
+  NewStudentDocument,
+} from './types/student.types';
 import { REDIS_STUDENT_KEY } from '@shared/redis/redis-key';
-
 
 @Injectable()
 export class StudentsService {
@@ -15,7 +21,7 @@ export class StudentsService {
   ) {}
 
   private cacheKey(schoolId: string) {
-    return REDIS_STUDENT_KEY.STUDENT(schoolId)
+    return REDIS_STUDENT_KEY.STUDENT(schoolId);
   }
 
   // ─── List ───────────────────────────────────────────────────────────────────
@@ -74,10 +80,10 @@ export class StudentsService {
       first_name: dto.first_name,
       last_name: dto.last_name,
       date_of_birth: dto.date_of_birth,
-      gender: dto.gender as any,
-      blood_group: dto.blood_group as any,
-      religion: dto.religion as any,
-      category: dto.category as any,
+      gender: dto.gender as NewStudent['gender'],
+      blood_group: dto.blood_group as NewStudent['blood_group'],
+      religion: dto.religion as NewStudent['religion'],
+      category: dto.category as NewStudent['category'],
       caste: dto.caste,
       nationality: dto.nationality,
       aadhaar_number: dto.aadhaar_number,
@@ -88,7 +94,7 @@ export class StudentsService {
       dial_code: dto.dial_code,
       phone_number: dto.phone_number,
       email: dto.email,
-      status: (dto.status as any) ?? 'ACTIVE',
+      status: (dto.status as NewStudent['status']) ?? 'ACTIVE',
       is_enabled: dto.is_enabled ?? true,
       created_by: createdBy,
     });
@@ -147,8 +153,8 @@ export class StudentsService {
                 school_id: schoolId,
                 student_id: studentId,
                 ...p,
-                relation: p.relation as any,
-                qualification: p.qualification as any,
+                relation: p.relation as NewStudentParent['relation'],
+                qualification: p.qualification as NewStudentParent['qualification'],
               })),
             )
           : Promise.resolve([]),
@@ -160,8 +166,8 @@ export class StudentsService {
                 school_id: schoolId,
                 student_id: studentId,
                 ...d,
-                document_name: d.document_name as any,
-                file_type: d.file_type as any,
+                document_name: d.document_name as NewStudentDocument['document_name'],
+                file_type: d.file_type as NewStudentDocument['file_type'],
                 uploaded_by: createdBy,
               })),
             )
@@ -169,6 +175,8 @@ export class StudentsService {
       ]);
 
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:list:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
 
     return {
       student,
@@ -192,10 +200,10 @@ export class StudentsService {
       first_name: dto.first_name,
       last_name: dto.last_name,
       date_of_birth: dto.date_of_birth,
-      gender: dto.gender as any,
-      blood_group: dto.blood_group as any,
-      religion: dto.religion as any,
-      category: dto.category as any,
+      gender: dto.gender as NewStudent['gender'],
+      blood_group: dto.blood_group as NewStudent['blood_group'],
+      religion: dto.religion as NewStudent['religion'],
+      category: dto.category as NewStudent['category'],
       caste: dto.caste,
       nationality: dto.nationality,
       aadhaar_number: dto.aadhaar_number,
@@ -206,7 +214,7 @@ export class StudentsService {
       dial_code: dto.dial_code,
       phone_number: dto.phone_number,
       email: dto.email,
-      status: dto.status as any,
+      status: dto.status as NewStudent['status'],
       is_enabled: dto.is_enabled,
     });
 
@@ -262,8 +270,8 @@ export class StudentsService {
           school_id: schoolId,
           student_id: id,
           ...p,
-          relation: p.relation as any,
-          qualification: p.qualification as any,
+          relation: p.relation as NewStudentParent['relation'],
+          qualification: p.qualification as NewStudentParent['qualification'],
         })),
       );
     }
@@ -277,14 +285,16 @@ export class StudentsService {
           school_id: schoolId,
           student_id: id,
           ...d,
-          document_name: d.document_name as any,
-          file_type: d.file_type as any,
+          document_name: d.document_name as NewStudentDocument['document_name'],
+          file_type: d.file_type as NewStudentDocument['file_type'],
         })),
       );
     }
 
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:${id}*`);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:list:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
 
     return this.getFullStudent(id, schoolId);
   }
@@ -297,6 +307,8 @@ export class StudentsService {
     await this.repo.softDelete(id, schoolId);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:${id}*`);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:list:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
   }
 
   // ─── Toggle enable/disable ──────────────────────────────────────────────────
@@ -307,12 +319,19 @@ export class StudentsService {
     await this.repo.update(id, schoolId, { is_enabled: enabled });
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:${id}*`);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:list:*`);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
     return this.getFullStudent(id, schoolId);
   }
 
   // ─── Documents ──────────────────────────────────────────────────────────────
 
-  async addDocuments(studentId: string, schoolId: string, documents: any[], uploadedBy: string) {
+  async addDocuments(
+    studentId: string,
+    schoolId: string,
+    documents: StudentDocumentDto[],
+    uploadedBy: string,
+  ) {
     const existing = await this.repo.findById(studentId, schoolId);
     if (!existing) throw new NotFoundException(`Student '${studentId}' not found`);
 

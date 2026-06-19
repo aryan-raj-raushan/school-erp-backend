@@ -1,4 +1,4 @@
-import { pgTable, varchar, timestamp, date, unique, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, timestamp, date, unique, boolean, index } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 import { schoolUsers } from './school-users.schema';
 import { attendanceStatusEnum } from './attendance.schema';
@@ -23,6 +23,8 @@ export const staffAttendances = pgTable(
   },
   (t) => ({
     uniqueStaffDate: unique('staff_attendances_staff_date_unique').on(t.staff_id, t.date),
+    idx_school_date: index('staff_attendances_school_date_idx').on(t.school_id, t.date),
+    idx_staff: index('staff_attendances_staff_id_idx').on(t.staff_id),
   }),
 );
 

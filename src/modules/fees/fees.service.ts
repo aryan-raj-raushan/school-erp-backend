@@ -322,7 +322,7 @@ export class FeesService {
   }
 
   async createBill(dto: CreateFeeBillDto, schoolId: string, userId: string): Promise<FeeBill> {
-    return this.feesRepo.createBill({
+    const bill = await this.feesRepo.createBill({
       id: generateId(),
       school_id: schoolId,
       student_id: dto.student_id,
@@ -341,6 +341,9 @@ export class FeesService {
       deleted: false,
       created_by: userId,
     });
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
+    return bill;
   }
 
   async bulkGenerateClassBills(
@@ -460,6 +463,8 @@ export class FeesService {
       status: newStatus as 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'WAIVED',
     });
 
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
     return payment;
   }
 
@@ -614,6 +619,8 @@ export class FeesService {
     }
 
     await this.feesRepo.deletePayment(paymentId);
+    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
+    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
   }
 
   // ─── MONTHLY DUES ────────────────────────────────────────────────────────────

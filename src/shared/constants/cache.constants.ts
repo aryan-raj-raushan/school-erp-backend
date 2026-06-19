@@ -1,8 +1,10 @@
+// These are staleness windows (seconds), not Redis TTLs — keys never expire in Redis.
+// Background refresh fires when age > this value. Explicit delByPattern on mutations.
 export const CacheTTL = {
-  SHORT: 300, // attendance, dashboard (5 min)
-  MEDIUM: 21600, // students-list, staff, subscriptions, fees, academics, exams, leave, comms, parents, sections (6 h)
-  LONG: 21600, // student-item, classes, departments, schools, holidays, class-details, syllabi, subjects, class-types, academic-years (6 h)
-  HOUR: 21600, // master-data, company-schools (6 h)
+  SHORT: 300, // attendance, dashboard — 5 min
+  MEDIUM: 86400, // students, staff, fees, academics — 24h
+  LONG: 604800, // classes, departments, schools, subjects — 7 days
+  HOUR: 86400, // master-data, company-schools — 24h
 } as const;
 
 export const AuthTTL = {
