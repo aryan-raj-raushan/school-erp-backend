@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { StudentsRepository } from './students.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
-import { CreateStudentDto, UpdateStudentDto, StudentDocumentDto } from './dto/create-student.dto';
+import { CreateStudentDto, StudentDocumentDto } from './dto/create-student.dto';
+import { UpdateStudentDto } from './dto/update-student.dto';
 import {
   StudentFull,
   StudentFilters,

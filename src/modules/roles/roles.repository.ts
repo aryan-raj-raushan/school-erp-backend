@@ -74,9 +74,12 @@ export class RolesRepository {
   }
 
   async update(id: string, schoolId: string, data: Partial<NewRole>): Promise<Role | undefined> {
+    const payload = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined),
+    ) as Partial<NewRole>;
     const [row] = await this.db
       .update(roles)
-      .set({ ...data, updated_at: new Date() })
+      .set({ ...payload, updated_at: new Date() })
       .where(and(eq(roles.id, id), eq(roles.school_id, schoolId)))
       .returning();
     return row;

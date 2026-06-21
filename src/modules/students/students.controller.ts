@@ -14,7 +14,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { StudentsService } from './students.service';
-import { CreateStudentDto, UpdateStudentDto, StudentDocumentDto } from './dto/create-student.dto';
+import { CreateStudentDto, StudentDocumentDto } from './dto/create-student.dto';
+import { UpdateStudentDto } from './dto/update-student.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';

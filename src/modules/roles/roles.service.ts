@@ -14,7 +14,7 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { FilterRoleDto } from './dto/filter-role.dto';
 import { AssignPermissionsDto } from './dto/assign-permissions.dto';
-import { Role } from './types/role.types';
+import { Role, NewRole } from './types/role.types';
 import { CacheTTL } from '../../shared/constants';
 
 @Injectable()
@@ -84,7 +84,12 @@ export class RolesService {
       throw new BadRequestException('Cannot rename system roles');
     }
 
-    const updated = await this.rolesRepo.update(id, schoolId, dto);
+    const updateData: Partial<NewRole> = {};
+    if (dto.name != null) updateData.name = dto.name;
+    if (dto.description !== undefined) updateData.description = dto.description ?? null;
+    if (dto.is_active != null) updateData.is_active = dto.is_active;
+
+    const updated = await this.rolesRepo.update(id, schoolId, updateData);
     if (!updated) throw new NotFoundException(`Role '${id}' not found`);
 
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
