@@ -54,6 +54,7 @@ import { AdmissionModule } from '@modules/admission/admission.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { SalaryModule } from './modules/salary/salary.module';
 import { RfidModule } from './modules/rfid/rfid.module';
+import { SearchModule } from './modules/search/search.module';
 
 @Module({
   imports: [
@@ -104,6 +105,7 @@ import { RfidModule } from './modules/rfid/rfid.module';
     PermissionsModule,
     RolesModule,
     RfidModule,
+    SearchModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
