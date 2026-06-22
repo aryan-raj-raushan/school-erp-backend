@@ -18,7 +18,7 @@ export * from './holidays.schema';
 export * from './parents.schema';
 export * from './attendance.schema';
 export * from './fees.schema';
-export * from './exams.schema';
+// export * from './exams.schema';
 export * from './academics.schema';
 export * from './leave.schema';
 export * from './communications.schema';
@@ -47,3 +47,11 @@ export * from './salary-transactions.schema';
 
 export * from './rfid-scan-events.schema';
 export * from './staff-attendance.schema';
+
+export * from './exam.schema';
+export * from './exam-attendance.schema';
+export * from './exam-grading.schema';
+export * from './exam-hall-details.schema';
+export * from './exam-hall-plan.schema';
+export * from './exam-schedule.schema';
+export * from './exam-sitting-plan.schema';
