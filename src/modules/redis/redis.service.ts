@@ -102,6 +102,62 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.keys(pattern);
   }
 
+  /**
+   * Scans all keys matching pattern, parses each stored { data, cachedAt } envelope,
+   * and returns a deduplicated flat array of T items.
+   * Returns null when no keys exist (caller should fall back to DB).
+   * Handles both plain-array data and PaginationResponse { items: T[] } shapes.
+   */
+  async getValuesByPattern<T extends { id: string }>(pattern: string): Promise<T[] | null> {
+    const prefix = this.configService.get<string>('redis.keyPrefix') ?? '';
+    let cursor = '0';
+    const appKeys: string[] = [];
+    do {
+      const [next, found] = await this.client.scan(
+        cursor,
+        'MATCH',
+        `${prefix}${pattern}`,
+        'COUNT',
+        100,
+      );
+      cursor = next;
+      appKeys.push(...found.map((k) => (k.startsWith(prefix) ? k.slice(prefix.length) : k)));
+    } while (cursor !== '0');
+
+    if (appKeys.length === 0) return null;
+
+    const pipeline = this.client.pipeline();
+    appKeys.forEach((k) => pipeline.get(k));
+    const results = (await pipeline.exec()) ?? [];
+
+    const items: T[] = [];
+    for (const [, raw] of results) {
+      if (!raw) continue;
+      try {
+        const { data } = JSON.parse(raw as string) as { data: unknown };
+        if (Array.isArray(data)) {
+          items.push(...(data as T[]));
+        } else if (
+          data &&
+          typeof data === 'object' &&
+          'items' in data &&
+          Array.isArray((data as Record<string, unknown>).items)
+        ) {
+          items.push(...((data as Record<string, unknown>).items as T[]));
+        }
+      } catch {
+        /* skip corrupt entries */
+      }
+    }
+
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      if (!item.id || seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }
+
   async delByPattern(pattern: string): Promise<void> {
     this.l1Invalidate(pattern);
 

@@ -17,7 +17,7 @@ import {
   academicYears,
   homeworks,
 } from '../../database/drizzle/schema';
-import { GlobalSearchResult, SearchResultItem } from './types/search.types';
+import { SearchResultItem } from './types/search.types';
 
 const LIMIT = 5;
 
@@ -25,53 +25,7 @@ const LIMIT = 5;
 export class SearchRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
-  async searchAll(term: string, schoolId: string, perms: string[]): Promise<GlobalSearchResult> {
-    const t = `%${term}%`;
-
-    const settled = await Promise.allSettled([
-      perms.includes('students.view') ? this.searchStudents(t, schoolId) : Promise.resolve([]),
-      perms.includes('staff.view') ? this.searchStaff(t, schoolId) : Promise.resolve([]),
-      perms.includes('parents.view') ? this.searchParents(t, schoolId) : Promise.resolve([]),
-      perms.includes('admissions.view') ? this.searchAdmissions(t, schoolId) : Promise.resolve([]),
-      perms.includes('classes.view') ? this.searchClasses(t, schoolId) : Promise.resolve([]),
-      perms.includes('subjects.view') ? this.searchSubjects(t, schoolId) : Promise.resolve([]),
-      perms.includes('departments.view')
-        ? this.searchDepartments(t, schoolId)
-        : Promise.resolve([]),
-      perms.includes('fees.view') ? this.searchFeeTypes(t, schoolId) : Promise.resolve([]),
-      perms.includes('events.view') || perms.includes('holidays.view')
-        ? this.searchEvents(t, schoolId)
-        : Promise.resolve([]),
-      perms.includes('academic_years.view')
-        ? this.searchAcademicYears(t, schoolId)
-        : Promise.resolve([]),
-      perms.includes('homework.view') ? this.searchHomework(t, schoolId) : Promise.resolve([]),
-    ]);
-
-    const safe = (idx: number): SearchResultItem[] => {
-      const r = settled[idx];
-      return r.status === 'fulfilled' ? (r.value as SearchResultItem[]) : [];
-    };
-
-    return {
-      students: safe(0),
-      staff: safe(1),
-      parents: safe(2),
-      admissions: safe(3),
-      classes: safe(4),
-      subjects: safe(5),
-      departments: safe(6),
-      feeTypes: safe(7),
-      events: safe(8),
-      academicYears: safe(9),
-      homework: safe(10),
-      query: term,
-    };
-  }
-
-  // ── Students ────────────────────────────────────────────────────────────────
-
-  private async searchStudents(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchStudents(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({
         id: students.id,
@@ -118,9 +72,7 @@ export class SearchRepository {
     }));
   }
 
-  // ── Staff ───────────────────────────────────────────────────────────────────
-
-  private async searchStaff(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchStaff(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({
         id: schoolUsers.id,
@@ -154,9 +106,7 @@ export class SearchRepository {
     }));
   }
 
-  // ── Parents ─────────────────────────────────────────────────────────────────
-
-  private async searchParents(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchParents(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({
         id: parents.id,
@@ -187,9 +137,7 @@ export class SearchRepository {
     }));
   }
 
-  // ── Admissions ──────────────────────────────────────────────────────────────
-
-  private async searchAdmissions(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchAdmissions(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({
         id: admissionEnquiries.id,
@@ -216,9 +164,7 @@ export class SearchRepository {
     }));
   }
 
-  // ── Classes ─────────────────────────────────────────────────────────────────
-
-  private async searchClasses(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchClasses(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({ id: classes.id, name: classes.name })
       .from(classes)
@@ -227,17 +173,10 @@ export class SearchRepository {
       )
       .limit(LIMIT);
 
-    return rows.map((r) => ({
-      id: r.id,
-      type: 'class' as const,
-      name: r.name,
-      subtitle: 'Class',
-    }));
+    return rows.map((r) => ({ id: r.id, type: 'class' as const, name: r.name, subtitle: 'Class' }));
   }
 
-  // ── Subjects ────────────────────────────────────────────────────────────────
-
-  private async searchSubjects(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchSubjects(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({ id: subjects.id, name: subjects.name })
       .from(subjects)
@@ -254,9 +193,7 @@ export class SearchRepository {
     }));
   }
 
-  // ── Departments ─────────────────────────────────────────────────────────────
-
-  private async searchDepartments(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchDepartments(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({ id: departments.id, name: departments.name })
       .from(departments)
@@ -277,9 +214,7 @@ export class SearchRepository {
     }));
   }
 
-  // ── Fee Types ────────────────────────────────────────────────────────────────
-
-  private async searchFeeTypes(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchFeeTypes(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({ id: feeTypes.id, name: feeTypes.name })
       .from(feeTypes)
@@ -296,9 +231,7 @@ export class SearchRepository {
     }));
   }
 
-  // ── School Events & Holidays ────────────────────────────────────────────────
-
-  private async searchEvents(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchEvents(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({ id: schoolEvents.id, name: schoolEvents.name, type: schoolEvents.type })
       .from(schoolEvents)
@@ -319,9 +252,7 @@ export class SearchRepository {
     }));
   }
 
-  // ── Academic Years ──────────────────────────────────────────────────────────
-
-  private async searchAcademicYears(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchAcademicYears(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({
         id: academicYears.id,
@@ -340,9 +271,7 @@ export class SearchRepository {
     }));
   }
 
-  // ── Homework ────────────────────────────────────────────────────────────────
-
-  private async searchHomework(t: string, schoolId: string): Promise<SearchResultItem[]> {
+  async searchHomework(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({ id: homeworks.id, title: homeworks.title, status: homeworks.status })
       .from(homeworks)
