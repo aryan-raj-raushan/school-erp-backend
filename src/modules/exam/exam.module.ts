@@ -37,6 +37,7 @@ import { ExamAttendanceCardService } from './exam-attendance/exam-attendance-car
 import { ExamAttendanceCardController } from './exam-attendance/exam-attendance-card.controller';
 import { ExamAdmitCardService } from './exam-admit-card/exam-admit-card.service';
 import { ExamAdmitCardController } from './exam-admit-card/exam-admit-card.controller';
+import { ExamAttendanceCardRepository } from './exam-attendance/exam-attendance-card.repository';
 
 @Module({
   imports: [DrizzleModule, RedisModule],
@@ -65,6 +66,7 @@ import { ExamAdmitCardController } from './exam-admit-card/exam-admit-card.contr
     ExamAttendanceService,
     ExamAttendanceRepository,
     ExamAttendanceCardService,
+    ExamAttendanceCardRepository,
     // Hall
     ExamHallService,
     ExamHallRepository,
