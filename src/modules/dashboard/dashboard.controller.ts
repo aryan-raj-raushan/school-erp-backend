@@ -12,24 +12,24 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('admin')
-  @ApiOperation({ summary: 'Admin / Owner dashboard summary' })
+  @ApiOperation({ summary: 'Admin / Owner full dashboard — counts, charts, events, finance' })
   async adminDashboard(@GetSchoolId() schoolId: string) {
     const data = await this.dashboardService.getAdminDashboard(schoolId);
-    return ApiResponse.success(data, 'Admin dashboard fetched successfully');
+    return ApiResponse.success(data, 'Dashboard fetched');
   }
 
   @Get('teacher')
-  @ApiOperation({ summary: 'Teacher dashboard summary' })
+  @ApiOperation({ summary: 'Teacher dashboard — attendance, homework, exams' })
   async teacherDashboard(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
     const data = await this.dashboardService.getTeacherDashboard(schoolId, userId);
-    return ApiResponse.success(data, 'Teacher dashboard fetched successfully');
+    return ApiResponse.success(data, 'Teacher dashboard fetched');
   }
 
   @Get('parent')
-  @ApiOperation({ summary: 'Parent dashboard summary' })
+  @ApiOperation({ summary: 'Parent dashboard — homework, exams, fees' })
   async parentDashboard(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
     const data = await this.dashboardService.getParentDashboard(schoolId, userId);
-    return ApiResponse.success(data, 'Parent dashboard fetched successfully');
+    return ApiResponse.success(data, 'Parent dashboard fetched');
   }
 }
 
@@ -43,7 +43,7 @@ export class ReportsController {
   @ApiOperation({ summary: 'Admin analytics & reports summary' })
   async adminReports(@GetSchoolId() schoolId: string) {
     const data = await this.dashboardService.getAdminReports(schoolId);
-    return ApiResponse.success(data, 'Admin reports fetched successfully');
+    return ApiResponse.success(data, 'Admin reports fetched');
   }
 
   @Get('admin/subjects')
@@ -54,6 +54,6 @@ export class ReportsController {
     @Query('class_section_id') classSectionId: string,
   ) {
     const data = await this.dashboardService.getSubjectAllocation(schoolId, classSectionId);
-    return ApiResponse.success(data, 'Subject allocation fetched successfully');
+    return ApiResponse.success(data, 'Subject allocation fetched');
   }
 }
