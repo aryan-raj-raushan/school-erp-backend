@@ -1,12 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsUUID, IsOptional, IsInt, Min } from 'class-validator';
 
-// ─── Assign Leave to Employee ─────────────────────────────────────────────────
-export class AssignLeaveDto {
-  @ApiProperty({ example: 'uuid-of-employee' })
-  @IsUUID()
-  employee_id: string;
-
+// ─── Body DTO (no employee_id — comes from path param) ───────────────────────
+export class AssignLeaveBodyDto {
   @ApiProperty({ example: 'uuid-of-leave-type' })
   @IsUUID()
   leave_type_id: string;
@@ -14,6 +10,11 @@ export class AssignLeaveDto {
   @ApiProperty({ example: 'uuid-of-academic-year' })
   @IsUUID()
   academic_year_id: string;
+}
+
+// ─── Full DTO used by service (employee_id merged from path) ──────────────────
+export class AssignLeaveDto extends AssignLeaveBodyDto {
+  employee_id: string;
 }
 
 // ─── Filter Assigned Leaves ───────────────────────────────────────────────────

@@ -18,7 +18,7 @@ import { GetCurrentUserId } from '../../common/decorators/current-user.decorator
 import { ApiResponse } from '../../shared/responses/api-response';
 
 import { CreateLeaveTypeDto, UpdateLeaveTypeDto, FilterLeaveTypeDto } from './dto/leave-type.dto';
-import { AssignLeaveDto, FilterAssignedLeaveDto } from './dto/leave-assigned.dto';
+import { AssignLeaveBodyDto, FilterAssignedLeaveDto } from './dto/leave-assigned.dto';
 import {
   ApplyLeaveDto,
   ReviewLeaveDto,
@@ -113,10 +113,9 @@ export class LeaveAssignedController {
   async assign(
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
     @GetSchoolId() schoolId: string,
-    @Body() dto: AssignLeaveDto,
+    @Body() dto: AssignLeaveBodyDto,
     @GetCurrentUserId() userId: string,
   ) {
-    // Merge employeeId from path into dto so it stays the single source of truth
     const data = await this.leaveService.assignLeave(
       { ...dto, employee_id: employeeId },
       schoolId,
