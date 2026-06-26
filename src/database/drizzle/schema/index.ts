@@ -55,3 +55,7 @@ export * from './exam-hall-details.schema';
 export * from './exam-hall-plan.schema';
 export * from './exam-schedule.schema';
 export * from './exam-sitting-plan.schema';
+
+export * from './exam-results.schema';
+
+export * from './employee-leave.schema';
