@@ -55,6 +55,8 @@ import { SalaryModule } from './modules/salary/salary.module';
 import { RfidModule } from './modules/rfid/rfid.module';
 import { ExamModule } from '@modules/exam/exam.module';
 import { SearchModule } from './modules/search/search.module';
+import { ExamResultsModule } from '@modules/results/exam-results.module';
+import { EmployeeLeaveModule } from '@modules/employee-leave/employee-leave.module';
 
 @Module({
   imports: [
@@ -106,6 +108,8 @@ import { SearchModule } from './modules/search/search.module';
     RfidModule,
     ExamModule,
     SearchModule,
+    ExamResultsModule,
+    EmployeeLeaveModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

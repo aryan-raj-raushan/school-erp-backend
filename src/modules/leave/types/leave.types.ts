@@ -1,5 +1,11 @@
 import { InferSelectModel, InferInsertModel } from 'drizzle-orm';
-import { leavePolicies, leaveTypes, leaveBalances, teacherLeaveRequests, studentLeaveRequests } from '../../../database/drizzle/schema/leave.schema';
+import {
+  leavePolicies,
+  leaveTypesEmployee as leaveTypes,
+  leaveBalances,
+  teacherLeaveRequests,
+  studentLeaveRequests,
+} from '../../../database/drizzle/schema/leave.schema';
 
 export type LeavePolicy = InferSelectModel<typeof leavePolicies>;
 export type NewLeavePolicy = InferInsertModel<typeof leavePolicies>;

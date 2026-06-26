@@ -97,3 +97,14 @@ export const REDIS_EXAM_KEYS = {
       `exam:attendance-card:${schoolId}:${examId}:*`,
   },
 };
+
+export const REDIS_EMPLOYEE_LEAVE_KEY = {
+  LIST_TTL: 21600,
+  ITEM_TTL: 21600,
+  ASSIGNED_TTL: 21600,
+  APPLICATION_TTL: 21600,
+
+  LEAVE_TYPE: (schoolId: string) => `employee_leave:leave_types:${schoolId}`,
+  LEAVE_ASSIGNED: (schoolId: string) => `employee_leave:assigned:${schoolId}`,
+  LEAVE_APPLICATION: (schoolId: string) => `employee_leave:applications:${schoolId}`,
+};
