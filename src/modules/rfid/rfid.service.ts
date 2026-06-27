@@ -134,6 +134,14 @@ export class RfidService {
         );
         await this.redisService.delByPattern(`attendance:${student.school_id}:*`);
         this.logger.log(`Auto-marked attendance for student ${student.id} via RFID`);
+
+        await this.rfidRepository.autoMarkExamAttendance(
+          student.id,
+          student.school_id,
+          new Date(receivedAt),
+        );
+        await this.redisService.delByPattern(`exam:attendance:${student.school_id}:*`);
+        this.logger.log(`Auto-marked exam attendance for student ${student.id} via RFID`);
       }
 
       const staff = await this.rfidRepository.findStaffByRfid(rfid);

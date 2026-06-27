@@ -13,6 +13,8 @@ import { students, studentAcademicInfo } from '../../database/drizzle/schema/stu
 import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
 import { attendances } from '../../database/drizzle/schema/attendance.schema';
 import { staffAttendances } from '../../database/drizzle/schema/staff-attendance.schema';
+import { examSchedules } from '../../database/drizzle/schema/exam-schedule.schema';
+import { examAttendance } from '../../database/drizzle/schema/exam-attendance.schema';
 
 export type PersonRow = {
   id: string;
@@ -250,6 +252,60 @@ export class RfidRepository {
         marked_by: 'rfid-auto',
         is_late: false,
       })
+      .onConflictDoNothing();
+  }
+
+  async autoMarkExamAttendance(studentId: string, schoolId: string, tapDate: Date): Promise<void> {
+    const [year] = await this.db
+      .select({ id: academicYears.id })
+      .from(academicYears)
+      .where(and(eq(academicYears.school_id, schoolId), eq(academicYears.is_current, true)))
+      .limit(1);
+    if (!year) return;
+
+    const [info] = await this.db
+      .select({ class_id: studentAcademicInfo.class_id })
+      .from(studentAcademicInfo)
+      .where(
+        and(
+          eq(studentAcademicInfo.student_id, studentId),
+          eq(studentAcademicInfo.academic_year_id, year.id),
+        ),
+      )
+      .limit(1);
+    if (!info?.class_id) return;
+
+    const dateStr = tapDate.toISOString().split('T')[0];
+
+    const todaySchedules = await this.db
+      .select({ id: examSchedules.id, exam_id: examSchedules.exam_id })
+      .from(examSchedules)
+      .where(
+        and(
+          eq(examSchedules.school_id, schoolId),
+          eq(examSchedules.class_id, info.class_id),
+          eq(examSchedules.exam_date, dateStr),
+          eq(examSchedules.is_enabled, true),
+          eq(examSchedules.deleted, false),
+        ),
+      );
+    if (todaySchedules.length === 0) return;
+
+    // onConflictDoNothing: RFID never overwrites a manually set ABSENT
+    await this.db
+      .insert(examAttendance)
+      .values(
+        todaySchedules.map((sc) => ({
+          id: randomUUID(),
+          school_id: schoolId,
+          academic_year_id: year.id,
+          exam_id: sc.exam_id,
+          schedule_id: sc.id,
+          student_id: studentId,
+          status: 'PRESENT' as const,
+          marked_by: 'rfid-auto',
+        })),
+      )
       .onConflictDoNothing();
   }
 }
