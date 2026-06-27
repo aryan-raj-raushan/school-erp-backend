@@ -26,6 +26,7 @@ import {
   EmployeeLeaveView,
   LeaveApplication,
 } from './types/employee-leave.types';
+import { AdminApplyLeaveDto } from './dto/admin-apply-leave.dto';
 
 @Injectable()
 export class EmployeeLeaveService {
@@ -219,6 +220,63 @@ export class EmployeeLeaveService {
       }
       return application;
     });
+  }
+
+  async adminApplyLeave(
+    dto: AdminApplyLeaveDto,
+    schoolId: string,
+    adminId: string, // the admin performing the action
+  ): Promise<LeaveApplication> {
+    // 1. Verify the leave type is assigned to the TARGET employee for that academic year
+    const assignment = await this.leaveRepo.findAssignment(
+      dto.employee_id,
+      schoolId,
+      dto.leave_type_id,
+      dto.academic_year_id,
+    );
+    if (!assignment) {
+      throw new BadRequestException(
+        'This leave type is not assigned to the selected employee for the chosen academic year',
+      );
+    }
+
+    // 2. Date validation and total days
+    const start = new Date(dto.start_date);
+    const end = new Date(dto.end_date);
+    if (end < start) {
+      throw new BadRequestException('end_date must be on or after start_date');
+    }
+    const totalDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // 3. Leave type must be enabled + balance check
+    const leaveType = await this.findLeaveTypeById(dto.leave_type_id, schoolId);
+    if (!leaveType.is_enabled) {
+      throw new BadRequestException(`Leave type '${leaveType.leave_name}' is currently disabled`);
+    }
+
+    const remaining = leaveType.leave_count_days - assignment.used_days;
+    if (totalDays > remaining) {
+      throw new BadRequestException(
+        `Insufficient leave balance. Requested: ${totalDays} day(s), Available: ${remaining} day(s)`,
+      );
+    }
+
+    const application = await this.leaveRepo.createApplication({
+      id: generateId(),
+      school_id: schoolId,
+      academic_year_id: dto.academic_year_id,
+      employee_id: dto.employee_id, // ← target employee
+      leave_type_id: dto.leave_type_id,
+      start_date: dto.start_date,
+      end_date: dto.end_date,
+      total_days: totalDays,
+      reason: dto.reason ?? null,
+      status: 'PENDING',
+      created_by: adminId, // ← admin who applied on their behalf
+    });
+
+    await this.redisService.delByPattern(`${this.applicationKey(schoolId)}:list:*`);
+    return application;
   }
 
   async applyLeave(

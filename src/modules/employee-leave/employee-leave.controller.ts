@@ -24,6 +24,7 @@ import {
   ReviewLeaveDto,
   FilterLeaveApplicationDto,
 } from './dto/leave-application.dto';
+import { AdminApplyLeaveDto } from './dto/admin-apply-leave.dto';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // LEAVE TYPES  — /leave-types
@@ -146,6 +147,22 @@ export class LeaveAssignedController {
 @Controller('leave-applications')
 export class LeaveApplicationsController {
   constructor(private readonly leaveService: EmployeeLeaveService) {}
+
+  // ─── OWNER ? ADMIN: apply for leave ─────────────────────────────────────────────
+
+  @Post('admin-apply')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Admin applies leave on behalf of an employee (or themselves)',
+  })
+  async adminApply(
+    @Body() dto: AdminApplyLeaveDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() adminId: string,
+  ) {
+    const data = await this.leaveService.adminApplyLeave(dto, schoolId, adminId);
+    return ApiResponse.created(data, 'Leave application created successfully');
+  }
 
   // ─── Employee: apply for leave ─────────────────────────────────────────────
   @Post()
