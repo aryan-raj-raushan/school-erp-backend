@@ -254,8 +254,11 @@ export class ExamScheduleService {
   }
 
   async remove(id: string, schoolId: string): Promise<void> {
-    await this.findById(id, schoolId);
-    await this.repo.softDelete(id, schoolId);
-    await this.redis.delByPattern(REDIS_EXAM_KEYS.SCHEDULE.PATTERN(schoolId));
+    const schedule = await this.findById(id, schoolId);
+    await this.repo.hardDelete(id, schoolId);
+    await Promise.all([
+      this.redis.delByPattern(REDIS_EXAM_KEYS.SCHEDULE.PATTERN(schoolId)),
+      this.redis.delByPattern(REDIS_EXAM_KEYS.ATTENDANCE.PATTERN(schoolId, schedule.exam_id)),
+    ]);
   }
 }

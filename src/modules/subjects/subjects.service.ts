@@ -43,21 +43,26 @@ export class SubjectsService {
   }
 
   async create(dto: CreateSubjectDto, schoolId: string, createdBy: string): Promise<Subject> {
-    const subject = await this.subjectsRepo.create({
-      id: generateId(),
-      school_id: schoolId,
-      created_by: createdBy,
-      ...dto,
-      is_elective: dto.is_elective ?? false,
-      is_active: dto.is_active ?? true,
-    });
+    const { class_ids, ...rest } = dto;
+    const subject = await this.subjectsRepo.create(
+      {
+        id: generateId(),
+        school_id: schoolId,
+        created_by: createdBy,
+        ...rest,
+        is_elective: rest.is_elective ?? false,
+        is_active: rest.is_active ?? true,
+      },
+      class_ids ?? [],
+    );
     await this.redisService.delByPattern(`subjects:${schoolId}:*`);
     return subject;
   }
 
   async update(id: string, schoolId: string, dto: UpdateSubjectDto): Promise<Subject> {
     await this.findById(id, schoolId);
-    const updated = await this.subjectsRepo.update(id, schoolId, dto);
+    const { class_ids, ...rest } = dto;
+    const updated = await this.subjectsRepo.update(id, schoolId, rest, class_ids);
     await this.redisService.delByPattern(`subjects:${schoolId}:*`);
     return updated;
   }

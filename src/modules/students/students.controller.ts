@@ -195,6 +195,42 @@ export class StudentsController {
     );
   }
 
+  // ─── School-wide Guardians ────────────────────────────────────────────────
+
+  @Get('guardians/all')
+  @ApiOperation({ summary: 'List all student guardians/parents across the school' })
+  async findAllGuardians(
+    @GetSchoolId() schoolId: string,
+    @Query('search') search?: string,
+  ) {
+    const data = await this.studentsService.findAllGuardians(schoolId, search);
+    return ApiResponse.success(data, 'Guardians fetched successfully');
+  }
+
+  @Post(':id/guardians')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a guardian to a student' })
+  async addGuardian(
+    @Param('id', ParseUUIDPipe) studentId: string,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+    @Body() body: any,
+  ) {
+    const data = await this.studentsService.addGuardian(studentId, schoolId, body, userId);
+    return ApiResponse.created(data, 'Guardian added successfully');
+  }
+
+  @Delete('guardians/:guardianId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove a guardian record' })
+  async removeGuardian(
+    @Param('guardianId', ParseUUIDPipe) guardianId: string,
+    @GetSchoolId() schoolId: string,
+  ) {
+    await this.studentsService.removeGuardian(guardianId, schoolId);
+    return ApiResponse.noContent('Guardian removed');
+  }
+
   // ─── Pickup / Parent ID Card ──────────────────────────────────────────────
 
   @Get(':id/pickup-card')

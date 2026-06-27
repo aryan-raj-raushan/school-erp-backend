@@ -1,10 +1,32 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../../database/drizzle/drizzle.provider';
 import { ExamSittingPlan, NewExamSittingPlan } from './types/exam-sitting.types';
 import { FilterSittingPlanDto } from './dto/exam-sitting.dto';
 import { examSittingPlans } from '@database/drizzle/schema/exam-sitting-plan.schema';
+import { students, studentAcademicInfo } from '@database/drizzle/schema/students.schema';
+import { classes } from '@database/drizzle/schema/classes.schema';
+import { sections } from '@database/drizzle/schema/sections.schema';
+import { schools } from '@database/drizzle/schema/schools.schema';
+
+export interface StudentForShuffle {
+  student_id: string;
+  exam_id: string;
+  class_id: string;
+  section_id: string | null;
+  first_name: string;
+  last_name: string | null;
+  roll_number: string | null;
+}
+
+export interface RoomStudentRow {
+  seat_number: number | null;
+  student_name: string;
+  roll_number: string | null;
+  class_name: string;
+  section_name: string | null;
+}
 
 @Injectable()
 export class ExamSittingRepository {
@@ -125,5 +147,105 @@ export class ExamSittingRepository {
       .update(examSittingPlans)
       .set({ deleted: true, updated_at: new Date() })
       .where(and(eq(examSittingPlans.id, id), eq(examSittingPlans.school_id, schoolId)));
+  }
+
+  async softDeleteByExamIds(examIds: string[], schoolId: string): Promise<void> {
+    if (examIds.length === 0) return;
+    await this.db
+      .update(examSittingPlans)
+      .set({ deleted: true, updated_at: new Date() })
+      .where(
+        and(
+          eq(examSittingPlans.school_id, schoolId),
+          inArray(examSittingPlans.exam_id, examIds),
+          eq(examSittingPlans.deleted, false),
+        ),
+      );
+  }
+
+  /** Fetch all students per exam (via studentAcademicInfo join) for shuffle logic */
+  async findStudentsForExam(
+    examId: string,
+    classId: string,
+    academicYearId: string,
+    schoolId: string,
+  ): Promise<StudentForShuffle[]> {
+    const rows = await this.db
+      .select({
+        student_id: studentAcademicInfo.student_id,
+        class_id: studentAcademicInfo.class_id,
+        section_id: studentAcademicInfo.section_id,
+        first_name: students.first_name,
+        last_name: students.last_name,
+        roll_number: studentAcademicInfo.roll_number,
+      })
+      .from(studentAcademicInfo)
+      .innerJoin(students, eq(students.id, studentAcademicInfo.student_id))
+      .where(
+        and(
+          eq(studentAcademicInfo.school_id, schoolId),
+          eq(studentAcademicInfo.academic_year_id, academicYearId),
+          eq(studentAcademicInfo.class_id, classId),
+          eq(studentAcademicInfo.is_current, true),
+          eq(studentAcademicInfo.deleted, false),
+          eq(students.deleted, false),
+        ),
+      )
+      .orderBy(studentAcademicInfo.section_id, students.first_name)
+      .limit(2000);
+
+    return rows.map((r) => ({ ...r, exam_id: examId }));
+  }
+
+  async findSchoolName(schoolId: string): Promise<string> {
+    const [row] = await this.db
+      .select({ name: schools.name })
+      .from(schools)
+      .where(eq(schools.id, schoolId))
+      .limit(1);
+    return row?.name ?? '';
+  }
+
+  /** Fetch seated students in a room (joined with student info) for PDF */
+  async findRoomStudents(
+    examIds: string[],
+    hallDetailId: string,
+    schoolId: string,
+  ): Promise<RoomStudentRow[]> {
+    if (examIds.length === 0) return [];
+    const rows = await this.db
+      .select({
+        seat_number: examSittingPlans.seat_number,
+        first_name: students.first_name,
+        last_name: students.last_name,
+        roll_number: examSittingPlans.roll_number,
+        class_name: classes.name,
+        section_name: sections.name,
+      })
+      .from(examSittingPlans)
+      .innerJoin(studentAcademicInfo, eq(studentAcademicInfo.student_id, examSittingPlans.student_id))
+      .innerJoin(students, eq(students.id, examSittingPlans.student_id))
+      .innerJoin(classes, eq(classes.id, studentAcademicInfo.class_id))
+      .leftJoin(sections, eq(sections.id, studentAcademicInfo.section_id))
+      .where(
+        and(
+          eq(examSittingPlans.school_id, schoolId),
+          eq(examSittingPlans.hall_detail_id, hallDetailId),
+          inArray(examSittingPlans.exam_id, examIds),
+          eq(examSittingPlans.deleted, false),
+          eq(studentAcademicInfo.is_current, true),
+          eq(studentAcademicInfo.deleted, false),
+          eq(students.deleted, false),
+        ),
+      )
+      .orderBy(examSittingPlans.seat_number);
+
+    return rows.map((r) => ({
+      seat_number: r.seat_number,
+      student_name: [r.first_name, r.last_name].filter(Boolean).join(' '),
+      roll_number: r.roll_number,
+      class_name: r.class_name,
+      section_name: r.section_name ?? null,
+    }));
   }
 }

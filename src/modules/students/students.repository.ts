@@ -284,6 +284,68 @@ export class StudentsRepository {
 
   // ─── Parents ────────────────────────────────────────────────────────────────
 
+  async findAllGuardians(schoolId: string, search?: string): Promise<{
+    id: string; student_id: string; student_name: string; relation: string;
+    first_name: string; last_name: string | null; phone_number: string; dial_code: string | null;
+    email: string | null; occupation: string | null; is_primary: boolean; can_pickup: boolean;
+  }[]> {
+    const rows = await this.db
+      .select({
+        id: studentParents.id,
+        student_id: students.id,
+        student_first_name: students.first_name,
+        student_last_name: students.last_name,
+        relation: studentParents.relation,
+        first_name: studentParents.first_name,
+        last_name: studentParents.last_name,
+        phone_number: studentParents.phone_number,
+        dial_code: studentParents.dial_code,
+        email: studentParents.email,
+        occupation: studentParents.occupation,
+        is_primary: studentParents.is_primary,
+        can_pickup: studentParents.can_pickup,
+      })
+      .from(studentParents)
+      .innerJoin(students, eq(students.id, studentParents.student_id))
+      .where(and(
+        eq(studentParents.school_id, schoolId),
+        eq(studentParents.deleted, false),
+        eq(students.deleted, false),
+        ...(search ? [or(
+          ilike(studentParents.first_name, `%${search}%`),
+          ilike(studentParents.last_name, `%${search}%`),
+          ilike(studentParents.phone_number, `%${search}%`),
+          ilike(students.first_name, `%${search}%`),
+          ilike(students.last_name, `%${search}%`),
+        )] : []),
+      ))
+      .orderBy(students.first_name, studentParents.is_primary);
+    return rows.map((r) => ({
+      ...r,
+      student_name: [r.student_first_name, r.student_last_name].filter(Boolean).join(' '),
+    }));
+  }
+
+  async addGuardian(data: NewStudentParent): Promise<StudentParent> {
+    const [row] = await this.db.insert(studentParents).values(data).returning();
+    return row;
+  }
+
+  async findGuardianById(id: string, schoolId: string): Promise<StudentParent | null> {
+    const [row] = await this.db
+      .select()
+      .from(studentParents)
+      .where(and(eq(studentParents.id, id), eq(studentParents.school_id, schoolId)));
+    return row ?? null;
+  }
+
+  async removeGuardian(id: string, schoolId: string): Promise<void> {
+    await this.db
+      .update(studentParents)
+      .set({ deleted: true, updated_at: new Date() })
+      .where(and(eq(studentParents.id, id), eq(studentParents.school_id, schoolId)));
+  }
+
   async findParents(studentId: string, schoolId: string): Promise<StudentParent[]> {
     return this.db
       .select()

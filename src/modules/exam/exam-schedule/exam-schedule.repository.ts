@@ -158,11 +158,9 @@ export class ExamScheduleRepository {
     return row;
   }
 
-  async softDelete(id: string, schoolId: string): Promise<void> {
-    // Also delete sub-schedules
+  async hardDelete(id: string, schoolId: string): Promise<void> {
     await this.db
-      .update(examSchedules)
-      .set({ deleted: true, updated_at: new Date() })
+      .delete(examSchedules)
       .where(
         and(
           or(eq(examSchedules.id, id), eq(examSchedules.parent_schedule_id, id))!,

@@ -5,6 +5,7 @@ import {
   IsUUID,
   IsBoolean,
   IsInt,
+  IsArray,
   Matches,
   MaxLength,
   Min,
@@ -30,13 +31,11 @@ export class CreateSubjectDto {
   @Transform(({ value }) => StringUtils.trim(value)?.toUpperCase())
   code?: string;
 
-  @ApiPropertyOptional({ example: 'uuid-of-class', description: 'Null means school-wide subject' })
+  @ApiPropertyOptional({ example: ['uuid-of-class'], description: 'Classes this subject belongs to' })
   @IsOptional()
-  @IsUUID()
-  class_id?: string;
-
-  @IsOptional()
-  @IsUUID()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  class_ids?: string[];
 
   @ApiPropertyOptional({ example: 'uuid-of-class-detail', description: 'Links to a specific year/semester' })
   @IsOptional()

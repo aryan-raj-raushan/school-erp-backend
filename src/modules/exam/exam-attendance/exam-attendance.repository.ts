@@ -53,7 +53,10 @@ export class ExamAttendanceRepository {
       })
       .from(examAttendance)
       .innerJoin(students, eq(examAttendance.student_id, students.id))
-      .innerJoin(examSchedules, eq(examAttendance.schedule_id, examSchedules.id))
+      .innerJoin(
+        examSchedules,
+        and(eq(examAttendance.schedule_id, examSchedules.id), eq(examSchedules.deleted, false)),
+      )
       .where(and(...conditions))
       .orderBy(examAttendance.created_at)
       .limit(limit)
@@ -116,4 +119,5 @@ export class ExamAttendanceRepository {
         ),
       );
   }
+
 }

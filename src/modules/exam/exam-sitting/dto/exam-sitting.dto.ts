@@ -1,9 +1,10 @@
 import {
-  IsUUID, IsOptional, IsInt, IsString, IsArray, ValidateNested, Min, MaxLength,
+  IsUUID, IsOptional, IsInt, IsString, IsArray, IsBoolean, ValidateNested, Min, MaxLength,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { PartialType, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ExamPaginationDto } from '@shared/dto/exam-pagination.dto';
+
 
 export class CreateSittingPlanEntryDto {
   @ApiProperty({ example: 'uuid-of-student' })
@@ -50,4 +51,41 @@ export class FilterSittingPlanDto extends ExamPaginationDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() exam_id?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() hall_detail_id?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() student_id?: string;
+}
+
+export class AutoShuffleSittingPlanDto {
+  @ApiProperty({ type: [String], description: 'Exam IDs to include (one per class)' })
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  exam_ids: string[];
+
+  @ApiProperty({ example: 'uuid-of-academic-year' })
+  @IsUUID()
+  academic_year_id: string;
+
+  @ApiProperty({ type: [String], description: 'Hall detail IDs to fill in order' })
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  hall_detail_ids: string[];
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  clear_existing?: boolean;
+}
+
+export class RoomPdfQueryDto {
+  @ApiProperty({ type: [String] })
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  exam_ids: string[];
+
+  @ApiProperty({ example: 'uuid-of-hall-detail' })
+  @IsUUID()
+  hall_detail_id: string;
+
+  @ApiProperty({ example: 'uuid-of-academic-year' })
+  @IsUUID()
+  academic_year_id: string;
 }

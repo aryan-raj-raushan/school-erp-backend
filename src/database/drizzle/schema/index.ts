@@ -9,6 +9,7 @@ export * from './academic-years.schema';
 export * from './classes.schema';
 export * from './sections.schema';
 export * from './subjects.schema';
+export * from './subject-classes.schema';
 export * from './students.schema';
 // export * from './student-documents.schema';
 export * from './subscriptions.schema';

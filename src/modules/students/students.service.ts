@@ -372,6 +372,43 @@ export class StudentsService {
     });
   }
 
+  async findAllGuardians(schoolId: string, search?: string) {
+    return this.repo.findAllGuardians(schoolId, search);
+  }
+
+  async addGuardian(studentId: string, schoolId: string, data: {
+    relation: string; first_name: string; last_name?: string;
+    phone_number: string; dial_code?: string; email?: string;
+    occupation?: string; is_primary?: boolean; can_pickup?: boolean;
+  }, createdBy: string) {
+    const student = await this.repo.findById(studentId, schoolId);
+    if (!student) throw new NotFoundException(`Student '${studentId}' not found`);
+    const parent = await this.repo.addGuardian({
+      id: generateId(),
+      school_id: schoolId,
+      student_id: studentId,
+      relation: data.relation as NewStudentParent['relation'],
+      first_name: data.first_name,
+      last_name: data.last_name,
+      phone_number: data.phone_number,
+      dial_code: data.dial_code ?? '+91',
+      email: data.email,
+      occupation: data.occupation,
+      is_primary: data.is_primary ?? false,
+      can_pickup: data.can_pickup ?? false,
+    });
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:${studentId}*`);
+    return parent;
+  }
+
+  async removeGuardian(guardianId: string, schoolId: string) {
+    const guardian = await this.repo.findGuardianById(guardianId, schoolId);
+    await this.repo.removeGuardian(guardianId, schoolId);
+    if (guardian?.student_id) {
+      await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:${guardian.student_id}*`);
+    }
+  }
+
   async getPickupCardData(studentId: string, schoolId: string) {
     const key = `${this.cacheKey(schoolId)}:pickup:${studentId}`;
     return this.redisService.getOrSet(key, REDIS_STUDENT_KEY.CACHE_TTL, async () => {
