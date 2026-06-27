@@ -171,7 +171,7 @@ export class ExamResultsRepository {
       .insert(reportCards)
       .values(data)
       .onConflictDoUpdate({
-        target: [reportCards.student_id, reportCards.exam_id],
+        target: [reportCards.school_id, reportCards.exam_id, reportCards.student_id],
         set: {
           pdf_url: sql`excluded.pdf_url`,
           pdf_s3_key: sql`excluded.pdf_s3_key`,
