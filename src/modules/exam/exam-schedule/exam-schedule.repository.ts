@@ -1,10 +1,11 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql, or } from 'drizzle-orm';
+import { eq, and, sql, or, isNull, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../../database/drizzle/drizzle.provider';
 import { ExamSchedule, NewExamSchedule } from './types/exam-schedule.types';
 import { FilterExamScheduleDto } from './dto/exam-schedule.dto';
 import { examSchedules } from '@database/drizzle/schema/exam-schedule.schema';
+import { sections } from '@database/drizzle/schema/sections.schema';
 
 @Injectable()
 export class ExamScheduleRepository {
@@ -16,6 +17,7 @@ export class ExamScheduleRepository {
     if (filters.academic_year_id)
       conditions.push(eq(examSchedules.academic_year_id, filters.academic_year_id));
     if (filters.class_id) conditions.push(eq(examSchedules.class_id, filters.class_id));
+    if (filters.section_id) conditions.push(eq(examSchedules.section_id, filters.section_id));
     if (filters.exam_id) conditions.push(eq(examSchedules.exam_id, filters.exam_id));
     if (filters.subject_id) conditions.push(eq(examSchedules.subject_id, filters.subject_id));
     if (filters.subject_type) conditions.push(eq(examSchedules.subject_type, filters.subject_type));
@@ -24,18 +26,19 @@ export class ExamScheduleRepository {
     return conditions;
   }
 
-  async findAll(schoolId: string, filters: FilterExamScheduleDto): Promise<ExamSchedule[]> {
+  async findAll(schoolId: string, filters: FilterExamScheduleDto): Promise<(ExamSchedule & { section_name: string | null })[]> {
     const conditions = this.buildConditions(schoolId, filters);
     const limit = filters.limit ?? 50;
     const offset = ((filters.page ?? 1) - 1) * limit;
 
     return this.db
-      .select()
+      .select({ ...getTableColumns(examSchedules), section_name: sections.name })
       .from(examSchedules)
+      .leftJoin(sections, eq(examSchedules.section_id, sections.id))
       .where(and(...conditions))
       .orderBy(examSchedules.exam_date, examSchedules.start_time)
       .limit(limit)
-      .offset(offset);
+      .offset(offset) as any;
   }
 
   async count(schoolId: string, filters: FilterExamScheduleDto): Promise<number> {
@@ -111,6 +114,8 @@ export class ExamScheduleRepository {
           eq(examSchedules.exam_id, examId),
           eq(examSchedules.class_id, classId),
           eq(examSchedules.subject_id, subjectId),
+          eq(examSchedules.subject_type, 'MAIN_EXAM'),
+          isNull(examSchedules.parent_schedule_id),
           eq(examSchedules.deleted, false),
         ),
       );

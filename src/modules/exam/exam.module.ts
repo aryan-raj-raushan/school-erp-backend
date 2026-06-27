@@ -23,7 +23,7 @@ import { ExamAttendanceService } from './exam-attendance/exam-attendance.service
 import { ExamAttendanceRepository } from './exam-attendance/exam-attendance.repository';
 
 // Hall
-import { ExamHallPlanController, ExamHallDetailController } from './exam-hall/exam-hall.controller';
+import { ExamHallDetailController } from './exam-hall/exam-hall.controller';
 import { ExamHallService } from './exam-hall/exam-hall.service';
 import { ExamHallRepository } from './exam-hall/exam-hall.repository';
 
@@ -48,7 +48,6 @@ import { ExamAdmitCardRepository } from './exam-admit-card/exam-admit-card.repos
     ExamScheduleController,
     ExamAttendanceController,
     ExamAttendanceCardController,
-    ExamHallPlanController,
     ExamHallDetailController,
     ExamSittingController,
     ExamAdmitCardController,

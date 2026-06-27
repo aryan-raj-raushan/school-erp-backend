@@ -1,22 +1,19 @@
 import { pgTable, varchar, boolean, timestamp, integer } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
-import { examHallPlans } from './exam-hall-plan.schema';
 
-/**
- * Module 7 – Exam Hall Details
- * Individual rooms that belong to an Exam Hall Plan.
- */
 export const examHallDetails = pgTable('exam_hall_details', {
   id: varchar('id', { length: 36 }).primaryKey(),
   school_id: varchar('school_id', { length: 36 })
     .notNull()
     .references(() => schools.id, { onDelete: 'cascade' }),
-  hall_plan_id: varchar('hall_plan_id', { length: 36 })
-    .notNull()
-    .references(() => examHallPlans.id, { onDelete: 'cascade' }),
+  // hall_plan_id retained as nullable for existing rows — FK removed
+  hall_plan_id: varchar('hall_plan_id', { length: 36 }),
 
-  room_name: varchar('room_name', { length: 150 }).notNull(), // "Room 101", "Sports Hall"
+  room_name: varchar('room_name', { length: 150 }).notNull(),
   sitting_capacity: integer('sitting_capacity').notNull().default(0),
+  /** Optional grid layout – when set, sitting_capacity = grid_rows × grid_cols */
+  grid_rows: integer('grid_rows'),
+  grid_cols: integer('grid_cols'),
 
   is_enabled: boolean('is_enabled').default(true).notNull(),
   deleted: boolean('deleted').default(false).notNull(),

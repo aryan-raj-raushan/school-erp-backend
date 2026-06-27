@@ -141,6 +141,11 @@ export class CreateExamScheduleBulkDto {
   @IsUUID()
   class_id: string;
 
+  @ApiPropertyOptional({ example: 'uuid-of-section' })
+  @IsOptional()
+  @IsUUID()
+  section_id?: string;
+
   @ApiProperty({ type: [CreateExamScheduleItemDto] })
   @IsArray()
   @ValidateNested({ each: true })
@@ -160,6 +165,11 @@ export class FilterExamScheduleDto extends ExamPaginationDto {
   @IsOptional()
   @IsUUID()
   class_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  section_id?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -52,7 +52,6 @@ export * from './exam.schema';
 export * from './exam-attendance.schema';
 export * from './exam-grading.schema';
 export * from './exam-hall-details.schema';
-export * from './exam-hall-plan.schema';
 export * from './exam-schedule.schema';
 export * from './exam-sitting-plan.schema';
 

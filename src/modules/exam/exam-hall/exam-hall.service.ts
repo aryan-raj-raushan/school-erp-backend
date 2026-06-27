@@ -1,15 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ExamHallRepository } from './exam-hall.repository';
 import { RedisService } from '../../redis/redis.service';
-import {
-  CreateHallPlanDto,
-  UpdateHallPlanDto,
-  FilterHallPlanDto,
-  CreateHallDetailDto,
-  UpdateHallDetailDto,
-  FilterHallDetailDto,
-} from './dto/exam-hall.dto';
-import { ExamHallPlan, ExamHallDetail } from './types/exam-hall.types';
+import { CreateHallDetailDto, UpdateHallDetailDto, FilterHallDetailDto } from './dto/exam-hall.dto';
+import { ExamHallDetail } from './types/exam-hall.types';
 import { REDIS_EXAM_KEYS } from '@shared/redis/redis-key';
 import { PaginationResponse } from '@shared/responses/api-response';
 import { generateId } from '@utils/uuid.utils';
@@ -21,66 +14,11 @@ export class ExamHallService {
     private readonly redis: RedisService,
   ) {}
 
-  // ── Hall Plans ────────────────────────────────────────────────────────────
-
-  async findAllPlans(
-    schoolId: string,
-    filters: FilterHallPlanDto,
-  ): Promise<PaginationResponse<ExamHallPlan>> {
-    const key = `${REDIS_EXAM_KEYS.HALL_PLAN.LIST(schoolId)}:${JSON.stringify(filters)}`;
-    return this.redis.getOrSet(key, REDIS_EXAM_KEYS.LIST_TTL, async () => {
-      const [items, total] = await Promise.all([
-        this.repo.findAllPlans(schoolId, filters),
-        this.repo.countPlans(schoolId, filters),
-      ]);
-      return PaginationResponse.of(items, total, filters);
-    });
-  }
-
-  async findPlanById(id: string, schoolId: string): Promise<ExamHallPlan> {
-    const key = REDIS_EXAM_KEYS.HALL_PLAN.ITEM(schoolId, id);
-    return this.redis.getOrSet(key, REDIS_EXAM_KEYS.ITEM_TTL, async () => {
-      const plan = await this.repo.findPlanById(id, schoolId);
-      if (!plan) throw new NotFoundException(`Hall plan '${id}' not found`);
-      return plan;
-    });
-  }
-
-  async createPlan(
-    dto: CreateHallPlanDto,
-    schoolId: string,
-    createdBy: string,
-  ): Promise<ExamHallPlan> {
-    const plan = await this.repo.createPlan({
-      id: generateId(),
-      school_id: schoolId,
-      created_by: createdBy,
-      ...dto,
-    });
-    await this.redis.delByPattern(REDIS_EXAM_KEYS.HALL_PLAN.PATTERN(schoolId));
-    return plan;
-  }
-
-  async updatePlan(id: string, schoolId: string, dto: UpdateHallPlanDto): Promise<ExamHallPlan> {
-    await this.findPlanById(id, schoolId);
-    const updated = await this.repo.updatePlan(id, schoolId, dto);
-    await this.redis.delByPattern(REDIS_EXAM_KEYS.HALL_PLAN.PATTERN(schoolId));
-    return updated;
-  }
-
-  async removePlan(id: string, schoolId: string): Promise<void> {
-    await this.findPlanById(id, schoolId);
-    await this.repo.softDeletePlan(id, schoolId);
-    await this.redis.delByPattern(REDIS_EXAM_KEYS.HALL_PLAN.PATTERN(schoolId));
-  }
-
-  // ── Hall Details ──────────────────────────────────────────────────────────
-
   async findAllDetails(
     schoolId: string,
     filters: FilterHallDetailDto,
   ): Promise<PaginationResponse<ExamHallDetail>> {
-    const key = `${REDIS_EXAM_KEYS.HALL_DETAIL.LIST(schoolId, filters.hall_plan_id ?? 'all')}:${JSON.stringify(filters)}`;
+    const key = `${REDIS_EXAM_KEYS.HALL_DETAIL.LIST(schoolId, 'all')}:${JSON.stringify(filters)}`;
     return this.redis.getOrSet(key, REDIS_EXAM_KEYS.LIST_TTL, async () => {
       const [items, total] = await Promise.all([
         this.repo.findAllDetails(schoolId, filters),
@@ -104,13 +42,21 @@ export class ExamHallService {
     schoolId: string,
     createdBy: string,
   ): Promise<ExamHallDetail> {
-    // Verify plan exists
-    await this.findPlanById(dto.hall_plan_id, schoolId);
+    const rows = Number(dto.grid_rows);
+    const cols = Number(dto.grid_cols);
+    const gridMode = rows >= 1 && cols >= 1;
+    const capacity = gridMode ? rows * cols : (dto.sitting_capacity ?? 0);
+
     const detail = await this.repo.createDetail({
       id: generateId(),
       school_id: schoolId,
+      room_name: dto.room_name,
+      sitting_capacity: capacity,
+      grid_rows: dto.grid_rows ?? null,
+      grid_cols: dto.grid_cols ?? null,
+      is_enabled: dto.is_enabled ?? true,
+      deleted: false,
       created_by: createdBy,
-      ...dto,
     });
     await this.redis.delByPattern(REDIS_EXAM_KEYS.HALL_DETAIL.PATTERN(schoolId));
     return detail;
@@ -122,7 +68,18 @@ export class ExamHallService {
     dto: UpdateHallDetailDto,
   ): Promise<ExamHallDetail> {
     await this.findDetailById(id, schoolId);
-    const updated = await this.repo.updateDetail(id, schoolId, dto);
+    const rows = dto.grid_rows ? Number(dto.grid_rows) : undefined;
+    const cols = dto.grid_cols ? Number(dto.grid_cols) : undefined;
+    const gridMode = rows && cols;
+    const capacity = gridMode ? rows * cols : dto.sitting_capacity;
+
+    const updated = await this.repo.updateDetail(id, schoolId, {
+      room_name: dto.room_name,
+      sitting_capacity: capacity,
+      grid_rows: dto.grid_rows,
+      grid_cols: dto.grid_cols,
+      is_enabled: dto.is_enabled,
+    });
     await this.redis.delByPattern(REDIS_EXAM_KEYS.HALL_DETAIL.PATTERN(schoolId));
     return updated;
   }

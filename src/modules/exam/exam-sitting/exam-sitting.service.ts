@@ -53,9 +53,8 @@ export class ExamSittingService {
     schoolId: string,
     createdBy: string,
   ): Promise<ExamSittingPlan[]> {
-    const { exam_id, academic_year_id, hall_plan_id, entries } = dto;
+    const { exam_id, academic_year_id, entries } = dto;
 
-    // Pre-load room capacities once
     const roomCapacityMap = new Map<string, number>();
     const roomOccupiedMap = new Map<string, number>();
 
@@ -63,15 +62,10 @@ export class ExamSittingService {
       if (!roomCapacityMap.has(entry.hall_detail_id)) {
         const detail = await this.hallService.findDetailById(entry.hall_detail_id, schoolId);
         roomCapacityMap.set(entry.hall_detail_id, detail.sitting_capacity);
-        const occupied = await this.repo.countSeatsOccupied(
-          exam_id,
-          entry.hall_detail_id,
-          schoolId,
-        );
+        const occupied = await this.repo.countSeatsOccupied(exam_id, entry.hall_detail_id, schoolId);
         roomOccupiedMap.set(entry.hall_detail_id, occupied);
       }
 
-      // Check duplicate student assignment
       const existing = await this.repo.findByStudentAndExam(entry.student_id, exam_id, schoolId);
       if (existing) {
         throw new ConflictException(
@@ -79,7 +73,6 @@ export class ExamSittingService {
         );
       }
 
-      // Validate capacity
       const capacity = roomCapacityMap.get(entry.hall_detail_id)!;
       const occupied = roomOccupiedMap.get(entry.hall_detail_id)!;
       if (occupied >= capacity) {
@@ -87,8 +80,6 @@ export class ExamSittingService {
           `Room '${entry.hall_detail_id}' has reached its sitting capacity of ${capacity}`,
         );
       }
-
-      // Increment in-memory count for subsequent entries in this batch
       roomOccupiedMap.set(entry.hall_detail_id, occupied + 1);
     }
 
@@ -97,7 +88,6 @@ export class ExamSittingService {
       school_id: schoolId,
       academic_year_id,
       exam_id,
-      hall_plan_id,
       hall_detail_id: entry.hall_detail_id,
       student_id: entry.student_id,
       seat_number: entry.seat_number ?? null,
@@ -115,11 +105,7 @@ export class ExamSittingService {
 
     if (dto.hall_detail_id && dto.hall_detail_id !== existing.hall_detail_id) {
       const detail = await this.hallService.findDetailById(dto.hall_detail_id, schoolId);
-      const occupied = await this.repo.countSeatsOccupied(
-        existing.exam_id,
-        dto.hall_detail_id,
-        schoolId,
-      );
+      const occupied = await this.repo.countSeatsOccupied(existing.exam_id, dto.hall_detail_id, schoolId);
       if (occupied >= detail.sitting_capacity) {
         throw new BadRequestException(
           `Room '${dto.hall_detail_id}' has reached its sitting capacity of ${detail.sitting_capacity}`,

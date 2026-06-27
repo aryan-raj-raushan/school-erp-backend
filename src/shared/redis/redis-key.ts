@@ -57,13 +57,6 @@ export const REDIS_EXAM_KEYS = {
     SCHOOL_PATTERN: (schoolId: string) => `exam:attendance:${schoolId}:*`,
   },
 
-  // ── Hall Plan ────────────────────────────────────────────────────────────
-  HALL_PLAN: {
-    LIST: (schoolId: string) => `exam:hall-plan:${schoolId}:list`,
-    ITEM: (schoolId: string, id: string) => `exam:hall-plan:${schoolId}:${id}`,
-    PATTERN: (schoolId: string) => `exam:hall-plan:${schoolId}:*`,
-  },
-
   // ── Hall Details ─────────────────────────────────────────────────────────
   HALL_DETAIL: {
     LIST: (schoolId: string, planId: string) => `exam:hall-detail:${schoolId}:${planId}:list`,

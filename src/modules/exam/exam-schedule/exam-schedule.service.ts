@@ -72,6 +72,7 @@ export class ExamScheduleService {
     createdBy: string,
     parentId?: string,
     subjectId?: string,
+    sectionId?: string,
   ): NewExamSchedule {
     const isMain = !parentId;
     const mainItem = item as CreateExamScheduleItemDto;
@@ -80,6 +81,7 @@ export class ExamScheduleService {
       school_id: schoolId,
       academic_year_id: academicYearId,
       class_id: classId,
+      section_id: sectionId ?? null,
       exam_id: examId,
       subject_id: subjectId ?? (isMain ? mainItem.subject_id : ''),
       subject_name: item.subject_name,
@@ -141,11 +143,14 @@ export class ExamScheduleService {
     schoolId: string,
     createdBy: string,
   ): Promise<ExamSchedule[]> {
-    const { exam_id, academic_year_id, class_id, schedules } = dto;
+    const { exam_id, academic_year_id, class_id, section_id, schedules } = dto;
 
     // Validate each main item
     for (const item of schedules) {
-      await this.validateNoDuplicate(schoolId, exam_id, class_id, item.subject_id);
+      const itemType = item.subject_type ?? SubjectType.MAIN_EXAM;
+      if (itemType === SubjectType.MAIN_EXAM) {
+        await this.validateNoDuplicate(schoolId, exam_id, class_id, item.subject_id);
+      }
       await this.validateNoConflict(
         schoolId,
         exam_id,
@@ -184,6 +189,7 @@ export class ExamScheduleService {
           createdBy,
           undefined,
           item.subject_id,
+          section_id,
         ),
       );
       rows[rows.length - 1].id = parentId;
@@ -200,6 +206,7 @@ export class ExamScheduleService {
               createdBy,
               parentId,
               item.subject_id,
+              section_id,
             ),
           );
         }

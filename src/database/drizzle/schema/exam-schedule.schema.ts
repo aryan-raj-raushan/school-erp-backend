@@ -11,6 +11,7 @@ import {
 import { schools } from './schools.schema';
 import { academicYears } from './academic-years.schema';
 import { classes } from './classes.schema';
+import { sections } from './sections.schema';
 import { exams } from './exams.schema';
 import { subjects } from './subjects.schema';
 import { schoolUsers } from './school-users.schema';
@@ -38,6 +39,9 @@ export const examSchedules = pgTable('exam_schedules', {
   class_id: varchar('class_id', { length: 36 })
     .notNull()
     .references(() => classes.id, { onDelete: 'cascade' }),
+  section_id: varchar('section_id', { length: 36 }).references(() => sections.id, {
+    onDelete: 'set null',
+  }),
   exam_id: varchar('exam_id', { length: 36 })
     .notNull()
     .references(() => exams.id, { onDelete: 'cascade' }),

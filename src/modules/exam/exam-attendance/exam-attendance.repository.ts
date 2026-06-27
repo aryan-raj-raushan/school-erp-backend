@@ -5,6 +5,14 @@ import { DrizzleDB } from '../../../database/drizzle/drizzle.provider';
 import { ExamAttendance, NewExamAttendance } from './types/exam-attendance.types';
 import { FilterAttendanceDto } from './dto/exam-attendance.dto';
 import { examAttendance } from '@database/drizzle/schema/exam-attendance.schema';
+import { students } from '@database/drizzle/schema/students.schema';
+import { examSchedules } from '@database/drizzle/schema/exam-schedule.schema';
+
+export type EnrichedExamAttendance = ExamAttendance & {
+  student_name: string;
+  subject_name: string;
+  exam_date: string;
+};
 
 @Injectable()
 export class ExamAttendanceRepository {
@@ -21,13 +29,31 @@ export class ExamAttendanceRepository {
     return conditions;
   }
 
-  async findAll(schoolId: string, filters: FilterAttendanceDto): Promise<ExamAttendance[]> {
+  async findAll(schoolId: string, filters: FilterAttendanceDto): Promise<EnrichedExamAttendance[]> {
     const conditions = this.buildConditions(schoolId, filters);
     const limit = filters.limit ?? 100;
     const offset = ((filters.page ?? 1) - 1) * limit;
     return this.db
-      .select()
+      .select({
+        id: examAttendance.id,
+        school_id: examAttendance.school_id,
+        academic_year_id: examAttendance.academic_year_id,
+        exam_id: examAttendance.exam_id,
+        schedule_id: examAttendance.schedule_id,
+        student_id: examAttendance.student_id,
+        status: examAttendance.status,
+        remarks: examAttendance.remarks,
+        marked_by: examAttendance.marked_by,
+        deleted: examAttendance.deleted,
+        created_at: examAttendance.created_at,
+        updated_at: examAttendance.updated_at,
+        student_name: sql<string>`concat(${students.first_name}, ' ', coalesce(${students.last_name}, ''))`,
+        subject_name: examSchedules.subject_name,
+        exam_date: examSchedules.exam_date,
+      })
       .from(examAttendance)
+      .innerJoin(students, eq(examAttendance.student_id, students.id))
+      .innerJoin(examSchedules, eq(examAttendance.schedule_id, examSchedules.id))
       .where(and(...conditions))
       .orderBy(examAttendance.created_at)
       .limit(limit)

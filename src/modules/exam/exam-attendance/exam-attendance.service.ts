@@ -3,6 +3,7 @@ import { ExamAttendanceRepository } from './exam-attendance.repository';
 import { RedisService } from '../../redis/redis.service';
 import { BulkMarkAttendanceDto, FilterAttendanceDto } from './dto/exam-attendance.dto';
 import { ExamAttendance, NewExamAttendance } from './types/exam-attendance.types';
+import { EnrichedExamAttendance } from './exam-attendance.repository';
 import { PaginationResponse } from '@shared/responses/api-response';
 import { REDIS_EXAM_KEYS } from '@shared/redis/redis-key';
 import { generateId } from '@utils/uuid.utils';
@@ -17,7 +18,7 @@ export class ExamAttendanceService {
   async findAll(
     schoolId: string,
     filters: FilterAttendanceDto,
-  ): Promise<PaginationResponse<ExamAttendance>> {
+  ): Promise<PaginationResponse<EnrichedExamAttendance>> {
     const key = `${REDIS_EXAM_KEYS.ATTENDANCE.LIST(schoolId, filters.exam_id ?? 'all', filters.schedule_id ?? 'all')}:${JSON.stringify(filters)}`;
     return this.redis.getOrSet(key, REDIS_EXAM_KEYS.LIST_TTL, async () => {
       const [items, total] = await Promise.all([

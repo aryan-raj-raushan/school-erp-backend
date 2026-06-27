@@ -88,8 +88,8 @@ export class ExamAdmitCardService {
           name: `${info.firstName} ${info.lastName ?? ''}`.trim(),
           admissionNumber: info.admissionNumber,
           rollNumber: info.rollNumber ?? undefined,
-          className: info.classId, // caller resolves display names
-          sectionName: info.sectionId ?? undefined,
+          className: info.className ?? info.classId,
+          sectionName: info.sectionName ?? undefined,
           profileImage: info.profileImage ?? undefined,
         },
         exam: {

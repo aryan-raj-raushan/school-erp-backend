@@ -1,12 +1,5 @@
 import {
-  IsUUID,
-  IsOptional,
-  IsInt,
-  IsString,
-  IsArray,
-  ValidateNested,
-  Min,
-  MaxLength,
+  IsUUID, IsOptional, IsInt, IsString, IsArray, ValidateNested, Min, MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PartialType, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -43,10 +36,6 @@ export class CreateSittingPlanBulkDto {
   @IsUUID()
   academic_year_id: string;
 
-  @ApiProperty({ example: 'uuid-of-hall-plan' })
-  @IsUUID()
-  hall_plan_id: string;
-
   @ApiProperty({ type: [CreateSittingPlanEntryDto] })
   @IsArray()
   @ValidateNested({ each: true })
@@ -57,28 +46,8 @@ export class CreateSittingPlanBulkDto {
 export class UpdateSittingPlanDto extends PartialType(CreateSittingPlanEntryDto) {}
 
 export class FilterSittingPlanDto extends ExamPaginationDto {
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  academic_year_id?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  exam_id?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  hall_plan_id?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  hall_detail_id?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  student_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() academic_year_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() exam_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() hall_detail_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() student_id?: string;
 }

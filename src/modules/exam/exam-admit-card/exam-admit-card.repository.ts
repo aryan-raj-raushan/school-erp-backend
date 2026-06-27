@@ -4,6 +4,8 @@ import { DRIZZLE_ORM } from '../../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../../database/drizzle/drizzle.provider';
 import { students, studentAcademicInfo } from '../../../database/drizzle/schema/students.schema';
 import { schools } from '../../../database/drizzle/schema/schools.schema';
+import { classes } from '../../../database/drizzle/schema/classes.schema';
+import { sections } from '../../../database/drizzle/schema/sections.schema';
 import { exams } from '@database/drizzle/schema/exam.schema';
 import { examSchedules } from '@database/drizzle/schema/exam-schedule.schema';
 
@@ -30,9 +32,13 @@ export class ExamAdmitCardRepository {
         rollNumber: studentAcademicInfo.roll_number,
         classId: studentAcademicInfo.class_id,
         sectionId: studentAcademicInfo.section_id,
+        className: classes.name,
+        sectionName: sections.name,
       })
       .from(studentAcademicInfo)
       .innerJoin(students, eq(studentAcademicInfo.student_id, students.id))
+      .leftJoin(classes, eq(studentAcademicInfo.class_id, classes.id))
+      .leftJoin(sections, eq(studentAcademicInfo.section_id, sections.id))
       .where(
         and(
           eq(studentAcademicInfo.student_id, studentId),

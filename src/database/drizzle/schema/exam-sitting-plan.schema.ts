@@ -2,7 +2,6 @@ import { pgTable, varchar, boolean, timestamp, integer } from 'drizzle-orm/pg-co
 import { schools } from './schools.schema';
 import { academicYears } from './academic-years.schema';
 import { exams } from './exam.schema';
-import { examHallPlans } from './exam-hall-plan.schema';
 import { examHallDetails } from './exam-hall-details.schema';
 import { students } from './students.schema';
 
@@ -22,9 +21,8 @@ export const examSittingPlans = pgTable('exam_sitting_plans', {
   exam_id: varchar('exam_id', { length: 36 })
     .notNull()
     .references(() => exams.id, { onDelete: 'cascade' }),
-  hall_plan_id: varchar('hall_plan_id', { length: 36 })
-    .notNull()
-    .references(() => examHallPlans.id, { onDelete: 'cascade' }),
+  // hall_plan_id retained as nullable for existing rows — FK removed
+  hall_plan_id: varchar('hall_plan_id', { length: 36 }),
   hall_detail_id: varchar('hall_detail_id', { length: 36 })
     .notNull()
     .references(() => examHallDetails.id, { onDelete: 'cascade' }),

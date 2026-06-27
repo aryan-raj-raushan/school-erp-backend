@@ -18,8 +18,6 @@ export class ExamSittingRepository {
     if (filters.academic_year_id)
       conditions.push(eq(examSittingPlans.academic_year_id, filters.academic_year_id));
     if (filters.exam_id) conditions.push(eq(examSittingPlans.exam_id, filters.exam_id));
-    if (filters.hall_plan_id)
-      conditions.push(eq(examSittingPlans.hall_plan_id, filters.hall_plan_id));
     if (filters.hall_detail_id)
       conditions.push(eq(examSittingPlans.hall_detail_id, filters.hall_detail_id));
     if (filters.student_id) conditions.push(eq(examSittingPlans.student_id, filters.student_id));

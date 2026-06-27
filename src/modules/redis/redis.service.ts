@@ -15,7 +15,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   // L1 in-memory cache — eliminates Upstash round-trip for hot data
   // TTL is short (process-local, no cross-instance sync needed for ERP scale)
   private readonly l1Cache = new Map<string, L1Entry<unknown>>();
-  private static readonly L1_TTL_MS = 30_000; // 30s — permissions + frequent GETs
+  private static readonly L1_TTL_MS = 0; // disabled — rely on Redis only
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -239,16 +239,11 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       const staleAfterMs = ttlSeconds * 1000;
 
       if (age > staleAfterMs) {
-        // STALE — serve immediately, refresh in background (one worker via lock)
-        const lock = `cache_refresh_lock:${key}`;
-        const got = await this.client.set(lock, '1', 'EX', 30, 'NX');
-        if (got) {
-          this.logger.debug(`CACHE STALE [${key}] age=${Math.round(age / 1000)}s — bg refresh`);
-          factory()
-            .then((v) => this.setCacheEntry(key, v))
-            .catch((e) => this.logger.warn(`BG refresh failed [${key}]: ${e}`))
-            .finally(() => this.client.del(lock));
-        }
+        // STALE — refresh synchronously so caller always gets fresh data
+        this.logger.debug(`CACHE STALE [${key}] age=${Math.round(age / 1000)}s — sync refresh`);
+        const fresh = await factory();
+        await this.setCacheEntry(key, fresh);
+        return fresh;
       } else {
         this.logger.debug(
           `CACHE HIT   [${key}] age=${Math.round(age / 1000)}s  ${Date.now() - start}ms`,
