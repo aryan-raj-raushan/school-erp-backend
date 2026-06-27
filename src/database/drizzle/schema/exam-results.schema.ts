@@ -81,51 +81,61 @@ export const examResults = pgTable(
  * Report Card — generated PDF per student per exam term.
  * A class-wide generation will insert N rows (one per student).
  */
-export const reportCards = pgTable('report_cards', {
-  id: varchar('id', { length: 36 }).primaryKey(),
-  school_id: varchar('school_id', { length: 36 })
-    .notNull()
-    .references(() => schools.id, { onDelete: 'cascade' }),
-  academic_year_id: varchar('academic_year_id', { length: 36 })
-    .notNull()
-    .references(() => academicYears.id, { onDelete: 'cascade' }),
-  exam_id: varchar('exam_id', { length: 36 })
-    .notNull()
-    .references(() => exams.id, { onDelete: 'cascade' }),
-  class_id: varchar('class_id', { length: 36 })
-    .notNull()
-    .references(() => classes.id, { onDelete: 'cascade' }),
-  section_id: varchar('section_id', { length: 36 }).references(() => sections.id, {
-    onDelete: 'set null',
+export const reportCards = pgTable(
+  'report_cards',
+  {
+    id: varchar('id', { length: 36 }).primaryKey(),
+    school_id: varchar('school_id', { length: 36 })
+      .notNull()
+      .references(() => schools.id, { onDelete: 'cascade' }),
+    academic_year_id: varchar('academic_year_id', { length: 36 })
+      .notNull()
+      .references(() => academicYears.id, { onDelete: 'cascade' }),
+    exam_id: varchar('exam_id', { length: 36 })
+      .notNull()
+      .references(() => exams.id, { onDelete: 'cascade' }),
+    class_id: varchar('class_id', { length: 36 })
+      .notNull()
+      .references(() => classes.id, { onDelete: 'cascade' }),
+    section_id: varchar('section_id', { length: 36 }).references(() => sections.id, {
+      onDelete: 'set null',
+    }),
+    student_id: varchar('student_id', { length: 36 })
+      .notNull()
+      .references(() => students.id, { onDelete: 'cascade' }),
+
+    /** S3 signed / public URL for the PDF */
+    pdf_url: varchar('pdf_url', { length: 500 }),
+    /** S3 object key for deletion / re-generation */
+    pdf_s3_key: varchar('pdf_s3_key', { length: 300 }),
+
+    /** Summary stats stored at generation time */
+    total_marks: integer('total_marks'),
+    marks_obtained: numeric('marks_obtained', { precision: 8, scale: 2 }),
+    percentage: numeric('percentage', { precision: 5, scale: 2 }),
+    grade: varchar('grade', { length: 20 }),
+    rank: integer('rank'),
+    remarks: text('remarks'),
+
+    /** Generation status */
+    status: varchar('status', { length: 20 }).default('PENDING').notNull(),
+    // PENDING | GENERATED | FAILED
+
+    /** When true, student / parent can view the report card */
+    is_published: boolean('is_published').default(false).notNull(),
+
+    is_enabled: boolean('is_enabled').default(true).notNull(),
+    deleted: boolean('deleted').default(false).notNull(),
+
+    created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp('updated_at', { withTimezone: true }),
+    created_by: varchar('created_by', { length: 36 }),
+  },
+  (t) => ({
+    unq_report_card: unique('report_cards_school_exam_student_unq').on(
+      t.school_id,
+      t.exam_id,
+      t.student_id,
+    ),
   }),
-  student_id: varchar('student_id', { length: 36 })
-    .notNull()
-    .references(() => students.id, { onDelete: 'cascade' }),
-
-  /** S3 signed / public URL for the PDF */
-  pdf_url: varchar('pdf_url', { length: 500 }),
-  /** S3 object key for deletion / re-generation */
-  pdf_s3_key: varchar('pdf_s3_key', { length: 300 }),
-
-  /** Summary stats stored at generation time */
-  total_marks: integer('total_marks'),
-  marks_obtained: numeric('marks_obtained', { precision: 8, scale: 2 }),
-  percentage: numeric('percentage', { precision: 5, scale: 2 }),
-  grade: varchar('grade', { length: 20 }),
-  rank: integer('rank'),
-  remarks: text('remarks'),
-
-  /** Generation status */
-  status: varchar('status', { length: 20 }).default('PENDING').notNull(),
-  // PENDING | GENERATED | FAILED
-
-  /** When true, student / parent can view the report card */
-  is_published: boolean('is_published').default(false).notNull(),
-
-  is_enabled: boolean('is_enabled').default(true).notNull(),
-  deleted: boolean('deleted').default(false).notNull(),
-
-  created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updated_at: timestamp('updated_at', { withTimezone: true }),
-  created_by: varchar('created_by', { length: 36 }),
-});
+);
