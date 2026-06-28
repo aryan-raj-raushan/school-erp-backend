@@ -4,9 +4,10 @@ import { RfidService } from './rfid.service';
 import { RfidRepository } from './rfid.repository';
 import { DrizzleModule } from '../../database/drizzle/drizzle.module';
 import { RedisModule } from '../redis/redis.module';
+import { AttendanceModule } from '../attendance/attendance.module';
 
 @Module({
-  imports: [DrizzleModule, RedisModule],
+  imports: [DrizzleModule, RedisModule, AttendanceModule],
   controllers: [RfidController],
   providers: [RfidService, RfidRepository],
 })

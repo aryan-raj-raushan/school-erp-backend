@@ -127,6 +127,16 @@ export const PERMISSION_REGISTRY = {
     delete: 'salary.delete',
     process: 'salary.process',
   },
+  schoolSettings: {
+    view: 'schoolSettings.view',
+    update: 'schoolSettings.update',
+  },
+  staffShifts: {
+    view: 'staffShifts.view',
+    create: 'staffShifts.create',
+    update: 'staffShifts.update',
+    delete: 'staffShifts.delete',
+  },
   // ← ADD NEW MODULE HERE
 } as const;
 

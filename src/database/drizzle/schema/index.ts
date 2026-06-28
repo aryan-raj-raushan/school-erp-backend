@@ -59,3 +59,15 @@ export * from './exam-sitting-plan.schema';
 export * from './exam-results.schema';
 
 export * from './employee-leave.schema';
+
+export * from './school-settings.schema';
+export * from './staff-shifts.schema';
+export * from './attendance-audit-log.schema';
+export * from './rfid-punch-log.schema';
+export * from './early-exits.schema';
+export * from './attendance-conflicts.schema';
+export * from './leave-approval-workflow.schema';
+export * from './student-movements.schema';
+export * from './gate-passes.schema';
+export * from './notification-rules.schema';
+export * from './audit-logs.schema';

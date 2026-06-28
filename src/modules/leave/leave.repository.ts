@@ -10,6 +10,17 @@ import {
   studentLeaveRequests,
 } from '../../database/drizzle/schema/leave.schema';
 import {
+  leaveApprovalWorkflow,
+  leaveWorkflowStepTemplates,
+  leaveApprovalSteps,
+} from '../../database/drizzle/schema/leave-approval-workflow.schema';
+import { InferInsertModel, InferSelectModel } from 'drizzle-orm';
+
+type NewWorkflow = InferInsertModel<typeof leaveApprovalWorkflow>;
+type NewStepTemplate = InferInsertModel<typeof leaveWorkflowStepTemplates>;
+type NewApprovalStep = InferInsertModel<typeof leaveApprovalSteps>;
+type ApprovalStep = InferSelectModel<typeof leaveApprovalSteps>;
+import {
   LeavePolicy,
   NewLeavePolicy,
   LeaveType,
@@ -235,6 +246,79 @@ export class LeaveRepository {
       .update(studentLeaveRequests)
       .set({ ...data, updated_at: new Date(), reviewed_at: new Date() })
       .where(and(eq(studentLeaveRequests.id, id), eq(studentLeaveRequests.school_id, schoolId)))
+      .returning();
+    return row;
+  }
+
+  // ─── Approval Workflows ────────────────────────────────────────────────────
+
+  async createWorkflow(data: NewWorkflow) {
+    const [row] = await this.db.insert(leaveApprovalWorkflow).values(data).returning();
+    return row;
+  }
+
+  async findWorkflows(schoolId: string) {
+    return this.db
+      .select()
+      .from(leaveApprovalWorkflow)
+      .where(eq(leaveApprovalWorkflow.school_id, schoolId));
+  }
+
+  async findActiveWorkflow(schoolId: string) {
+    const [row] = await this.db
+      .select()
+      .from(leaveApprovalWorkflow)
+      .where(and(eq(leaveApprovalWorkflow.school_id, schoolId), eq(leaveApprovalWorkflow.is_active, true)))
+      .limit(1);
+    return row;
+  }
+
+  async createStepTemplate(data: NewStepTemplate) {
+    const [row] = await this.db.insert(leaveWorkflowStepTemplates).values(data).returning();
+    return row;
+  }
+
+  async findStepTemplates(workflowId: string) {
+    return this.db
+      .select()
+      .from(leaveWorkflowStepTemplates)
+      .where(eq(leaveWorkflowStepTemplates.workflow_id, workflowId))
+      .orderBy(leaveWorkflowStepTemplates.step_order);
+  }
+
+  async createApprovalStep(data: NewApprovalStep) {
+    const [row] = await this.db.insert(leaveApprovalSteps).values(data).returning();
+    return row;
+  }
+
+  async findApprovalSteps(leaveRequestId: string): Promise<ApprovalStep[]> {
+    return this.db
+      .select()
+      .from(leaveApprovalSteps)
+      .where(eq(leaveApprovalSteps.leave_request_id, leaveRequestId))
+      .orderBy(leaveApprovalSteps.step_order);
+  }
+
+  async findPendingStep(leaveRequestId: string): Promise<ApprovalStep | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(leaveApprovalSteps)
+      .where(
+        and(
+          eq(leaveApprovalSteps.leave_request_id, leaveRequestId),
+          eq(leaveApprovalSteps.status, 'PENDING'),
+        ),
+      )
+      .orderBy(leaveApprovalSteps.step_order)
+      .limit(1);
+    return row;
+  }
+
+  async updateApprovalStep(stepId: string, data: Partial<NewApprovalStep>) {
+    const [row] = await this.db
+      .update(leaveApprovalSteps)
+      .set({ ...data, decided_at: new Date() })
+      .where(eq(leaveApprovalSteps.id, stepId))
       .returning();
     return row;
   }

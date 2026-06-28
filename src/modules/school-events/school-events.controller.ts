@@ -35,6 +35,17 @@ export class SchoolEventsController {
     return ApiResponse.success(data.items, 'School events fetched successfully', data.meta);
   }
 
+  @Get('calendar')
+  @ApiOperation({ summary: 'Unified calendar — all events and holidays in a date range' })
+  async getCalendar(
+    @GetSchoolId() schoolId: string,
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    const data = await this.schoolEventsService.getUnifiedCalendar(schoolId, from, to);
+    return ApiResponse.success(data, 'Calendar fetched successfully');
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a school event or holiday by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {

@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  Ip,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
@@ -22,9 +23,11 @@ import {
 } from './dto/attendance-filter.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
-import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { GetCurrentUserId, GetCurrentUser } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
+import { RequestUser } from '../../shared/types/jwt-payload.types';
+import { SchoolRole } from '../../shared/enums/roles.enum';
 
 @ApiTags('Attendance')
 @ApiBearerAuth('access-token')
@@ -177,9 +180,105 @@ export class AttendanceController {
     @Param('attendanceId', ParseUUIDPipe) attendanceId: string,
     @GetSchoolId() schoolId: string,
     @Body() dto: UpdateAttendanceDto,
+    @GetCurrentUser() user: RequestUser,
+    @GetCurrentUserId() userId: string,
+    @Ip() ip: string,
   ) {
-    const data = await this.attendanceService.update(attendanceId, schoolId, dto);
+    const isAdmin = user?.role === SchoolRole.SCHOOL_ADMIN || user?.role === SchoolRole.PRINCIPAL;
+    const data = await this.attendanceService.update(attendanceId, schoolId, dto, isAdmin, userId, ip);
     return ApiResponse.success(data, 'Attendance updated successfully');
+  }
+
+  @Get(':attendanceId/audit')
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
+  @ApiOperation({ summary: 'Audit log for a single attendance record' })
+  async getAuditLog(
+    @Param('attendanceId', ParseUUIDPipe) attendanceId: string,
+    @GetSchoolId() schoolId: string,
+  ) {
+    const data = await this.attendanceService.getAuditLog(attendanceId, schoolId);
+    return ApiResponse.success(data, 'Audit log fetched successfully');
+  }
+
+  @Get('dashboard/today')
+  @ApiOperation({ summary: 'Today attendance summary for dashboard' })
+  async getTodayDashboard(@GetSchoolId() schoolId: string) {
+    const data = await this.attendanceService.getTodayDashboard(schoolId);
+    return ApiResponse.success(data, 'Today dashboard fetched');
+  }
+
+  @Get('heatmap')
+  @ApiOperation({ summary: 'Attendance heatmap for a student over a year' })
+  @ApiQuery({ name: 'student_id', required: true })
+  @ApiQuery({ name: 'year', required: true, type: Number })
+  async getHeatmap(
+    @GetSchoolId() schoolId: string,
+    @Query('student_id') studentId: string,
+    @Query('year') year: string,
+  ) {
+    const data = await this.attendanceService.getHeatmap(schoolId, studentId, Number(year));
+    return ApiResponse.success(data, 'Heatmap fetched');
+  }
+
+  @Get('late-trend')
+  @ApiOperation({ summary: 'Late arrival trend by date for a class section' })
+  @ApiQuery({ name: 'class_section_id', required: true })
+  @ApiQuery({ name: 'month', required: true, type: Number })
+  @ApiQuery({ name: 'year', required: true, type: Number })
+  async getLateTrend(
+    @GetSchoolId() schoolId: string,
+    @Query('class_section_id') classSectionId: string,
+    @Query('month') month: string,
+    @Query('year') year: string,
+  ) {
+    const data = await this.attendanceService.getLateTrend(schoolId, classSectionId, Number(month), Number(year));
+    return ApiResponse.success(data, 'Late trend fetched');
+  }
+
+  @Get('conflicts')
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
+  @ApiOperation({ summary: 'Unresolved attendance conflicts' })
+  @ApiQuery({ name: 'date', required: false })
+  async getConflicts(@GetSchoolId() schoolId: string, @Query('date') date?: string) {
+    const data = await this.attendanceService.getConflicts(schoolId, date);
+    return ApiResponse.success(data, 'Conflicts fetched');
+  }
+
+  @Put('conflicts/:conflictId/resolve')
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
+  @ApiOperation({ summary: 'Resolve an attendance conflict' })
+  async resolveConflict(
+    @Param('conflictId') conflictId: string,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+    @Body() body: { resolution: 'RFID_WON' | 'MANUAL_WON' | 'ADMIN_SET' },
+  ) {
+    const data = await this.attendanceService.resolveConflict(conflictId, schoolId, body.resolution, userId);
+    return ApiResponse.success(data, 'Conflict resolved');
+  }
+
+  @Get('missing-punches')
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
+  @ApiOperation({ summary: 'Students with RFID entry but no exit for a date' })
+  @ApiQuery({ name: 'date', required: true })
+  async getMissingPunches(
+    @GetSchoolId() schoolId: string,
+    @Query('date') date: string,
+  ) {
+    const data = await this.attendanceService.getMissingPunches(schoolId, date);
+    return ApiResponse.success(data, 'Missing punches fetched successfully');
+  }
+
+  @Put('missing-punches/:punchId/resolve')
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
+  @ApiOperation({ summary: 'Resolve a missing exit punch — mark attendance as PRESENT or HALF_DAY' })
+  async resolveMissingPunch(
+    @Param('punchId') punchId: string,
+    @GetSchoolId() schoolId: string,
+    @Body() body: { status: 'PRESENT' | 'HALF_DAY' },
+  ) {
+    await this.attendanceService.resolveMissingPunch(punchId, schoolId, body.status);
+    return ApiResponse.success(null, 'Missing punch resolved successfully');
   }
 
   @Delete(':attendanceId')

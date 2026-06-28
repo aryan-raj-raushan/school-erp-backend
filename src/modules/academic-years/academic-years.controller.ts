@@ -89,4 +89,38 @@ export class AcademicYearsController {
     const data = await this.academicYearsService.setCurrent(id, schoolId);
     return ApiResponse.success(data, 'Current academic year updated successfully');
   }
+
+  @Post(':id/freeze')
+  @Permissions(PERMISSION_REGISTRY.academic_years.update)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Freeze attendance for an academic year (no further edits)' })
+  async freeze(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    const data = await this.academicYearsService.freeze(id, schoolId, userId);
+    return ApiResponse.success(data, 'Academic year frozen');
+  }
+
+  @Post(':id/unfreeze')
+  @Permissions(PERMISSION_REGISTRY.academic_years.update)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Unfreeze academic year' })
+  async unfreeze(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
+    const data = await this.academicYearsService.unfreeze(id, schoolId);
+    return ApiResponse.success(data, 'Academic year unfrozen');
+  }
+
+  @Post('rollover')
+  @Permissions(PERMISSION_REGISTRY.academic_years.update)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Roll over policies and balances from one year to another' })
+  async rollover(
+    @GetSchoolId() schoolId: string,
+    @Body() body: { from_id: string; to_id: string },
+  ) {
+    const data = await this.academicYearsService.rollover(body.from_id, body.to_id, schoolId);
+    return ApiResponse.success(data, 'Rollover completed');
+  }
 }

@@ -8,6 +8,15 @@ import {
   boolean,
   index,
 } from 'drizzle-orm/pg-core';
+
+export const attendanceSessionEnum = pgEnum('attendance_session', [
+  'MORNING',
+  'AFTERNOON',
+  'EXAM',
+  'BUS',
+  'HOSTEL',
+  'LIBRARY',
+]);
 import { schools } from './schools.schema';
 import { students } from './students.schema';
 import { academicYears } from './academic-years.schema';
@@ -17,6 +26,11 @@ export const attendanceStatusEnum = pgEnum('attendance_status', [
   'ABSENT',
   'LATE',
   'EXCUSED',
+  'HALF_DAY',
+  'HOLIDAY',
+  'LEAVE',
+  'MISSING_PUNCH',
+  'EARLY_EXIT',
 ]);
 
 export const attendances = pgTable(
@@ -34,6 +48,7 @@ export const attendances = pgTable(
       .references(() => academicYears.id, { onDelete: 'cascade' }),
     class_section_id: varchar('class_section_id', { length: 36 }).notNull(),
     date: date('date').notNull(),
+    session: attendanceSessionEnum('session').default('MORNING').notNull(),
     status: attendanceStatusEnum('status').notNull(),
     remarks: varchar('remarks', { length: 255 }),
     marked_by: varchar('marked_by', { length: 36 }).notNull(),
@@ -42,7 +57,7 @@ export const attendances = pgTable(
     updated_at: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => ({
-    uniqueStudentDate: unique('attendances_student_date_unique').on(t.student_id, t.date),
+    uniqueStudentDate: unique('attendances_student_date_session_unique').on(t.student_id, t.date, t.session),
     idx_school_date: index('attendances_school_date_idx').on(t.school_id, t.date),
     idx_student: index('attendances_student_id_idx').on(t.student_id),
     idx_class_section_date: index('attendances_section_date_idx').on(t.class_section_id, t.date),

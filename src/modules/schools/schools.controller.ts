@@ -18,6 +18,7 @@ import { UpdateSchoolDto } from './dto/update-school.dto';
 import { SchoolFilterDto } from './dto/school-filter.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { CompanyRole } from '../../shared/enums';
 import { JwtPayload } from '../../shared/types/jwt-payload.types';
@@ -27,6 +28,23 @@ import { JwtPayload } from '../../shared/types/jwt-payload.types';
 @Controller('schools')
 export class SchoolsController {
   constructor(private readonly schoolsService: SchoolsService) {}
+
+  @Get('profile')
+  @ApiOperation({ summary: 'Get the current school profile (school-context auth)' })
+  async getMyProfile(@GetSchoolId() schoolId: string) {
+    const data = await this.schoolsService.getMyProfile(schoolId);
+    return ApiResponse.success(data, 'School profile fetched successfully');
+  }
+
+  @Patch('profile')
+  @ApiOperation({ summary: 'Update the current school profile (school-context auth)' })
+  async updateMyProfile(
+    @GetSchoolId() schoolId: string,
+    @Body() dto: UpdateSchoolDto,
+  ) {
+    const data = await this.schoolsService.updateMyProfile(schoolId, dto);
+    return ApiResponse.success(data, 'School profile updated successfully');
+  }
 
   @Get()
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)

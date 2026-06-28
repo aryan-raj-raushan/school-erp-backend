@@ -16,6 +16,17 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export enum MarkAttendanceStatus {
   PRESENT = 'PRESENT',
   ABSENT = 'ABSENT',
+  LATE = 'LATE',
+  HALF_DAY = 'HALF_DAY',
+}
+
+export enum AttendanceSession {
+  MORNING = 'MORNING',
+  AFTERNOON = 'AFTERNOON',
+  EXAM = 'EXAM',
+  BUS = 'BUS',
+  HOSTEL = 'HOSTEL',
+  LIBRARY = 'LIBRARY',
 }
 
 export class AttendanceEntryDto {
@@ -24,7 +35,7 @@ export class AttendanceEntryDto {
   @IsNotEmpty()
   student_id: string;
 
-  @ApiProperty({ enum: MarkAttendanceStatus, description: 'Only PRESENT or ABSENT accepted' })
+  @ApiProperty({ enum: MarkAttendanceStatus, description: 'Teacher-selectable: PRESENT, ABSENT, LATE, HALF_DAY. HOLIDAY/LEAVE/MISSING_PUNCH/EARLY_EXIT are system-set only.' })
   @IsEnum(MarkAttendanceStatus)
   @IsNotEmpty()
   status: MarkAttendanceStatus;
@@ -56,6 +67,11 @@ export class MarkAttendanceDto {
   @IsDateString()
   @IsNotEmpty()
   date: string;
+
+  @ApiPropertyOptional({ enum: AttendanceSession, default: AttendanceSession.MORNING })
+  @IsOptional()
+  @IsEnum(AttendanceSession)
+  session?: AttendanceSession;
 
   @ApiProperty({ type: [AttendanceEntryDto] })
   @IsArray()

@@ -16,6 +16,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export enum StaffAttendanceStatus {
   PRESENT = 'PRESENT',
   ABSENT = 'ABSENT',
+  LATE = 'LATE',
+  HALF_DAY = 'HALF_DAY',
 }
 
 export class StaffAttendanceEntryDto {

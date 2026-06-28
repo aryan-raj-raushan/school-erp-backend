@@ -56,6 +56,13 @@ import { ExamModule } from '@modules/exam/exam.module';
 import { SearchModule } from './modules/search/search.module';
 import { ExamResultsModule } from '@modules/results/exam-results.module';
 import { EmployeeLeaveModule } from '@modules/employee-leave/employee-leave.module';
+import { SchoolSettingsModule } from '@modules/school-settings/school-settings.module';
+import { StaffShiftsModule } from '@modules/staff-shifts/staff-shifts.module';
+import { EarlyExitsModule } from '@modules/early-exits/early-exits.module';
+import { GatePassesModule } from '@modules/gate-passes/gate-passes.module';
+import { NotificationRulesModule } from '@modules/notification-rules/notification-rules.module';
+import { AuditLogsModule } from '@modules/audit-logs/audit-logs.module';
+import { StudentMovementsModule } from '@modules/student-movements/student-movements.module';
 
 @Module({
   imports: [
@@ -108,6 +115,13 @@ import { EmployeeLeaveModule } from '@modules/employee-leave/employee-leave.modu
     SearchModule,
     ExamResultsModule,
     EmployeeLeaveModule,
+    SchoolSettingsModule,
+    StaffShiftsModule,
+    EarlyExitsModule,
+    GatePassesModule,
+    NotificationRulesModule,
+    AuditLogsModule,
+    StudentMovementsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

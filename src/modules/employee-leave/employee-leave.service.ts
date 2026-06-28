@@ -4,10 +4,16 @@ import {
   ConflictException,
   BadRequestException,
   ForbiddenException,
+  Inject,
 } from '@nestjs/common';
 import { EmployeeLeaveRepository } from './employee-leave.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
+import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
+import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
+import { eq, and } from 'drizzle-orm';
+import { staffAttendances } from '../../database/drizzle/schema/staff-attendance.schema';
+import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { REDIS_EMPLOYEE_LEAVE_KEY } from '@shared/redis/redis-key';
 import { LeaveApplicationStatus } from './leave.enum';
@@ -33,6 +39,7 @@ export class EmployeeLeaveService {
   constructor(
     private readonly leaveRepo: EmployeeLeaveRepository,
     private readonly redisService: RedisService,
+    @Inject(DRIZZLE_ORM) private readonly db: DrizzleDB,
   ) {}
 
   // ─── Cache key helpers ────────────────────────────────────────────────────
@@ -371,12 +378,78 @@ export class EmployeeLeaveService {
       await this.redisService.delByPattern(
         `${this.assignedKey(schoolId)}:${application.employee_id}:*`,
       );
+      // Sync attendance: write LEAVE for each date in the range
+      await this.syncStaffAttendanceForLeave(
+        schoolId,
+        application.employee_id,
+        application.start_date,
+        application.end_date,
+        'LEAVE',
+      );
+    }
+
+    // On rejection/cancellation: revert LEAVE → ABSENT
+    if (dto.status === LeaveApplicationStatus.REJECTED) {
+      await this.syncStaffAttendanceForLeave(
+        schoolId,
+        application.employee_id,
+        application.start_date,
+        application.end_date,
+        'ABSENT',
+      );
     }
 
     // Bust application caches
     await this.redisService.delByPattern(`${this.applicationKey(schoolId)}:*`);
 
     return updated;
+  }
+
+  private async syncStaffAttendanceForLeave(
+    schoolId: string,
+    staffId: string,
+    startDate: string,
+    endDate: string,
+    status: 'LEAVE' | 'ABSENT',
+  ): Promise<void> {
+    const [currentYear] = await this.db
+      .select({ id: academicYears.id })
+      .from(academicYears)
+      .where(and(eq(academicYears.school_id, schoolId), eq(academicYears.is_current, true)))
+      .limit(1);
+
+    if (!currentYear) return;
+
+    const dates = this.getDateRange(startDate, endDate);
+    for (const date of dates) {
+      await this.db
+        .insert(staffAttendances)
+        .values({
+          id: generateId(),
+          school_id: schoolId,
+          staff_id: staffId,
+          date,
+          status,
+          marked_by: 'leave-sync',
+          is_late: false,
+        })
+        .onConflictDoUpdate({
+          target: [staffAttendances.staff_id, staffAttendances.date],
+          set: { status, marked_by: 'leave-sync', updated_at: new Date() },
+        });
+    }
+  }
+
+  private getDateRange(startDate: string, endDate: string): string[] {
+    const dates: string[] = [];
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const cur = new Date(start);
+    while (cur <= end) {
+      dates.push(cur.toISOString().split('T')[0]);
+      cur.setDate(cur.getDate() + 1);
+    }
+    return dates;
   }
 
   async cancelLeave(id: string, schoolId: string, employeeId: string): Promise<LeaveApplication> {

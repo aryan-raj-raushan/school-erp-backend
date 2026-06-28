@@ -5,6 +5,7 @@ import {
   boolean,
   timestamp,
   decimal,
+  integer,
   pgEnum,
 } from 'drizzle-orm/pg-core';
 
@@ -29,6 +30,14 @@ export const schools = pgTable('schools', {
   marking_system: markingSystemEnum('marking_system'),
   lat: decimal('lat', { precision: 10, scale: 7 }),
   lng: decimal('lng', { precision: 10, scale: 7 }),
+  // School Profile fields
+  timezone: varchar('timezone', { length: 100 }).default('Asia/Kolkata'),
+  udise_code: varchar('udise_code', { length: 30 }),
+  affiliation_number: varchar('affiliation_number', { length: 50 }),
+  established_year: integer('established_year'),
+  principal_name: varchar('principal_name', { length: 150 }),
+  principal_email: varchar('principal_email', { length: 100 }),
+  principal_phone: varchar('principal_phone', { length: 15 }),
   is_active: boolean('is_active').default(true).notNull(),
   deleted: boolean('deleted').default(false).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

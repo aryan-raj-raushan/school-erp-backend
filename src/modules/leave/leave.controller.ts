@@ -10,9 +10,9 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { IsArray, IsUUID } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsOptional, IsArray, IsEnum, IsUUID } from 'class-validator';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiProperty } from '@nestjs/swagger';
+import { ApiProperty as AP } from '@nestjs/swagger';
 import { LeaveService } from './leave.service';
 import {
   CreateLeavePolicyDto,
@@ -310,6 +310,67 @@ export class ParentLeaveController {
     return ApiResponse.success(
       await this.leaveService.getStudentLeaveBalanceSummary(studentId, schoolId),
       'Summary fetched',
+    );
+  }
+}
+
+class CreateWorkflowStepDto {
+  @AP() @IsString() approver_role: string;
+  @AP({ required: false }) @IsOptional() @IsString() approver_id?: string;
+}
+
+class CreateWorkflowDto {
+  @AP() @IsString() name: string;
+  @AP({ type: [CreateWorkflowStepDto] }) @IsArray() steps: CreateWorkflowStepDto[];
+}
+
+class ApproveStepDto {
+  @AP() @IsEnum(['APPROVED', 'REJECTED']) status: 'APPROVED' | 'REJECTED';
+  @AP({ required: false }) @IsOptional() @IsString() remarks?: string;
+}
+
+@ApiTags('Leave Workflows')
+@ApiBearerAuth('access-token')
+@Controller('leave/workflows')
+export class LeaveWorkflowController {
+  constructor(private readonly leaveService: LeaveService) {}
+
+  @Post()
+  @Permissions(PERMISSION_REGISTRY.leave.approve)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create approval workflow with steps' })
+  async create(@Body() dto: CreateWorkflowDto, @GetSchoolId() schoolId: string) {
+    return ApiResponse.created(
+      await this.leaveService.createWorkflow(schoolId, dto.name, dto.steps),
+      'Workflow created',
+    );
+  }
+
+  @Get()
+  @Permissions(PERMISSION_REGISTRY.leave.view)
+  @ApiOperation({ summary: 'List approval workflows' })
+  async list(@GetSchoolId() schoolId: string) {
+    return ApiResponse.success(await this.leaveService.listWorkflows(schoolId), 'Workflows fetched');
+  }
+
+  @Get('steps/:leaveRequestId')
+  @Permissions(PERMISSION_REGISTRY.leave.view)
+  @ApiOperation({ summary: 'Get approval steps for a leave request' })
+  async getSteps(@Param('leaveRequestId') leaveRequestId: string) {
+    return ApiResponse.success(await this.leaveService.getApprovalSteps(leaveRequestId), 'Steps fetched');
+  }
+
+  @Put('steps/:stepId/review')
+  @Permissions(PERMISSION_REGISTRY.leave.approve)
+  @ApiOperation({ summary: 'Approve or reject an approval step' })
+  async reviewStep(
+    @Param('stepId') stepId: string,
+    @GetCurrentUserId() userId: string,
+    @Body() dto: ApproveStepDto,
+  ) {
+    return ApiResponse.success(
+      await this.leaveService.approveLeaveStep(stepId, userId, dto.status, dto.remarks),
+      'Step reviewed',
     );
   }
 }

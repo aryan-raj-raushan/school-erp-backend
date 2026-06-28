@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, gte, lte, sql, isNull, count, desc } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { attendances } from '../../database/drizzle/schema/attendance.schema';
@@ -7,6 +7,9 @@ import { students } from '../../database/drizzle/schema/students.schema';
 import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
 import { sections } from '../../database/drizzle/schema/sections.schema';
 import { classes } from '../../database/drizzle/schema/classes.schema';
+import { rfidPunchLog } from '../../database/drizzle/schema/rfid-punch-log.schema';
+import { studentAcademicInfo } from '../../database/drizzle/schema/students.schema';
+import { attendanceConflicts } from '../../database/drizzle/schema/attendance-conflicts.schema';
 import {
   Attendance,
   NewAttendance,
@@ -59,7 +62,7 @@ export class AttendanceRepository {
       .insert(attendances)
       .values(data)
       .onConflictDoUpdate({
-        target: [attendances.student_id, attendances.date],
+        target: [attendances.student_id, attendances.date, attendances.session],
         set: { status: data.status, remarks: data.remarks, is_late: data.is_late, updated_at: new Date() },
       })
       .returning();
@@ -171,6 +174,7 @@ export class AttendanceRepository {
         academic_year_id: attendances.academic_year_id,
         class_section_id: attendances.class_section_id,
         date: attendances.date,
+        session: attendances.session,
         status: attendances.status,
         is_late: attendances.is_late,
         remarks: attendances.remarks,
@@ -203,6 +207,7 @@ export class AttendanceRepository {
         academic_year_id: attendances.academic_year_id,
         class_section_id: attendances.class_section_id,
         date: attendances.date,
+        session: attendances.session,
         status: attendances.status,
         is_late: attendances.is_late,
         remarks: attendances.remarks,
@@ -294,5 +299,143 @@ export class AttendanceRepository {
       .from(attendances)
       .where(and(eq(attendances.school_id, schoolId), eq(attendances.class_section_id, classSectionId), gte(attendances.date, from_date), lte(attendances.date, to_date)))
       .orderBy(attendances.date);
+  }
+
+  async getMissingPunches(schoolId: string, date: string) {
+    return this.db
+      .select({
+        punch_id: rfidPunchLog.id,
+        student_id: rfidPunchLog.student_id,
+        student_name: sql<string>`${students.first_name} || ' ' || coalesce(${students.last_name}, '')`,
+        admission_number: studentAcademicInfo.admission_number,
+        entry_tap: rfidPunchLog.entry_tap,
+        date: rfidPunchLog.date,
+      })
+      .from(rfidPunchLog)
+      .innerJoin(students, eq(students.id, rfidPunchLog.student_id))
+      .leftJoin(
+        studentAcademicInfo,
+        and(
+          eq(studentAcademicInfo.student_id, rfidPunchLog.student_id),
+          eq(studentAcademicInfo.is_current, true),
+        ),
+      )
+      .where(
+        and(
+          eq(rfidPunchLog.school_id, schoolId),
+          eq(rfidPunchLog.date, date),
+          isNull(rfidPunchLog.exit_tap),
+        ),
+      )
+      .orderBy(rfidPunchLog.entry_tap);
+  }
+
+  async getTodayStats(schoolId: string, today: string) {
+    const rows = await this.db
+      .select({ status: attendances.status, cnt: count() })
+      .from(attendances)
+      .where(and(eq(attendances.school_id, schoolId), eq(attendances.date, today)))
+      .groupBy(attendances.status);
+
+    const stats: Record<string, number> = {};
+    for (const r of rows) stats[r.status] = Number(r.cnt);
+
+    return {
+      date: today,
+      present: stats['PRESENT'] ?? 0,
+      absent: stats['ABSENT'] ?? 0,
+      late: stats['LATE'] ?? 0,
+      half_day: stats['HALF_DAY'] ?? 0,
+      leave: stats['LEAVE'] ?? 0,
+      holiday: stats['HOLIDAY'] ?? 0,
+      missing_punch: stats['MISSING_PUNCH'] ?? 0,
+      total: Object.values(stats).reduce((a, b) => a + b, 0),
+    };
+  }
+
+  async getStudentHeatmap(schoolId: string, studentId: string, year: number) {
+    const from = `${year}-01-01`;
+    const to = `${year}-12-31`;
+    return this.db
+      .select({ date: attendances.date, status: attendances.status })
+      .from(attendances)
+      .where(
+        and(
+          eq(attendances.school_id, schoolId),
+          eq(attendances.student_id, studentId),
+          gte(attendances.date, from),
+          lte(attendances.date, to),
+        ),
+      )
+      .orderBy(attendances.date);
+  }
+
+  async getLateTrend(schoolId: string, classSectionId: string, month: number, year: number) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const from = `${year}-${pad(month)}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const to = `${year}-${pad(month)}-${lastDay}`;
+    return this.db
+      .select({
+        date: attendances.date,
+        late_count: count(),
+      })
+      .from(attendances)
+      .where(
+        and(
+          eq(attendances.school_id, schoolId),
+          eq(attendances.class_section_id, classSectionId),
+          eq(attendances.is_late, true),
+          gte(attendances.date, from),
+          lte(attendances.date, to),
+        ),
+      )
+      .groupBy(attendances.date)
+      .orderBy(attendances.date);
+  }
+
+  async getConflicts(schoolId: string, date?: string) {
+    const conditions = [eq(attendanceConflicts.school_id, schoolId), isNull(attendanceConflicts.resolved_at)];
+    if (date) conditions.push(eq(attendanceConflicts.date, date) as any);
+    return this.db
+      .select()
+      .from(attendanceConflicts)
+      .where(and(...conditions))
+      .orderBy(desc(attendanceConflicts.created_at));
+  }
+
+  async resolveConflict(conflictId: string, schoolId: string, resolution: 'RFID_WON' | 'MANUAL_WON' | 'ADMIN_SET', resolvedBy: string) {
+    const [row] = await this.db
+      .update(attendanceConflicts)
+      .set({ resolution, resolved_by: resolvedBy, resolved_at: new Date() })
+      .where(and(eq(attendanceConflicts.id, conflictId), eq(attendanceConflicts.school_id, schoolId)))
+      .returning();
+    return row;
+  }
+
+  async resolveMissingPunch(punchId: string, schoolId: string, resolvedStatus: 'PRESENT' | 'HALF_DAY'): Promise<void> {
+    const [punch] = await this.db
+      .select()
+      .from(rfidPunchLog)
+      .where(and(eq(rfidPunchLog.id, punchId), eq(rfidPunchLog.school_id, schoolId)))
+      .limit(1);
+
+    if (!punch) return;
+
+    await this.db
+      .update(rfidPunchLog)
+      .set({ status: 'COMPLETE' })
+      .where(eq(rfidPunchLog.id, punchId));
+
+    await this.db
+      .update(attendances)
+      .set({ status: resolvedStatus })
+      .where(
+        and(
+          eq(attendances.student_id, punch.student_id),
+          eq(attendances.school_id, schoolId),
+          eq(attendances.date, punch.date),
+        ),
+      );
   }
 }

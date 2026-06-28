@@ -150,6 +150,30 @@ export class SchoolsService {
     return updated;
   }
 
+  async getMyProfile(schoolId: string): Promise<School> {
+    const cacheKey = `schools:${schoolId}`;
+    return this.redisService.getOrSet(cacheKey, CacheTTL.LONG, async () => {
+      const school = await this.schoolsRepo.findById(schoolId);
+      if (!school) throw new NotFoundException('School not found');
+      return school;
+    });
+  }
+
+  async updateMyProfile(schoolId: string, dto: UpdateSchoolDto): Promise<School> {
+    const school = await this.schoolsRepo.findById(schoolId);
+    if (!school) throw new NotFoundException('School not found');
+
+    if (dto.code && dto.code !== school.code) {
+      const existing = await this.schoolsRepo.findByCode(dto.code);
+      if (existing) throw new ConflictException(`School code '${dto.code}' already in use`);
+    }
+
+    const updated = await this.schoolsRepo.update(schoolId, dto);
+    await this.redisService.del(`schools:${schoolId}`);
+    await this.redisService.delByPattern(`schools:list:*`);
+    return updated;
+  }
+
   async remove(id: string, userId: string, role: string): Promise<void> {
     await this.assertSchoolAccess(id, userId, role);
     await this.findById(id, userId, role);

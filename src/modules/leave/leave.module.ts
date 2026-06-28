@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
-import { LeavePoliciesController, TeacherLeaveController, StudentLeaveController, ParentLeaveController } from './leave.controller';
+import { LeavePoliciesController, TeacherLeaveController, StudentLeaveController, ParentLeaveController, LeaveWorkflowController } from './leave.controller';
 import { LeaveService } from './leave.service';
 import { LeaveRepository } from './leave.repository';
+import { DrizzleModule } from '../../database/drizzle/drizzle.module';
 
 @Module({
-  controllers: [LeavePoliciesController, TeacherLeaveController, StudentLeaveController, ParentLeaveController],
+  imports: [DrizzleModule],
+  controllers: [LeavePoliciesController, TeacherLeaveController, StudentLeaveController, ParentLeaveController, LeaveWorkflowController],
   providers: [LeaveService, LeaveRepository],
   exports: [LeaveService, LeaveRepository],
 })

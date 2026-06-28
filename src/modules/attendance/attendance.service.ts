@@ -1,7 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject } from '@nestjs/common';
 import { AttendanceRepository } from './attendance.repository';
+import { AttendanceEngineService } from './attendance-engine.service';
+import { SchoolSettingsService } from '../school-settings/school-settings.service';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
+import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
+import type { DrizzleDB } from '../../database/drizzle/drizzle.provider';
+import { attendanceAuditLog } from '../../database/drizzle/schema';
+import { and, eq, desc } from 'drizzle-orm';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
@@ -25,7 +31,10 @@ import { CacheTTL } from '../../shared/constants';
 export class AttendanceService {
   constructor(
     private readonly attendanceRepo: AttendanceRepository,
+    private readonly attendanceEngine: AttendanceEngineService,
+    private readonly settingsService: SchoolSettingsService,
     private readonly redisService: RedisService,
+    @Inject(DRIZZLE_ORM) private readonly db: DrizzleDB,
   ) {}
 
   private cacheKey(schoolId: string) {
@@ -58,6 +67,18 @@ export class AttendanceService {
     const results: Attendance[] = [];
 
     for (const entry of dto.entries) {
+      const engineResult = await this.attendanceEngine.resolve({
+        schoolId,
+        personId: entry.student_id,
+        personType: 'STUDENT',
+        date: dto.date,
+        source: 'MANUAL',
+        manualStatus: entry.status as 'PRESENT' | 'ABSENT' | 'LATE' | 'HALF_DAY',
+        classSectionId: dto.class_section_id,
+      });
+
+      if (engineResult.status === 'SKIP') continue;
+
       const record = await this.attendanceRepo.upsert({
         id: generateId(),
         school_id: schoolId,
@@ -65,8 +86,9 @@ export class AttendanceService {
         academic_year_id: dto.academic_year_id,
         class_section_id: dto.class_section_id,
         date: dto.date,
-        status: entry.status as Attendance['status'],
-        is_late: entry.is_late ?? false,
+        session: dto.session ?? 'MORNING',
+        status: engineResult.status as Attendance['status'],
+        is_late: engineResult.isLate,
         remarks: entry.remarks,
         marked_by: markedBy,
       });
@@ -93,12 +115,54 @@ export class AttendanceService {
     };
   }
 
-  async update(id: string, schoolId: string, dto: UpdateAttendanceDto): Promise<Attendance> {
-    await this.findById(id, schoolId);
+  async update(
+    id: string,
+    schoolId: string,
+    dto: UpdateAttendanceDto,
+    isAdmin = false,
+    changedBy?: string,
+    ipAddress?: string,
+  ): Promise<Attendance> {
+    const record = await this.findById(id, schoolId);
+
+    if (!isAdmin) {
+      const settings = await this.settingsService.getSettings(schoolId);
+      const lockHours = settings?.attendance_lock_hours ?? 24;
+      const createdAt = new Date(record.created_at).getTime();
+      const lockExpiry = createdAt + lockHours * 60 * 60 * 1000;
+      if (Date.now() > lockExpiry) {
+        throw new ForbiddenException(
+          `Attendance is locked after ${lockHours} hours. Contact admin to edit.`,
+        );
+      }
+    }
+
+    // Write audit log before update
+    await this.db.insert(attendanceAuditLog).values({
+      id: generateId(),
+      attendance_id: id,
+      school_id: schoolId,
+      changed_by: changedBy ?? 'system',
+      old_status: record.status,
+      new_status: dto.status ?? record.status,
+      old_remarks: record.remarks ?? null,
+      new_remarks: dto.remarks ?? null,
+      ip_address: ipAddress ?? null,
+    });
+
     const updated = await this.attendanceRepo.update(id, schoolId, dto);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
     return updated;
+  }
+
+  async getAuditLog(id: string, schoolId: string) {
+    await this.findById(id, schoolId);
+    return this.db
+      .select()
+      .from(attendanceAuditLog)
+      .where(and(eq(attendanceAuditLog.attendance_id, id), eq(attendanceAuditLog.school_id, schoolId)))
+      .orderBy(desc(attendanceAuditLog.changed_at));
   }
 
   async remove(id: string, schoolId: string): Promise<void> {
@@ -291,5 +355,42 @@ export class AttendanceService {
     date: string,
   ): Promise<Attendance[]> {
     return this.attendanceRepo.getDailyReport(schoolId, classSectionId, date);
+  }
+
+  async getMissingPunches(schoolId: string, date: string) {
+    return this.attendanceRepo.getMissingPunches(schoolId, date);
+  }
+
+  async getTodayDashboard(schoolId: string) {
+    const today = new Date().toISOString().split('T')[0];
+    const key = `dashboard:attendance:${schoolId}:${today}`;
+    return this.redisService.getOrSet(key, 60, async () => {
+      return this.attendanceRepo.getTodayStats(schoolId, today);
+    });
+  }
+
+  async getHeatmap(schoolId: string, studentId: string, year: number) {
+    return this.attendanceRepo.getStudentHeatmap(schoolId, studentId, year);
+  }
+
+  async getLateTrend(schoolId: string, classSectionId: string, month: number, year: number) {
+    return this.attendanceRepo.getLateTrend(schoolId, classSectionId, month, year);
+  }
+
+  async getConflicts(schoolId: string, date?: string) {
+    return this.attendanceRepo.getConflicts(schoolId, date);
+  }
+
+  async resolveConflict(conflictId: string, schoolId: string, resolution: 'RFID_WON' | 'MANUAL_WON' | 'ADMIN_SET', resolvedBy: string) {
+    return this.attendanceRepo.resolveConflict(conflictId, schoolId, resolution, resolvedBy);
+  }
+
+  async resolveMissingPunch(
+    punchId: string,
+    schoolId: string,
+    resolvedStatus: 'PRESENT' | 'HALF_DAY',
+  ): Promise<void> {
+    await this.attendanceRepo.resolveMissingPunch(punchId, schoolId, resolvedStatus);
+    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
   }
 }

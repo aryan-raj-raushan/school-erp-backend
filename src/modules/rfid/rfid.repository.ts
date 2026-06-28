@@ -15,6 +15,9 @@ import { attendances } from '../../database/drizzle/schema/attendance.schema';
 import { staffAttendances } from '../../database/drizzle/schema/staff-attendance.schema';
 import { examSchedules } from '../../database/drizzle/schema/exam-schedule.schema';
 import { examAttendance } from '../../database/drizzle/schema/exam-attendance.schema';
+import { AttendanceEngineService } from '../attendance/attendance-engine.service';
+import { rfidPunchLog } from '../../database/drizzle/schema/rfid-punch-log.schema';
+import { studentMovements } from '../../database/drizzle/schema/student-movements.schema';
 
 export type PersonRow = {
   id: string;
@@ -25,7 +28,10 @@ export type PersonRow = {
 
 @Injectable()
 export class RfidRepository {
-  constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE_ORM) private readonly db: DrizzleDB,
+    private readonly engine: AttendanceEngineService,
+  ) {}
 
   async insert(data: NewRfidScanEventRow): Promise<void> {
     await this.db.insert(rfidScanEvents).values(data).onConflictDoNothing();
@@ -204,6 +210,54 @@ export class RfidRepository {
     if (!academic?.section_id) return;
 
     const dateStr = tapDate.toISOString().split('T')[0];
+    const tapTime = tapDate.toISOString().split('T')[1].substring(0, 5);
+
+    // Check if an entry punch already exists for today
+    const [existingPunch] = await this.db
+      .select()
+      .from(rfidPunchLog)
+      .where(
+        and(
+          eq(rfidPunchLog.student_id, studentId),
+          eq(rfidPunchLog.school_id, schoolId),
+          eq(rfidPunchLog.date, dateStr),
+        ),
+      )
+      .limit(1);
+
+    if (existingPunch) {
+      // Second tap = exit tap — mark punch as COMPLETE
+      if (!existingPunch.exit_tap) {
+        await this.db
+          .update(rfidPunchLog)
+          .set({ exit_tap: tapDate, status: 'COMPLETE' })
+          .where(eq(rfidPunchLog.id, existingPunch.id));
+      }
+      // Attendance was already marked on entry; nothing more to do
+      return;
+    }
+
+    // First tap of the day — write punch log entry
+    await this.db.insert(rfidPunchLog).values({
+      id: randomUUID(),
+      school_id: schoolId,
+      student_id: studentId,
+      date: dateStr,
+      entry_tap: tapDate,
+      status: 'MISSING_EXIT',
+    });
+
+    const engineResult = await this.engine.resolve({
+      schoolId,
+      personId: studentId,
+      personType: 'STUDENT',
+      date: dateStr,
+      tapTime,
+      source: 'RFID',
+      classSectionId: academic.section_id,
+    });
+
+    if (engineResult.status === 'HOLIDAY' || engineResult.status === 'SKIP') return;
 
     await this.db
       .insert(attendances)
@@ -214,9 +268,24 @@ export class RfidRepository {
         academic_year_id: currentYear.id,
         class_section_id: academic.section_id,
         date: dateStr,
-        status: 'PRESENT',
+        session: 'MORNING' as const,
+        status: engineResult.status as typeof attendances.$inferInsert.status,
         marked_by: 'rfid-auto',
-        is_late: false,
+        is_late: engineResult.isLate,
+      })
+      .onConflictDoNothing();
+
+    // Log campus entry in student_movements
+    await this.db
+      .insert(studentMovements)
+      .values({
+        id: randomUUID(),
+        school_id: schoolId,
+        student_id: studentId,
+        date: dateStr,
+        tapped_at: tapDate,
+        location: 'CAMPUS',
+        device_id: null,
       })
       .onConflictDoNothing();
   }
@@ -241,6 +310,19 @@ export class RfidRepository {
 
   async autoMarkStaffAttendance(staffId: string, schoolId: string, tapDate: Date): Promise<void> {
     const dateStr = tapDate.toISOString().split('T')[0];
+    const tapTime = tapDate.toISOString().split('T')[1].substring(0, 5);
+
+    const engineResult = await this.engine.resolve({
+      schoolId,
+      personId: staffId,
+      personType: 'STAFF',
+      date: dateStr,
+      tapTime,
+      source: 'RFID',
+    });
+
+    if (engineResult.status === 'HOLIDAY' || engineResult.status === 'SKIP') return;
+
     await this.db
       .insert(staffAttendances)
       .values({
@@ -248,9 +330,9 @@ export class RfidRepository {
         school_id: schoolId,
         staff_id: staffId,
         date: dateStr,
-        status: 'PRESENT',
+        status: engineResult.status as typeof staffAttendances.$inferInsert.status,
         marked_by: 'rfid-auto',
-        is_late: false,
+        is_late: engineResult.isLate,
       })
       .onConflictDoNothing();
   }

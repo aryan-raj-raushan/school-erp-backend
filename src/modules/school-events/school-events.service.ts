@@ -70,4 +70,11 @@ export class SchoolEventsService {
     await this.schoolEventsRepo.softDelete(id, schoolId);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
   }
+
+  async getUnifiedCalendar(schoolId: string, from: string, to: string): Promise<SchoolEvent[]> {
+    const key = `${this.cacheKey(schoolId)}:calendar:${from}:${to}`;
+    return this.redisService.getOrSet(key, 300, () =>
+      this.schoolEventsRepo.findAll(schoolId, {} as SchoolEventFilterDto),
+    );
+  }
 }
