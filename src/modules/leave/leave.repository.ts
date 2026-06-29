@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, getTableColumns } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -9,6 +9,8 @@ import {
   teacherLeaveRequests,
   studentLeaveRequests,
 } from '../../database/drizzle/schema/leave.schema';
+import { students } from '../../database/drizzle/schema/students.schema';
+import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
 import {
   leaveApprovalWorkflow,
   leaveWorkflowStepTemplates,
@@ -146,10 +148,17 @@ export class LeaveRepository {
       );
   }
 
-  async findAllBalances(schoolId: string, academicYearId: string): Promise<LeaveBalance[]> {
+  async findAllBalances(
+    schoolId: string,
+    academicYearId: string,
+  ): Promise<(LeaveBalance & { staff_name: string | null })[]> {
     return this.db
-      .select()
+      .select({
+        ...getTableColumns(leaveBalances),
+        staff_name: sql<string>`${schoolUsers.first_name} || ' ' || coalesce(${schoolUsers.last_name}, '')`,
+      })
       .from(leaveBalances)
+      .leftJoin(schoolUsers, eq(leaveBalances.staff_id, schoolUsers.id))
       .where(
         and(
           eq(leaveBalances.school_id, schoolId),
@@ -171,12 +180,19 @@ export class LeaveRepository {
     return row;
   }
 
-  async findTeacherRequests(schoolId: string, staffId?: string): Promise<TeacherLeaveRequest[]> {
+  async findTeacherRequests(
+    schoolId: string,
+    staffId?: string,
+  ): Promise<(TeacherLeaveRequest & { staff_name: string | null })[]> {
     const conditions = [eq(teacherLeaveRequests.school_id, schoolId)];
     if (staffId) conditions.push(eq(teacherLeaveRequests.staff_id, staffId));
     return this.db
-      .select()
+      .select({
+        ...getTableColumns(teacherLeaveRequests),
+        staff_name: sql<string>`${schoolUsers.first_name} || ' ' || coalesce(${schoolUsers.last_name}, '')`,
+      })
       .from(teacherLeaveRequests)
+      .leftJoin(schoolUsers, eq(teacherLeaveRequests.staff_id, schoolUsers.id))
       .where(and(...conditions))
       .orderBy(teacherLeaveRequests.created_at);
   }
@@ -215,13 +231,17 @@ export class LeaveRepository {
     schoolId: string,
     studentId?: string,
     appliedBy?: string,
-  ): Promise<StudentLeaveRequest[]> {
+  ): Promise<(StudentLeaveRequest & { student_name: string | null })[]> {
     const conditions = [eq(studentLeaveRequests.school_id, schoolId)];
     if (studentId) conditions.push(eq(studentLeaveRequests.student_id, studentId));
     if (appliedBy) conditions.push(eq(studentLeaveRequests.applied_by, appliedBy));
     return this.db
-      .select()
+      .select({
+        ...getTableColumns(studentLeaveRequests),
+        student_name: sql<string>`${students.first_name} || ' ' || coalesce(${students.last_name}, '')`,
+      })
       .from(studentLeaveRequests)
+      .leftJoin(students, eq(studentLeaveRequests.student_id, students.id))
       .where(and(...conditions))
       .orderBy(studentLeaveRequests.created_at);
   }
@@ -268,7 +288,12 @@ export class LeaveRepository {
     const [row] = await this.db
       .select()
       .from(leaveApprovalWorkflow)
-      .where(and(eq(leaveApprovalWorkflow.school_id, schoolId), eq(leaveApprovalWorkflow.is_active, true)))
+      .where(
+        and(
+          eq(leaveApprovalWorkflow.school_id, schoolId),
+          eq(leaveApprovalWorkflow.is_active, true),
+        ),
+      )
       .limit(1);
     return row;
   }

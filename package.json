@@ -6,11 +6,11 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "prebuild": "rm -f tsconfig.build.tsbuildinfo",
+    "prebuild": "node -e \"try{require('fs').unlinkSync('tsconfig.build.tsbuildinfo')}catch(e){}\"",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "prestart:dev": "rm -f tsconfig.build.tsbuildinfo",
+    "prestart:dev": "node -e \"try{require('fs').unlinkSync('tsconfig.build.tsbuildinfo')}catch(e){}\"",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
