@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/swagger';
-import { IsString, IsOptional, IsInt, MaxLength, Min, Max, Matches } from 'class-validator';
+import { IsString, IsOptional, IsInt, IsNumberString, MaxLength, Min, Max, Matches } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { StringUtils } from '../../../utils/string.utils';
@@ -54,4 +54,20 @@ export class UpdateSchoolDto extends PartialType(CreateSchoolDto) {
   @IsOptional()
   @IsString()
   logo_url?: string;
+
+  @ApiPropertyOptional({ example: 'India' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  country?: string;
+
+  @ApiPropertyOptional({ example: '28.6139' })
+  @IsOptional()
+  @IsNumberString()
+  lat?: string;
+
+  @ApiPropertyOptional({ example: '77.2090' })
+  @IsOptional()
+  @IsNumberString()
+  lng?: string;
 }
