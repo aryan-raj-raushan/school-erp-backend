@@ -260,7 +260,7 @@ export class AttendanceRepository {
       .from(attendances)
       .innerJoin(students, eq(attendances.student_id, students.id))
       .where(and(...conditions))
-      // .groupBy(attendances.student_id, students.first_name, students.last_name, students.roll_number, students.admission_number);
+      .groupBy(attendances.student_id, students.first_name, students.last_name);
 
     return results
       .filter((r) => {
