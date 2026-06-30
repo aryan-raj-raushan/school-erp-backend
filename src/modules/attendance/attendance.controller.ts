@@ -11,13 +11,16 @@ import {
   HttpCode,
   HttpStatus,
   Ip,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import {
   AttendanceFilterDto,
+  AttendanceExportFilterDto,
   StudentAttendanceFilterDto,
   DefaultersFilterDto,
 } from './dto/attendance-filter.dto';
@@ -47,6 +50,8 @@ export class AttendanceController {
     const data = await this.attendanceService.mark(dto, schoolId, userId);
     return ApiResponse.created(data, 'Attendance marked successfully');
   }
+
+  // ── Named sub-routes MUST come before `:attendanceId` ──────────────────────
 
   @Get('daily')
   @ApiOperation({ summary: 'Daily attendance report for a class section' })
@@ -90,10 +95,75 @@ export class AttendanceController {
 
   @Get('export')
   @Permissions(PERMISSION_REGISTRY.reports.export)
-  @ApiOperation({ summary: 'Enqueue attendance export job' })
-  async enqueueExport(@GetSchoolId() schoolId: string, @Query() filters: AttendanceFilterDto) {
-    const data = await this.attendanceService.enqueueExport(schoolId, filters);
-    return ApiResponse.success(data, 'Export job enqueued');
+  @ApiOperation({ summary: 'Download attendance as Excel file' })
+  async generateExport(
+    @GetSchoolId() schoolId: string,
+    @Query() filters: AttendanceExportFilterDto,
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } = await this.attendanceService.generateExport(schoolId, filters);
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
+  }
+
+  @Get('heatmap')
+  @ApiOperation({ summary: 'Attendance heatmap for a student over a year' })
+  @ApiQuery({ name: 'studentId', required: true })
+  @ApiQuery({ name: 'year', required: true, type: Number })
+  async getHeatmap(
+    @GetSchoolId() schoolId: string,
+    @Query('studentId') studentId: string,
+    @Query('year') year: string,
+  ) {
+    const data = await this.attendanceService.getHeatmap(schoolId, studentId, Number(year));
+    return ApiResponse.success(data, 'Heatmap fetched');
+  }
+
+  @Get('late-trend')
+  @ApiOperation({ summary: 'Late arrival trend by date for a class section' })
+  @ApiQuery({ name: 'class_section_id', required: true })
+  @ApiQuery({ name: 'month', required: true, type: Number })
+  @ApiQuery({ name: 'year', required: true, type: Number })
+  async getLateTrend(
+    @GetSchoolId() schoolId: string,
+    @Query('class_section_id') classSectionId: string,
+    @Query('month') month: string,
+    @Query('year') year: string,
+  ) {
+    const data = await this.attendanceService.getLateTrend(schoolId, classSectionId, Number(month), Number(year));
+    return ApiResponse.success(data, 'Late trend fetched');
+  }
+
+  @Get('conflicts')
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
+  @ApiOperation({ summary: 'Unresolved attendance conflicts' })
+  @ApiQuery({ name: 'date', required: false })
+  async getConflicts(@GetSchoolId() schoolId: string, @Query('date') date?: string) {
+    const data = await this.attendanceService.getConflicts(schoolId, date);
+    return ApiResponse.success(data, 'Conflicts fetched');
+  }
+
+  @Get('missing-punches')
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
+  @ApiOperation({ summary: 'Students with RFID entry but no exit for a date' })
+  @ApiQuery({ name: 'date', required: true })
+  async getMissingPunches(
+    @GetSchoolId() schoolId: string,
+    @Query('date') date: string,
+  ) {
+    const data = await this.attendanceService.getMissingPunches(schoolId, date);
+    return ApiResponse.success(data, 'Missing punches fetched successfully');
+  }
+
+  @Get('dashboard/today')
+  @ApiOperation({ summary: 'Today attendance summary for dashboard' })
+  async getTodayDashboard(@GetSchoolId() schoolId: string) {
+    const data = await this.attendanceService.getTodayDashboard(schoolId);
+    return ApiResponse.success(data, 'Today dashboard fetched');
   }
 
   @Get('students/:studentId')
@@ -156,6 +226,8 @@ export class AttendanceController {
     return ApiResponse.success(data, 'Section attendance fetched successfully');
   }
 
+  // ── Wildcard param route — keep AFTER all named routes ─────────────────────
+
   @Get(':attendanceId')
   @ApiOperation({ summary: 'Get single attendance record by ID' })
   async findOne(
@@ -171,6 +243,33 @@ export class AttendanceController {
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: AttendanceFilterDto) {
     const data = await this.attendanceService.findAll(schoolId, filters);
     return ApiResponse.success(data.items, 'Attendance fetched successfully', data.meta);
+  }
+
+  // ── Mutation routes ─────────────────────────────────────────────────────────
+
+  @Put('conflicts/:conflictId/resolve')
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
+  @ApiOperation({ summary: 'Resolve an attendance conflict' })
+  async resolveConflict(
+    @Param('conflictId') conflictId: string,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+    @Body() body: { resolution: 'RFID_WON' | 'MANUAL_WON' | 'ADMIN_SET' },
+  ) {
+    const data = await this.attendanceService.resolveConflict(conflictId, schoolId, body.resolution, userId);
+    return ApiResponse.success(data, 'Conflict resolved');
+  }
+
+  @Put('missing-punches/:punchId/resolve')
+  @Permissions(PERMISSION_REGISTRY.attendance.update)
+  @ApiOperation({ summary: 'Resolve a missing exit punch — mark attendance as PRESENT or HALF_DAY' })
+  async resolveMissingPunch(
+    @Param('punchId') punchId: string,
+    @GetSchoolId() schoolId: string,
+    @Body() body: { status: 'PRESENT' | 'HALF_DAY' },
+  ) {
+    await this.attendanceService.resolveMissingPunch(punchId, schoolId, body.status);
+    return ApiResponse.success(null, 'Missing punch resolved successfully');
   }
 
   @Put(':attendanceId')
@@ -198,87 +297,6 @@ export class AttendanceController {
   ) {
     const data = await this.attendanceService.getAuditLog(attendanceId, schoolId);
     return ApiResponse.success(data, 'Audit log fetched successfully');
-  }
-
-  @Get('dashboard/today')
-  @ApiOperation({ summary: 'Today attendance summary for dashboard' })
-  async getTodayDashboard(@GetSchoolId() schoolId: string) {
-    const data = await this.attendanceService.getTodayDashboard(schoolId);
-    return ApiResponse.success(data, 'Today dashboard fetched');
-  }
-
-  @Get('heatmap')
-  @ApiOperation({ summary: 'Attendance heatmap for a student over a year' })
-  @ApiQuery({ name: 'student_id', required: true })
-  @ApiQuery({ name: 'year', required: true, type: Number })
-  async getHeatmap(
-    @GetSchoolId() schoolId: string,
-    @Query('student_id') studentId: string,
-    @Query('year') year: string,
-  ) {
-    const data = await this.attendanceService.getHeatmap(schoolId, studentId, Number(year));
-    return ApiResponse.success(data, 'Heatmap fetched');
-  }
-
-  @Get('late-trend')
-  @ApiOperation({ summary: 'Late arrival trend by date for a class section' })
-  @ApiQuery({ name: 'class_section_id', required: true })
-  @ApiQuery({ name: 'month', required: true, type: Number })
-  @ApiQuery({ name: 'year', required: true, type: Number })
-  async getLateTrend(
-    @GetSchoolId() schoolId: string,
-    @Query('class_section_id') classSectionId: string,
-    @Query('month') month: string,
-    @Query('year') year: string,
-  ) {
-    const data = await this.attendanceService.getLateTrend(schoolId, classSectionId, Number(month), Number(year));
-    return ApiResponse.success(data, 'Late trend fetched');
-  }
-
-  @Get('conflicts')
-  @Permissions(PERMISSION_REGISTRY.attendance.update)
-  @ApiOperation({ summary: 'Unresolved attendance conflicts' })
-  @ApiQuery({ name: 'date', required: false })
-  async getConflicts(@GetSchoolId() schoolId: string, @Query('date') date?: string) {
-    const data = await this.attendanceService.getConflicts(schoolId, date);
-    return ApiResponse.success(data, 'Conflicts fetched');
-  }
-
-  @Put('conflicts/:conflictId/resolve')
-  @Permissions(PERMISSION_REGISTRY.attendance.update)
-  @ApiOperation({ summary: 'Resolve an attendance conflict' })
-  async resolveConflict(
-    @Param('conflictId') conflictId: string,
-    @GetSchoolId() schoolId: string,
-    @GetCurrentUserId() userId: string,
-    @Body() body: { resolution: 'RFID_WON' | 'MANUAL_WON' | 'ADMIN_SET' },
-  ) {
-    const data = await this.attendanceService.resolveConflict(conflictId, schoolId, body.resolution, userId);
-    return ApiResponse.success(data, 'Conflict resolved');
-  }
-
-  @Get('missing-punches')
-  @Permissions(PERMISSION_REGISTRY.attendance.update)
-  @ApiOperation({ summary: 'Students with RFID entry but no exit for a date' })
-  @ApiQuery({ name: 'date', required: true })
-  async getMissingPunches(
-    @GetSchoolId() schoolId: string,
-    @Query('date') date: string,
-  ) {
-    const data = await this.attendanceService.getMissingPunches(schoolId, date);
-    return ApiResponse.success(data, 'Missing punches fetched successfully');
-  }
-
-  @Put('missing-punches/:punchId/resolve')
-  @Permissions(PERMISSION_REGISTRY.attendance.update)
-  @ApiOperation({ summary: 'Resolve a missing exit punch — mark attendance as PRESENT or HALF_DAY' })
-  async resolveMissingPunch(
-    @Param('punchId') punchId: string,
-    @GetSchoolId() schoolId: string,
-    @Body() body: { status: 'PRESENT' | 'HALF_DAY' },
-  ) {
-    await this.attendanceService.resolveMissingPunch(punchId, schoolId, body.status);
-    return ApiResponse.success(null, 'Missing punch resolved successfully');
   }
 
   @Delete(':attendanceId')

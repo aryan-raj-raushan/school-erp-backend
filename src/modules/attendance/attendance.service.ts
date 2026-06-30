@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException, Inject } from '@nestjs/common';
+import * as ExcelJS from 'exceljs';
 import { AttendanceRepository } from './attendance.repository';
 import { AttendanceEngineService } from './attendance-engine.service';
 import { SchoolSettingsService } from '../school-settings/school-settings.service';
@@ -13,6 +14,7 @@ import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import {
   AttendanceFilterDto,
+  type AttendanceExportFilterDto,
   StudentAttendanceFilterDto,
   DefaultersFilterDto,
 } from './dto/attendance-filter.dto';
@@ -279,15 +281,45 @@ export class AttendanceService {
     );
   }
 
-  async enqueueExport(schoolId: string, filters: AttendanceFilterDto): Promise<{ jobId: string }> {
-    const jobId = generateId();
-    const jobKey = `export_job:attendance:${jobId}`;
-    await this.redisService.setex(
-      jobKey,
-      86400,
-      JSON.stringify({ jobId, status: 'PENDING', schoolId, filters }),
-    );
-    return { jobId };
+  async generateExport(schoolId: string, filters: AttendanceExportFilterDto): Promise<{ buffer: Buffer; filename: string }> {
+    const records = await this.attendanceRepo.getExportRecords(schoolId, filters);
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Attendance');
+
+    sheet.columns = [
+      { header: 'Date', key: 'date', width: 14 },
+      { header: 'Class / Section', key: 'section_label', width: 22 },
+      { header: 'Student Name', key: 'student_name', width: 26 },
+      { header: 'Status', key: 'status', width: 14 },
+      { header: 'Late?', key: 'is_late', width: 8 },
+      { header: 'Session', key: 'session', width: 12 },
+      { header: 'Remarks', key: 'remarks', width: 32 },
+      { header: 'Marked By', key: 'marked_by_name', width: 24 },
+    ];
+
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE9ECEF' } };
+    headerRow.alignment = { vertical: 'middle' };
+
+    for (const r of records) {
+      sheet.addRow({
+        date: r.date,
+        section_label: r.section_label,
+        student_name: r.student_name,
+        status: r.status,
+        is_late: r.is_late ? 'Yes' : 'No',
+        session: r.session,
+        remarks: r.remarks ?? '',
+        marked_by_name: r.marked_by_name ?? '',
+      });
+    }
+
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    const from = filters.start_date ?? 'all';
+    const to = filters.end_date ?? 'all';
+    return { buffer, filename: `attendance_${from}_to_${to}.xlsx` };
   }
 
   async getStudentHistory(
