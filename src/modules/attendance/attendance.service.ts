@@ -13,6 +13,7 @@ import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import {
   AttendanceFilterDto,
+  type AttendanceExportFilterDto,
   StudentAttendanceFilterDto,
   DefaultersFilterDto,
 } from './dto/attendance-filter.dto';
@@ -279,7 +280,7 @@ export class AttendanceService {
     );
   }
 
-  async enqueueExport(schoolId: string, filters: AttendanceFilterDto): Promise<{ jobId: string }> {
+  async enqueueExport(schoolId: string, filters: AttendanceExportFilterDto): Promise<{ jobId: string }> {
     const jobId = generateId();
     const jobKey = `export_job:attendance:${jobId}`;
     await this.redisService.setex(
