@@ -413,6 +413,36 @@ export class AttendanceRepository {
     return row;
   }
 
+  async getExportRecords(
+    schoolId: string,
+    filters: { class_section_id?: string; start_date?: string; end_date?: string; academic_year_id?: string },
+  ) {
+    const conditions = [eq(attendances.school_id, schoolId)];
+    if (filters.class_section_id) conditions.push(eq(attendances.class_section_id, filters.class_section_id));
+    if (filters.academic_year_id) conditions.push(eq(attendances.academic_year_id, filters.academic_year_id));
+    if (filters.start_date) conditions.push(gte(attendances.date, filters.start_date));
+    if (filters.end_date) conditions.push(lte(attendances.date, filters.end_date));
+
+    return this.db
+      .select({
+        date: attendances.date,
+        status: attendances.status,
+        is_late: attendances.is_late,
+        session: attendances.session,
+        remarks: attendances.remarks,
+        student_name: sql<string>`concat(${students.first_name}, ' ', coalesce(${students.last_name}, ''))`,
+        marked_by_name: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
+        section_label: sql<string>`concat(${classes.name}, ' ', ${sections.name})`,
+      })
+      .from(attendances)
+      .innerJoin(students, eq(attendances.student_id, students.id))
+      .leftJoin(schoolUsers, eq(attendances.marked_by, schoolUsers.id))
+      .leftJoin(sections, eq(attendances.class_section_id, sections.id))
+      .leftJoin(classes, eq(sections.class_id, classes.id))
+      .where(and(...conditions))
+      .orderBy(attendances.date, students.first_name);
+  }
+
   async resolveMissingPunch(punchId: string, schoolId: string, resolvedStatus: 'PRESENT' | 'HALF_DAY'): Promise<void> {
     const [punch] = await this.db
       .select()

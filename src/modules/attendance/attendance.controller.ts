@@ -11,7 +11,9 @@ import {
   HttpCode,
   HttpStatus,
   Ip,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
 import { MarkAttendanceDto } from './dto/mark-attendance.dto';
@@ -93,10 +95,19 @@ export class AttendanceController {
 
   @Get('export')
   @Permissions(PERMISSION_REGISTRY.reports.export)
-  @ApiOperation({ summary: 'Enqueue attendance export job' })
-  async enqueueExport(@GetSchoolId() schoolId: string, @Query() filters: AttendanceExportFilterDto) {
-    const data = await this.attendanceService.enqueueExport(schoolId, filters);
-    return ApiResponse.success(data, 'Export job enqueued');
+  @ApiOperation({ summary: 'Download attendance as Excel file' })
+  async generateExport(
+    @GetSchoolId() schoolId: string,
+    @Query() filters: AttendanceExportFilterDto,
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } = await this.attendanceService.generateExport(schoolId, filters);
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 
   @Get('heatmap')
