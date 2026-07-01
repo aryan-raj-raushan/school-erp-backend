@@ -99,10 +99,20 @@ export class DefaultersFilterDto {
   @IsUUID()
   class_section_id?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: 1, description: 'Month (1-12)' })
   @IsOptional()
-  @IsUUID()
-  academic_year_id?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  month?: number;
+
+  @ApiPropertyOptional({ example: 2026, description: 'Year' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  year?: number;
 
   @ApiPropertyOptional({ example: 75, description: 'Minimum attendance % threshold' })
   @IsOptional()

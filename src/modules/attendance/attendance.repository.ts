@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+﻿import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, gte, lte, sql, isNull, count, desc } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
@@ -242,10 +242,20 @@ export class AttendanceRepository {
     return row ? `${row.class_name} ${row.section_name}` : classSectionId;
   }
 
-  async getDefaulters(schoolId: string, class_section_id?: string, academic_year_id?: string, threshold = 75): Promise<DefaulterRecord[]> {
-    const conditions = [eq(attendances.school_id, schoolId)];
-    if (class_section_id) conditions.push(eq(attendances.class_section_id, class_section_id));
-    if (academic_year_id) conditions.push(eq(attendances.academic_year_id, academic_year_id));
+  async getDefaulters(schoolId: string, class_section_id?: string, month?: number, year?: number, threshold = 75): Promise<DefaulterRecord[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const conditions: any[] = [eq(attendances.school_id, schoolId)];
+
+    if (class_section_id) {
+      conditions.push(eq(attendances.class_section_id, class_section_id));
+    }
+
+    if (month && year) {
+      const firstDay = new Date(year, month - 1, 1).toISOString().split('T')[0];
+      const lastDay = new Date(year, month, 0).toISOString().split('T')[0];
+      conditions.push(gte(attendances.date, firstDay));
+      conditions.push(lte(attendances.date, lastDay));
+    }
 
     const results = await this.db
       .select({
@@ -285,7 +295,7 @@ export class AttendanceRepository {
       });
   }
 
-  // Legacy — kept for backward compat with section date-range endpoint
+  // Legacy â€” kept for backward compat with section date-range endpoint
   async getDailyReport(schoolId: string, classSectionId: string, date: string): Promise<Attendance[]> {
     return this.db
       .select()
