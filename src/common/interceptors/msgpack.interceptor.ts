@@ -20,6 +20,10 @@ export class MsgpackInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       switchMap((data) => {
+        // If headers already sent (e.g., file export), skip msgpack encoding
+        if (response.headersSent) {
+          return of(null);
+        }
         // Write binary directly — returning Buffer from map() causes NestJS to JSON.stringify it
         // as {"type":"Buffer","data":[...]} which breaks msgpack decode on the client.
         // Return of(null): isNil(null)=true → NestJS calls res.send() with no body → no-op on
