@@ -3,7 +3,10 @@ import { eq, and, lte, gte } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { schoolEvents } from '../../database/drizzle/schema/school-events.schema';
-import { teacherLeaveRequests, studentLeaveRequests } from '../../database/drizzle/schema/leave.schema';
+import {
+  teacherLeaveRequests,
+  studentLeaveRequests,
+} from '../../database/drizzle/schema/leave.schema';
 import { leaveApplications } from '../../database/drizzle/schema/employee-leave.schema';
 import { SchoolSettingsService } from '../school-settings/school-settings.service';
 import { StaffShiftsService } from '../staff-shifts/staff-shifts.service';
@@ -54,13 +57,30 @@ export class AttendanceEngineService {
     // Step 1 — Holiday check
     const isHoliday = await this.isHoliday(ctx.schoolId, ctx.date);
     if (isHoliday) {
-      return { status: 'HOLIDAY', isLate: false, timing: null, reason: 'Holiday', conflictDetected: false };
+      return {
+        status: 'HOLIDAY',
+        isLate: false,
+        timing: null,
+        reason: 'Holiday',
+        conflictDetected: false,
+      };
     }
 
     // Step 2 — Approved leave check
-    const hasApprovedLeave = await this.hasApprovedLeave(ctx.schoolId, ctx.personId, ctx.personType, ctx.date);
+    const hasApprovedLeave = await this.hasApprovedLeave(
+      ctx.schoolId,
+      ctx.personId,
+      ctx.personType,
+      ctx.date,
+    );
     if (hasApprovedLeave) {
-      return { status: 'LEAVE', isLate: false, timing: null, reason: 'Approved leave', conflictDetected: false };
+      return {
+        status: 'LEAVE',
+        isLate: false,
+        timing: null,
+        reason: 'Approved leave',
+        conflictDetected: false,
+      };
     }
 
     // Step 3 — Manual source: trust the provided status, still use timing for is_late
@@ -81,12 +101,24 @@ export class AttendanceEngineService {
 
     // Step 5 — No tap time (RFID/biometric without time) → PRESENT, not late
     if (!ctx.tapTime) {
-      return { status: 'PRESENT', isLate: false, timing, reason: 'No tap time — defaulting to PRESENT', conflictDetected: false };
+      return {
+        status: 'PRESENT',
+        isLate: false,
+        timing,
+        reason: 'No tap time — defaulting to PRESENT',
+        conflictDetected: false,
+      };
     }
 
     // Step 6 — Compute status from tap time
     if (!timing) {
-      return { status: 'PRESENT', isLate: false, timing: null, reason: 'No active timing schedule', conflictDetected: false };
+      return {
+        status: 'PRESENT',
+        isLate: false,
+        timing: null,
+        reason: 'No active timing schedule',
+        conflictDetected: false,
+      };
     }
 
     const result = this.computeStatusFromTime(ctx.tapTime, timing);
@@ -114,15 +146,27 @@ export class AttendanceEngineService {
       : null;
 
     if (absentAfter !== null && tap > absentAfter) {
-      return { status: 'ABSENT', isLate: false, reason: `Arrived after absent cutoff (${timing.absent_cutoff_time})` };
+      return {
+        status: 'ABSENT',
+        isLate: false,
+        reason: `Arrived after absent cutoff (${timing.absent_cutoff_time})`,
+      };
     }
 
     if (halfDayAfter !== null && tap > halfDayAfter) {
-      return { status: 'HALF_DAY', isLate: true, reason: `Arrived after half-day cutoff (${timing.half_day_cutoff_time})` };
+      return {
+        status: 'HALF_DAY',
+        isLate: true,
+        reason: `Arrived after half-day cutoff (${timing.half_day_cutoff_time})`,
+      };
     }
 
     if (tap > lateAfter) {
-      return { status: 'LATE', isLate: true, reason: `Arrived after late cutoff (${timing.late_cutoff_time ?? `${timing.school_start_time}+${grace}min`})` };
+      return {
+        status: 'LATE',
+        isLate: true,
+        reason: `Arrived after late cutoff (${timing.late_cutoff_time ?? `${timing.school_start_time}+${grace}min`})`,
+      };
     }
 
     return { status: 'PRESENT', isLate: false, reason: 'On time' };
@@ -130,7 +174,11 @@ export class AttendanceEngineService {
 
   private async resolveActiveTiming(ctx: AttendanceContext): Promise<SchoolTiming | null> {
     if (ctx.personType === 'STAFF') {
-      const shift = await this.staffShiftsService.getActiveShift(ctx.personId, ctx.schoolId, ctx.date);
+      const shift = await this.staffShiftsService.getActiveShift(
+        ctx.personId,
+        ctx.schoolId,
+        ctx.date,
+      );
       if (shift) {
         return {
           id: `shift:${shift.id}`,
@@ -144,6 +192,9 @@ export class AttendanceEngineService {
           half_day_cutoff_time: null,
           absent_cutoff_time: null,
           working_days: shift.working_days ?? 'MON,TUE,WED,THU,FRI',
+          period_duration_minutes: 45,
+          lunch_start_time: null,
+          lunch_end_time: null,
           effective_from: shift.effective_from,
           effective_to: shift.effective_to,
           priority: 10,

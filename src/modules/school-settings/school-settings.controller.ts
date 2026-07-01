@@ -41,10 +41,7 @@ export class SchoolSettingsController {
   @Put()
   @Permissions(PERMISSION_REGISTRY.schoolSettings.update)
   @ApiOperation({ summary: 'Update school attendance configuration' })
-  async updateSettings(
-    @GetSchoolId() schoolId: string,
-    @Body() dto: UpdateSchoolSettingsDto,
-  ) {
+  async updateSettings(@GetSchoolId() schoolId: string, @Body() dto: UpdateSchoolSettingsDto) {
     const data = await this.service.updateSettings(schoolId, dto);
     return ApiResponse.success(data, 'Settings updated successfully');
   }
@@ -62,10 +59,7 @@ export class SchoolSettingsController {
   @Permissions(PERMISSION_REGISTRY.schoolSettings.update)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new timing schedule' })
-  async createTiming(
-    @GetSchoolId() schoolId: string,
-    @Body() dto: CreateSchoolTimingDto,
-  ) {
+  async createTiming(@GetSchoolId() schoolId: string, @Body() dto: CreateSchoolTimingDto) {
     const data = await this.service.createTiming(schoolId, dto);
     return ApiResponse.created(data, 'Timing created successfully');
   }
@@ -86,10 +80,7 @@ export class SchoolSettingsController {
   @Permissions(PERMISSION_REGISTRY.schoolSettings.update)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Delete a timing schedule' })
-  async deleteTiming(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetSchoolId() schoolId: string,
-  ) {
+  async deleteTiming(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     await this.service.deleteTiming(id, schoolId);
     return ApiResponse.noContent('Timing deleted successfully');
   }

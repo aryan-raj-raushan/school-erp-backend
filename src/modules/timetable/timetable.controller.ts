@@ -14,6 +14,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TimetableService } from './timetable.service';
 import { CreateTimetableDto } from './dto/create-timetable.dto';
+import { AutoGenerateTimetableDto } from './dto/auto-generate-timetable.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
@@ -36,23 +37,32 @@ export class TimetableController {
     );
   }
 
+  @Post('auto-generate')
+  @Permissions(PERMISSION_REGISTRY.timetable.create)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      'Auto-generate a timetable from the class subject-teacher map and a school timing profile',
+  })
+  async autoGenerate(@Body() dto: AutoGenerateTimetableDto, @GetSchoolId() schoolId: string) {
+    const data = await this.timetableService.autoGenerate(dto, schoolId);
+    return ApiResponse.created(data, 'Timetable auto-generated');
+  }
+
   @Get()
   @Permissions(PERMISSION_REGISTRY.timetable.view)
   @ApiOperation({ summary: 'List timetables' })
   @ApiQuery({ name: 'academic_year_id', required: false })
   @ApiQuery({ name: 'class_id', required: false })
-  @ApiQuery({ name: 'class_detail_id', required: false })
   async findAll(
     @GetSchoolId() schoolId: string,
     @Query('academic_year_id') ayId?: string,
     @Query('class_id') classId?: string,
-    @Query('class_detail_id') classDetailId?: string,
   ) {
     return ApiResponse.success(
       await this.timetableService.findAll(schoolId, {
         academic_year_id: ayId,
         class_id: classId,
-        class_detail_id: classDetailId,
       }),
       'Timetables fetched',
     );

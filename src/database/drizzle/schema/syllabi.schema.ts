@@ -1,7 +1,6 @@
 import { pgTable, varchar, boolean, timestamp, text } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 import { classes } from './classes.schema';
-import { classDetails } from './class-details.schema';
 export const syllabi = pgTable('syllabi', {
   id: varchar('id', { length: 36 }).primaryKey(),
   school_id: varchar('school_id', { length: 36 })
@@ -10,10 +9,6 @@ export const syllabi = pgTable('syllabi', {
   class_id: varchar('class_id', { length: 36 })
     .notNull()
     .references(() => classes.id, { onDelete: 'cascade' }),
-  class_detail_id: varchar('class_detail_id', { length: 36 }).references(
-    () => classDetails.id,
-    { onDelete: 'set null' },
-  ),
   title: varchar('title', { length: 200 }).notNull(),
   content: text('content'),
   is_enabled: boolean('is_enabled').default(true).notNull(),

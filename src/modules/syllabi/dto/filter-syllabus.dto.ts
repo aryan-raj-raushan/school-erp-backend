@@ -7,13 +7,4 @@ export class FilterSyllabusDto extends PaginationDto {
   @IsOptional()
   @IsUUID()
   class_id?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
-  class_detail_id?: string;
 }

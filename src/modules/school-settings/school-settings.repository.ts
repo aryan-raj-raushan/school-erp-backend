@@ -7,11 +7,7 @@ import {
   schoolTimings,
   classTimingOverrides,
 } from '../../database/drizzle/schema/school-settings.schema';
-import {
-  SchoolSettings,
-  SchoolTiming,
-  ClassTimingOverride,
-} from './types/school-settings.types';
+import { SchoolSettings, SchoolTiming, ClassTimingOverride } from './types/school-settings.types';
 
 @Injectable()
 export class SchoolSettingsRepository {

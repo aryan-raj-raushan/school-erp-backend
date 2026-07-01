@@ -17,12 +17,8 @@ export class SyllabiRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
   private buildConditions(schoolId: string, filters: Partial<FilterSyllabusDto> = {}) {
-    const conditions = [
-      eq(syllabi.school_id, schoolId),
-      eq(syllabi.deleted, false),
-    ];
+    const conditions = [eq(syllabi.school_id, schoolId), eq(syllabi.deleted, false)];
     if (filters.class_id) conditions.push(eq(syllabi.class_id, filters.class_id));
-    if (filters.class_detail_id) conditions.push(eq(syllabi.class_detail_id, filters.class_detail_id));
     return conditions;
   }
 
@@ -54,7 +50,10 @@ export class SyllabiRepository {
     return row;
   }
 
-  async findWithAttachments(id: string, schoolId: string): Promise<SyllabusWithAttachments | undefined> {
+  async findWithAttachments(
+    id: string,
+    schoolId: string,
+  ): Promise<SyllabusWithAttachments | undefined> {
     const syllabus = await this.findById(id, schoolId);
     if (!syllabus) return undefined;
     const attachments = await this.findAttachments(id);
@@ -79,7 +78,9 @@ export class SyllabiRepository {
   }
 
   async deleteAttachmentsBySyllabusId(syllabusId: string): Promise<void> {
-    await this.db.delete(syllabusAttachments).where(eq(syllabusAttachments.syllabus_id, syllabusId));
+    await this.db
+      .delete(syllabusAttachments)
+      .where(eq(syllabusAttachments.syllabus_id, syllabusId));
   }
 
   async deleteAttachmentById(id: string): Promise<void> {

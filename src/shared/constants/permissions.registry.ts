@@ -66,6 +66,12 @@ export const PERMISSION_REGISTRY = {
     update: 'timetable.update',
     delete: 'timetable.delete',
   },
+  classSubjectTeachers: {
+    view: 'classSubjectTeachers.view',
+    create: 'classSubjectTeachers.create',
+    update: 'classSubjectTeachers.update',
+    delete: 'classSubjectTeachers.delete',
+  },
   syllabus: {
     view: 'syllabus.view',
     create: 'syllabus.create',

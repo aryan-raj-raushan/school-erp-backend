@@ -31,11 +31,11 @@ import { CommunicationsModule } from './modules/communications/communications.mo
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { MasterDataModule } from './modules/master-data/master-data.module';
-import { ClassDetailsModule } from './modules/class-details/class-details.module';
 import { SyllabiModule } from './modules/syllabi/syllabi.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { ClassTypesModule } from './modules/class-types/class-types.module';
 import { TimetableModule } from './modules/timetable/timetable.module';
+import { ClassSubjectTeacherModule } from './modules/class-subject-teacher/class-subject-teacher.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { RolesModule } from './modules/roles/roles.module';
 
@@ -99,7 +99,6 @@ import { StudentMovementsModule } from '@modules/student-movements/student-movem
     DashboardModule,
     ExportsModule,
     MasterDataModule,
-    ClassDetailsModule,
     SyllabiModule,
     DepartmentsModule,
     ClassTypesModule,
@@ -108,6 +107,7 @@ import { StudentMovementsModule } from '@modules/student-movements/student-movem
     FinanceModule,
     SalaryModule,
     TimetableModule,
+    ClassSubjectTeacherModule,
     PermissionsModule,
     RolesModule,
     RfidModule,

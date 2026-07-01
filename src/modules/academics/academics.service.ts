@@ -29,7 +29,6 @@ export class AcademicsService {
     schoolId: string,
     filters: {
       class_id?: string;
-      class_detail_id?: string;
       subject_id?: string;
       academic_year_id?: string;
     },
@@ -195,7 +194,6 @@ export class AcademicsService {
     schoolId: string,
     filters: {
       class_id?: string;
-      class_detail_id?: string;
       subject_id?: string;
       academic_year_id?: string;
     },

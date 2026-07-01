@@ -6,6 +6,8 @@ import { classes } from '../../database/drizzle/schema/classes.schema';
 import { sections } from '../../database/drizzle/schema/sections.schema';
 import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
 import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
+import { subjectClasses } from '../../database/drizzle/schema/subject-classes.schema';
+import { classTimingOverrides } from '../../database/drizzle/schema/school-settings.schema';
 import { Class, NewClass, ClassSectionView } from './types/class.types';
 import { ClassFilterDto } from './dto/class-filter.dto';
 
@@ -113,9 +115,25 @@ export class ClassesRepository {
   }
 
   async softDelete(id: string, schoolId: string): Promise<void> {
-    await this.db
-      .update(classes)
-      .set({ deleted: true, is_active: false, updated_at: new Date() })
-      .where(and(eq(classes.id, id), eq(classes.school_id, schoolId)));
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(classes)
+        .set({ deleted: true, is_active: false, updated_at: new Date() })
+        .where(and(eq(classes.id, id), eq(classes.school_id, schoolId)));
+
+      // Sections have no meaning without their parent class — cascade the soft delete
+      // so they stop appearing in section pickers (students, attendance, RFID, etc.)
+      await tx
+        .update(sections)
+        .set({ deleted: true, is_active: false, updated_at: new Date() })
+        .where(and(eq(sections.class_id, id), eq(sections.school_id, schoolId)));
+
+      // Pure mapping tables — remove rows referencing the deleted class rather than
+      // leaving them orphaned (they have no soft-delete flag of their own).
+      await tx.delete(subjectClasses).where(eq(subjectClasses.class_id, id));
+      await tx
+        .delete(classTimingOverrides)
+        .where(and(eq(classTimingOverrides.class_id, id), eq(classTimingOverrides.school_id, schoolId)));
+    });
   }
 }

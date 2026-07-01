@@ -16,12 +16,12 @@ export class SubjectsService {
     private readonly redisService: RedisService,
   ) {}
 
-  private cacheKey(schoolId: string, classId?: string): string {
-    return `subjects:${schoolId}:${classId ?? 'all'}`;
+  private cacheKey(schoolId: string): string {
+    return `subjects:${schoolId}`;
   }
 
   async findAll(schoolId: string, filters: SubjectFilterDto): Promise<PaginationResponse<Subject>> {
-    const key = `${this.cacheKey(schoolId, filters.class_id)}:list:${filters.page ?? 1}:${filters.limit ?? 20}:${filters.search ?? ''}`;
+    const key = `${this.cacheKey(schoolId)}:list:${filters.page ?? 1}:${filters.limit ?? 20}:${filters.search ?? ''}`;
     return this.redisService.getOrSet(key, CacheTTL.LONG, async () => {
       const [items, total] = await Promise.all([
         this.subjectsRepo.findAll(schoolId, filters),
@@ -43,26 +43,21 @@ export class SubjectsService {
   }
 
   async create(dto: CreateSubjectDto, schoolId: string, createdBy: string): Promise<Subject> {
-    const { class_ids, ...rest } = dto;
-    const subject = await this.subjectsRepo.create(
-      {
-        id: generateId(),
-        school_id: schoolId,
-        created_by: createdBy,
-        ...rest,
-        is_elective: rest.is_elective ?? false,
-        is_active: rest.is_active ?? true,
-      },
-      class_ids ?? [],
-    );
+    const subject = await this.subjectsRepo.create({
+      id: generateId(),
+      school_id: schoolId,
+      created_by: createdBy,
+      ...dto,
+      is_elective: dto.is_elective ?? false,
+      is_active: dto.is_active ?? true,
+    });
     await this.redisService.delByPattern(`subjects:${schoolId}:*`);
     return subject;
   }
 
   async update(id: string, schoolId: string, dto: UpdateSubjectDto): Promise<Subject> {
     await this.findById(id, schoolId);
-    const { class_ids, ...rest } = dto;
-    const updated = await this.subjectsRepo.update(id, schoolId, rest, class_ids);
+    const updated = await this.subjectsRepo.update(id, schoolId, dto);
     await this.redisService.delByPattern(`subjects:${schoolId}:*`);
     return updated;
   }

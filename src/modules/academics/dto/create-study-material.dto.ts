@@ -17,11 +17,6 @@ export class CreateStudyMaterialDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
-  class_detail_id?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUUID()
   subject_id?: string;
 
   @ApiProperty({ example: 'Chapter 5 Notes' })

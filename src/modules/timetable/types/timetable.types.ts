@@ -1,5 +1,10 @@
 import { InferSelectModel, InferInsertModel } from 'drizzle-orm';
-import { timetables, timetablePeriodTimes, timetableEntries, timetableClassTeachers } from '../../../database/drizzle/schema/timetable.schema';
+import {
+  timetables,
+  timetablePeriodTimes,
+  timetableEntries,
+  timetableClassTeachers,
+} from '../../../database/drizzle/schema/timetable.schema';
 
 export type Timetable = InferSelectModel<typeof timetables>;
 export type NewTimetable = InferInsertModel<typeof timetables>;
@@ -19,5 +24,16 @@ export interface TimetableFull {
   entries: (TimetableEntry & { subject_name?: string | null; teacher_name?: string | null })[];
   class_teacher?: { id: string; teacher_id: string; teacher_name: string | null } | null;
   class_name?: string | null;
-  class_detail_name?: string | null;
+}
+
+export interface AutoGenerateConflict {
+  day_of_week: string;
+  period_number: number;
+  subject_name: string;
+  teacher_name: string;
+}
+
+export interface AutoGenerateResult {
+  timetable: TimetableFull;
+  conflicts: AutoGenerateConflict[];
 }

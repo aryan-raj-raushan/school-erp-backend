@@ -123,6 +123,25 @@ export class CreateSchoolTimingDto {
   @MaxLength(100)
   working_days?: string;
 
+  @ApiPropertyOptional({ example: 45, description: 'Length of one teaching period, in minutes' })
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(180)
+  period_duration_minutes?: number;
+
+  @ApiPropertyOptional({ example: '11:30' })
+  @IsOptional()
+  @IsString()
+  @Matches(TIME_REGEX, { message: 'lunch_start_time must be HH:MM' })
+  lunch_start_time?: string;
+
+  @ApiPropertyOptional({ example: '12:00' })
+  @IsOptional()
+  @IsString()
+  @Matches(TIME_REGEX, { message: 'lunch_end_time must be HH:MM' })
+  lunch_end_time?: string;
+
   @ApiProperty({ example: '2025-04-01' })
   @IsString()
   @Matches(DATE_REGEX, { message: 'effective_from must be YYYY-MM-DD' })
@@ -194,6 +213,25 @@ export class UpdateSchoolTimingDto {
   @IsString()
   @MaxLength(100)
   working_days?: string;
+
+  @ApiPropertyOptional({ example: 45, description: 'Length of one teaching period, in minutes' })
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(180)
+  period_duration_minutes?: number;
+
+  @ApiPropertyOptional({ example: '11:30' })
+  @IsOptional()
+  @IsString()
+  @Matches(TIME_REGEX, { message: 'lunch_start_time must be HH:MM' })
+  lunch_start_time?: string;
+
+  @ApiPropertyOptional({ example: '12:00' })
+  @IsOptional()
+  @IsString()
+  @Matches(TIME_REGEX, { message: 'lunch_end_time must be HH:MM' })
+  lunch_end_time?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -2,10 +2,8 @@ import {
   IsString,
   IsNotEmpty,
   IsOptional,
-  IsUUID,
   IsBoolean,
   IsInt,
-  IsArray,
   Matches,
   MaxLength,
   Min,
@@ -27,20 +25,11 @@ export class CreateSubjectDto {
   @IsOptional()
   @IsString()
   @MaxLength(20)
-  @Matches(REGEX.SUBJECT_CODE, { message: 'Code must be 2-20 uppercase alphanumeric chars with optional hyphens' })
+  @Matches(REGEX.SUBJECT_CODE, {
+    message: 'Code must be 2-20 uppercase alphanumeric chars with optional hyphens',
+  })
   @Transform(({ value }) => StringUtils.trim(value)?.toUpperCase())
   code?: string;
-
-  @ApiPropertyOptional({ example: ['uuid-of-class'], description: 'Classes this subject belongs to' })
-  @IsOptional()
-  @IsArray()
-  @IsUUID('all', { each: true })
-  class_ids?: string[];
-
-  @ApiPropertyOptional({ example: 'uuid-of-class-detail', description: 'Links to a specific year/semester' })
-  @IsOptional()
-  @IsUUID()
-  class_detail_id?: string;
 
   @ApiPropertyOptional({ example: 0, description: 'Display order in subject list' })
   @IsOptional()

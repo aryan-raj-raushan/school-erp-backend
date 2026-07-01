@@ -44,14 +44,6 @@ export class CreateSyllabusDto {
   @IsNotEmpty()
   class_id: string;
 
-  @IsOptional()
-  @IsUUID()
-
-  @ApiPropertyOptional({ example: 'uuid-of-class-detail' })
-  @IsOptional()
-  @IsUUID()
-  class_detail_id?: string;
-
   @ApiProperty({ example: 'Mathematics Syllabus Term 1', maxLength: 200 })
   @IsString()
   @IsNotEmpty()

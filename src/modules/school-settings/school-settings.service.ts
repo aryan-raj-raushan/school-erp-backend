@@ -47,9 +47,13 @@ export class SchoolSettingsService {
 
   async getTimings(schoolId: string): Promise<SchoolTiming[]> {
     const key = this.timingsKey(schoolId);
-    return this.redisService.getOrSet(key, CacheTTL.LONG, () =>
-      this.repo.findTimings(schoolId),
-    );
+    return this.redisService.getOrSet(key, CacheTTL.LONG, () => this.repo.findTimings(schoolId));
+  }
+
+  async getTimingById(id: string, schoolId: string): Promise<SchoolTiming> {
+    const timing = await this.repo.findTimingById(id, schoolId);
+    if (!timing) throw new NotFoundException(`Timing '${id}' not found`);
+    return timing;
   }
 
   async getActiveTimingForDate(schoolId: string, date: string): Promise<SchoolTiming | null> {
@@ -73,6 +77,9 @@ export class SchoolSettingsService {
       half_day_cutoff_time: dto.half_day_cutoff_time ?? null,
       absent_cutoff_time: dto.absent_cutoff_time ?? null,
       working_days: dto.working_days ?? 'MON,TUE,WED,THU,FRI',
+      period_duration_minutes: dto.period_duration_minutes ?? 45,
+      lunch_start_time: dto.lunch_start_time ?? null,
+      lunch_end_time: dto.lunch_end_time ?? null,
       effective_from: dto.effective_from,
       effective_to: dto.effective_to,
       priority: dto.priority ?? 0,
