@@ -29,5 +29,6 @@
       "@utils/*": ["src/utils/*"]
     }
   },
-  "exclude": ["node_modules", "dist", "drizzle.config.ts"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

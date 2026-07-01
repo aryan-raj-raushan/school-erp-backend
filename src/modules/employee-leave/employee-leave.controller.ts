@@ -50,7 +50,8 @@ export class LeaveTypesController {
   }
 
   @Post()
-  // @Permissions(PERMISSION_REGISTRY.leaves.create)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new leave type (Admin only)' })
   async create(
@@ -63,7 +64,8 @@ export class LeaveTypesController {
   }
 
   @Patch(':id')
-  // @Permissions(PERMISSION_REGISTRY.leaves.update)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.update)
   @ApiOperation({ summary: 'Update a leave type (Admin only)' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -76,7 +78,8 @@ export class LeaveTypesController {
   }
 
   @Delete(':id')
-  // @Permissions(PERMISSION_REGISTRY.leaves.delete)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft-delete a leave type (Admin only)' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
@@ -108,7 +111,8 @@ export class LeaveAssignedController {
   }
 
   @Post()
-  // @Permissions(PERMISSION_REGISTRY.leaves.create)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Assign a leave type to an employee (Admin only)' })
   async assign(
@@ -126,7 +130,8 @@ export class LeaveAssignedController {
   }
 
   @Delete(':assignmentId')
-  // @Permissions(PERMISSION_REGISTRY.leaves.delete)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke an assigned leave from an employee (Admin only)' })
   async revoke(
@@ -166,7 +171,8 @@ export class LeaveApplicationsController {
 
   // ─── Employee: apply for leave ─────────────────────────────────────────────
   @Post()
-  // @Permissions(PERMISSION_REGISTRY.leaves.apply)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.apply)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Apply for a leave (Employee)' })
   async apply(
@@ -180,7 +186,8 @@ export class LeaveApplicationsController {
 
   // ─── Employee: cancel own pending application ──────────────────────────────
   @Patch(':id/cancel')
-  // @Permissions(PERMISSION_REGISTRY.leaves.apply)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.apply)
   @ApiOperation({ summary: 'Cancel a pending leave application (Employee)' })
   async cancel(
     @Param('id', ParseUUIDPipe) id: string,
@@ -193,7 +200,8 @@ export class LeaveApplicationsController {
 
   // ─── Admin: list all applications (with filters) ───────────────────────────
   @Get()
-  // @Permissions(PERMISSION_REGISTRY.leaves.review)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.review)
   @ApiOperation({ summary: 'List all leave applications (Admin / HR)' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterLeaveApplicationDto) {
     const data = await this.leaveService.findAllApplications(schoolId, filters);
@@ -202,7 +210,8 @@ export class LeaveApplicationsController {
 
   // ─── Admin: get single application ────────────────────────────────────────
   @Get(':id')
-  // @Permissions(PERMISSION_REGISTRY.leaves.review)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.review)
   @ApiOperation({ summary: 'Get a single leave application by ID (Admin / HR)' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     const data = await this.leaveService.findApplicationById(id, schoolId);
@@ -211,7 +220,8 @@ export class LeaveApplicationsController {
 
   // ─── Admin: approve or reject ─────────────────────────────────────────────
   @Patch(':id/review')
-  // @Permissions(PERMISSION_REGISTRY.leaves.review)
+  // TODO: Uncomment after adding proper permissions to PERMISSION_REGISTRY
+  // @Permissions(PERMISSION_REGISTRY.leave.review)
   @ApiOperation({ summary: 'Approve or reject a leave application (Admin / HR)' })
   async review(
     @Param('id', ParseUUIDPipe) id: string,

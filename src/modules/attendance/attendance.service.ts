@@ -276,7 +276,8 @@ export class AttendanceService {
     return this.attendanceRepo.getDefaulters(
       schoolId,
       filters.class_section_id,
-      filters.academic_year_id,
+      filters.month,
+      filters.year,
       filters.threshold,
     );
   }

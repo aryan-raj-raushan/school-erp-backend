@@ -68,6 +68,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       path: request.url,
     };
 
+    // If headers already sent, don't try to send error response
+    if (response.headersSent) {
+      return;
+    }
+
     if (request.headers['accept'] === 'application/msgpack') {
       response
         .status(statusCode)
