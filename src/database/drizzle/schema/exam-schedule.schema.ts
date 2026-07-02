@@ -12,7 +12,7 @@ import { schools } from './schools.schema';
 import { academicYears } from './academic-years.schema';
 import { classes } from './classes.schema';
 import { sections } from './sections.schema';
-import { exams } from './exams.schema';
+import { exams } from './exam.schema';
 import { subjects } from './subjects.schema';
 import { schoolUsers } from './school-users.schema';
 import { examHallDetails } from './exam-hall-details.schema';
@@ -78,6 +78,9 @@ export const examSchedules = pgTable('exam_schedules', {
 
   /** Self-referencing FK – null for parent rows, set for sub-subject rows */
   parent_schedule_id: varchar('parent_schedule_id', { length: 36 }),
+
+  /** When true, auto-generate/auto-shuffle must never overwrite this row */
+  locked: boolean('locked').default(false).notNull(),
 
   is_enabled: boolean('is_enabled').default(true).notNull(),
   deleted: boolean('deleted').default(false).notNull(),

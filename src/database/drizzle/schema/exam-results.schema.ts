@@ -12,7 +12,7 @@ import { schools } from './schools.schema';
 import { academicYears } from './academic-years.schema';
 import { classes } from './classes.schema';
 import { sections } from './sections.schema';
-import { exams } from './exams.schema';
+import { exams } from './exam.schema';
 import { students } from './students.schema';
 import { subjects } from './subjects.schema';
 import { examSchedules } from './exam-schedule.schema';

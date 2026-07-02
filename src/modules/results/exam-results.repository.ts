@@ -345,19 +345,20 @@ export class ExamResultsRepository {
   // ─── Supporting lookups ───────────────────────────────────────────────────
 
   async findExamWithDetails(examId: string, schoolId: string) {
+    // Note: exams no longer carry a single class_id (one exam can span many
+    // classes via exam_classes) — callers needing a class name should look
+    // it up from the student's/report's own class_id via findClassById().
     const [row] = await this.db
       .select({
         id: schema.exams.id,
         exam_name: schema.exams.exam_name,
         exam_term: schema.exams.exam_term,
-        class_id: schema.exams.class_id,
         academic_year_id: schema.exams.academic_year_id,
-        class_name: schema.classes.name,
         academic_year_name: schema.academicYears.name,
         is_published: schema.exams.is_published,
+        status: schema.exams.status,
       })
       .from(schema.exams)
-      .leftJoin(schema.classes, eq(schema.exams.class_id, schema.classes.id))
       .leftJoin(schema.academicYears, eq(schema.exams.academic_year_id, schema.academicYears.id))
       .where(
         and(
@@ -466,6 +467,11 @@ export class ExamResultsRepository {
       .select()
       .from(schema.sections)
       .where(eq(schema.sections.id, sectionId));
+    return row;
+  }
+
+  async findClassById(classId: string) {
+    const [row] = await this.db.select().from(schema.classes).where(eq(schema.classes.id, classId));
     return row;
   }
 }

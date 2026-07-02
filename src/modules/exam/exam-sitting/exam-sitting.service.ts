@@ -7,6 +7,7 @@ import {
 import { ExamSittingRepository } from './exam-sitting.repository';
 import { ExamHallService } from '../exam-hall/exam-hall.service';
 import { ExamService } from '../exam-manage/exam.service';
+import { ExamScheduleRepository } from '../exam-schedule/exam-schedule.repository';
 import { RedisService } from '../../redis/redis.service';
 import {
   CreateSittingPlanBulkDto,
@@ -16,7 +17,7 @@ import {
   RoomPdfQueryDto,
 } from './dto/exam-sitting.dto';
 import { ExamSittingPlan } from './types/exam-sitting.types';
-import type { RoomStudentRow } from './exam-sitting.repository';
+import type { RoomStudentRow, StudentForShuffle } from './exam-sitting.repository';
 import { REDIS_EXAM_KEYS } from '@shared/redis/redis-key';
 import { PaginationResponse } from '@shared/responses/api-response';
 import { generateId } from '@utils/uuid.utils';
@@ -24,6 +25,8 @@ import { generateId } from '@utils/uuid.utils';
 export interface ShuffleResult {
   total_assigned: number;
   rooms: { room_name: string; assigned_count: number }[];
+  unassigned_count: number;
+  shortfall_warning?: string;
 }
 
 export interface RoomPdfData {
@@ -36,12 +39,32 @@ export interface RoomPdfData {
   students: RoomStudentRow[];
 }
 
+export interface MasterPdfRoomEntry {
+  class_name: string;
+  subject_name: string;
+  invigilator_name: string;
+  student_count: number;
+}
+
+export interface MasterPdfRoomSection {
+  room_name: string;
+  entries: MasterPdfRoomEntry[];
+}
+
+export interface MasterPdfData {
+  school_name: string;
+  exam_name: string;
+  date?: string;
+  rooms: MasterPdfRoomSection[];
+}
+
 @Injectable()
 export class ExamSittingService {
   constructor(
     private readonly repo: ExamSittingRepository,
     private readonly hallService: ExamHallService,
     private readonly examService: ExamService,
+    private readonly scheduleRepo: ExamScheduleRepository,
     private readonly redis: RedisService,
   ) {}
 
@@ -144,35 +167,67 @@ export class ExamSittingService {
     await this.redis.delByPattern(REDIS_EXAM_KEYS.SITTING.PATTERN(schoolId, existing.exam_id));
   }
 
+  /**
+   * Riffle-interleave a roll-number-sorted list so originally adjacent roll
+   * numbers end up spread apart (anti-cheating fallback for a single-class
+   * group, and the base ordering fed into the cross-group interleave below).
+   */
+  private spaceByRollNumber<T extends { roll_number: string | null }>(list: T[]): T[] {
+    const sorted = [...list].sort((a, b) =>
+      (a.roll_number ?? '').localeCompare(b.roll_number ?? '', undefined, { numeric: true }),
+    );
+    const mid = Math.ceil(sorted.length / 2);
+    const first = sorted.slice(0, mid);
+    const second = sorted.slice(mid);
+    const result: T[] = [];
+    for (let i = 0; i < first.length; i++) {
+      result.push(first[i]);
+      if (second[i]) result.push(second[i]);
+    }
+    return result;
+  }
+
+  /**
+   * Auto-seat students for an exam across the given rooms.
+   * Anti-cheating strategy: within each class-section group, roll numbers
+   * are riffle-spaced (no two originally-adjacent roll numbers end up next
+   * to each other); groups are then round-robin interleaved across seats so
+   * a multi-class room never has two same-class-section neighbours either.
+   */
   async autoShuffle(
     dto: AutoShuffleSittingPlanDto,
     schoolId: string,
     createdBy: string,
   ): Promise<ShuffleResult> {
-    const { exam_ids, academic_year_id, hall_detail_ids, clear_existing = true } = dto;
+    const { exam_id, academic_year_id, hall_detail_ids, clear_existing = true } = dto;
 
-    // 1. Fetch each exam → students per class, grouped by class+section
-    const groupMap = new Map<string, { student_id: string; exam_id: string; roll_number: string | null }[]>();
+    const exam = await this.examService.findById(exam_id, schoolId);
+    const classIds =
+      dto.class_ids && dto.class_ids.length > 0 ? dto.class_ids : exam.class_ids;
+    if (classIds.length === 0) {
+      throw new BadRequestException('This exam has no participating classes to seat');
+    }
 
-    for (const examId of exam_ids) {
-      const exam = await this.examService.findById(examId, schoolId);
-      const studentsForExam = await this.repo.findStudentsForExam(
-        examId,
-        exam.class_id,
+    // 1. Fetch students per class, grouped by class+section
+    const groupMap = new Map<string, StudentForShuffle[]>();
+    for (const classId of classIds) {
+      const studentsForClass = await this.repo.findStudentsForExam(
+        exam_id,
+        classId,
         academic_year_id,
         schoolId,
       );
-      for (const s of studentsForExam) {
-        const groupKey = `${exam.class_id}__${s.section_id ?? 'none'}`;
+      for (const s of studentsForClass) {
+        const groupKey = `${classId}__${s.section_id ?? 'none'}`;
         if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
-        groupMap.get(groupKey)!.push({ student_id: s.student_id, exam_id: examId, roll_number: s.roll_number });
+        groupMap.get(groupKey)!.push(s);
       }
     }
 
-    // 2. Round-robin interleave across groups
-    const groups = [...groupMap.values()];
-    const shuffled: { student_id: string; exam_id: string; roll_number: string | null }[] = [];
-    let maxLen = Math.max(...groups.map((g) => g.length));
+    // 2. Space out roll numbers within each group, then round-robin interleave across groups
+    const groups = [...groupMap.values()].map((g) => this.spaceByRollNumber(g));
+    const shuffled: StudentForShuffle[] = [];
+    const maxLen = groups.length > 0 ? Math.max(...groups.map((g) => g.length)) : 0;
     for (let i = 0; i < maxLen; i++) {
       for (const group of groups) {
         if (i < group.length) shuffled.push(group[i]);
@@ -181,19 +236,19 @@ export class ExamSittingService {
 
     // 3. Clear existing
     if (clear_existing) {
-      await this.repo.softDeleteByExamIds(exam_ids, schoolId);
-      for (const examId of exam_ids) {
-        await this.redis.delByPattern(REDIS_EXAM_KEYS.SITTING.PATTERN(schoolId, examId));
-      }
+      await this.repo.softDeleteByExamIds([exam_id], schoolId);
+      await this.redis.delByPattern(REDIS_EXAM_KEYS.SITTING.PATTERN(schoolId, exam_id));
     }
 
     // 4. Fill rooms in order
     const roomResults: { room_name: string; assigned_count: number }[] = [];
     const allRows: Parameters<typeof this.repo.createMany>[0] = [];
     let studentIdx = 0;
+    let totalCapacity = 0;
 
     for (const hallDetailId of hall_detail_ids) {
       const room = await this.hallService.findDetailById(hallDetailId, schoolId);
+      totalCapacity += room.sitting_capacity;
       let seatNum = 1;
       let assignedInRoom = 0;
 
@@ -203,7 +258,7 @@ export class ExamSittingService {
           id: generateId(),
           school_id: schoolId,
           academic_year_id,
-          exam_id: s.exam_id,
+          exam_id,
           hall_detail_id: hallDetailId,
           student_id: s.student_id,
           seat_number: seatNum++,
@@ -213,17 +268,25 @@ export class ExamSittingService {
         assignedInRoom++;
       }
       roomResults.push({ room_name: room.room_name, assigned_count: assignedInRoom });
-      if (studentIdx >= shuffled.length) break;
     }
 
     if (allRows.length > 0) {
       await this.repo.createMany(allRows);
-      for (const examId of exam_ids) {
-        await this.redis.delByPattern(REDIS_EXAM_KEYS.SITTING.PATTERN(schoolId, examId));
-      }
+      await this.redis.delByPattern(REDIS_EXAM_KEYS.SITTING.PATTERN(schoolId, exam_id));
     }
 
-    return { total_assigned: allRows.length, rooms: roomResults };
+    const unassignedCount = shuffled.length - allRows.length;
+    return {
+      total_assigned: allRows.length,
+      rooms: roomResults,
+      unassigned_count: unassignedCount,
+      shortfall_warning:
+        unassignedCount > 0
+          ? `${unassignedCount} student(s) could not be seated — total room capacity ` +
+            `(${totalCapacity}) is less than the number of students (${shuffled.length}). ` +
+            `Add another room or increase capacity.`
+          : undefined,
+    };
   }
 
   async getRoomPdfData(dto: RoomPdfQueryDto, schoolId: string): Promise<RoomPdfData> {
@@ -245,6 +308,55 @@ export class ExamSittingService {
       grid_rows: room.grid_rows ?? null,
       exam_names: [...new Set(examNames)],
       students: studentRows,
+    };
+  }
+
+  /**
+   * Root-level overview for the exam controller: every room used by this
+   * exam (optionally scoped to one day), with its class(es), subject(s),
+   * invigilator, and seated student count — one document instead of
+   * flipping through per-room PDFs.
+   */
+  async getMasterPdfData(
+    examId: string,
+    schoolId: string,
+    date?: string,
+  ): Promise<MasterPdfData> {
+    const [exam, schoolName, scheduleRows, seatCounts] = await Promise.all([
+      this.examService.findById(examId, schoolId),
+      this.repo.findSchoolName(schoolId),
+      this.scheduleRepo.findSchedulesForMasterPdf(schoolId, examId, date),
+      this.repo.countSeatsByRoomAndClass(examId, schoolId),
+    ]);
+
+    const seatCountMap = new Map<string, number>();
+    for (const s of seatCounts) {
+      seatCountMap.set(`${s.hall_detail_id}__${s.class_name}`, s.count);
+    }
+
+    const roomMap = new Map<string, MasterPdfRoomSection>();
+    for (const row of scheduleRows) {
+      if (!row.hall_detail_id || !row.room_name) continue; // no room assigned yet
+      if (!roomMap.has(row.hall_detail_id)) {
+        roomMap.set(row.hall_detail_id, { room_name: row.room_name, entries: [] });
+      }
+      const invigilatorName =
+        [row.invigilator_first_name, row.invigilator_last_name].filter(Boolean).join(' ') ||
+        'Unassigned';
+      const className = row.class_name ?? 'Unknown Class';
+      roomMap.get(row.hall_detail_id)!.entries.push({
+        class_name: className,
+        subject_name: row.subject_name,
+        invigilator_name: invigilatorName,
+        student_count: seatCountMap.get(`${row.hall_detail_id}__${className}`) ?? 0,
+      });
+    }
+
+    return {
+      school_name: schoolName,
+      exam_name: exam.exam_name,
+      date,
+      rooms: [...roomMap.values()],
     };
   }
 }

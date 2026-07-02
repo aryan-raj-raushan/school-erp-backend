@@ -197,6 +197,37 @@ export class ExamSittingRepository {
     return rows.map((r) => ({ ...r, exam_id: examId }));
   }
 
+  /** Seated student counts per room, broken down by class — for the master print. */
+  async countSeatsByRoomAndClass(
+    examId: string,
+    schoolId: string,
+  ): Promise<{ hall_detail_id: string; class_name: string; count: number }[]> {
+    const rows = await this.db
+      .select({
+        hall_detail_id: examSittingPlans.hall_detail_id,
+        class_name: classes.name,
+        count: sql<number>`count(*)`,
+      })
+      .from(examSittingPlans)
+      .innerJoin(
+        studentAcademicInfo,
+        eq(studentAcademicInfo.student_id, examSittingPlans.student_id),
+      )
+      .innerJoin(classes, eq(classes.id, studentAcademicInfo.class_id))
+      .where(
+        and(
+          eq(examSittingPlans.school_id, schoolId),
+          eq(examSittingPlans.exam_id, examId),
+          eq(examSittingPlans.deleted, false),
+          eq(studentAcademicInfo.is_current, true),
+          eq(studentAcademicInfo.deleted, false),
+        ),
+      )
+      .groupBy(examSittingPlans.hall_detail_id, classes.name);
+
+    return rows.map((r) => ({ ...r, count: Number(r.count) }));
+  }
+
   async findSchoolName(schoolId: string): Promise<string> {
     const [row] = await this.db
       .select({ name: schools.name })

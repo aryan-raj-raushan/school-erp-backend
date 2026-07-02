@@ -10,9 +10,19 @@ export const auditEntityEnum = pgEnum('audit_entity', [
   'GATE_PASS',
   'EARLY_EXIT',
   'USER',
+  'EXAM',
+  'EXAM_SCHEDULE',
+  'EXAM_SITTING_PLAN',
 ]);
 
-export const auditActionEnum = pgEnum('audit_action', ['CREATE', 'UPDATE', 'DELETE']);
+export const auditActionEnum = pgEnum('audit_action', [
+  'CREATE',
+  'UPDATE',
+  'DELETE',
+  'STATUS_CHANGE',
+  'PUBLISH',
+  'DOWNLOAD',
+]);
 
 export const auditLogs = pgTable(
   'audit_logs',

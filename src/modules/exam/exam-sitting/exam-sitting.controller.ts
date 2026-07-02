@@ -218,6 +218,106 @@ export class ExamSittingController {
     res.end(pdfBuffer);
   }
 
+  @Get('master-pdf')
+  @ApiOperation({
+    summary: 'Download the master seating/invigilator overview PDF for an exam',
+    description:
+      'One document covering every room used by the exam (optionally scoped to a single ' +
+      'day) — for the exam controller, instead of opening each room PDF individually.',
+  })
+  @ApiQuery({ name: 'exam_id', required: true })
+  @ApiQuery({ name: 'date', required: false, description: 'YYYY-MM-DD, omit for all dates' })
+  async masterPdf(
+    @Query('exam_id') examId: string,
+    @Query('date') date: string | undefined,
+    @GetSchoolId() schoolId: string,
+    @Res() res: Response,
+  ) {
+    const data = await this.service.getMasterPdfData(examId, schoolId, date);
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const PDFDocument = require('pdfkit');
+
+    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 40, size: 'A4' });
+      const chunks: Buffer[] = [];
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const pageW = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+      // ── Header ──────────────────────────────────────────────────────────
+      doc.fontSize(16).font('Helvetica-Bold').text(data.school_name, { align: 'center' });
+      doc.fontSize(12).text('MASTER SEATING & INVIGILATION SHEET', { align: 'center' });
+      doc.font('Helvetica').fontSize(10);
+      doc.moveDown(0.3);
+      doc.text(`Exam: ${data.exam_name}${data.date ? `  |  Date: ${data.date}` : ''}`, {
+        align: 'center',
+      });
+      doc.moveDown(1);
+
+      if (data.rooms.length === 0) {
+        doc.fontSize(10).text('No rooms have been assigned yet for this exam.', {
+          align: 'center',
+        });
+      }
+
+      const colWidths = [140, 140, 150, 80];
+      const headers = ['Class', 'Subject', 'Invigilator', 'Students'];
+      const rowH = 20;
+
+      for (const room of data.rooms) {
+        if (doc.y + 60 > doc.page.height - doc.page.margins.bottom) {
+          doc.addPage();
+        }
+
+        doc.fontSize(12).font('Helvetica-Bold').fillColor('#000').text(`Room: ${room.room_name}`);
+        doc.moveDown(0.3);
+
+        let tx = doc.page.margins.left;
+        let ty = doc.y;
+        headers.forEach((h, i) => {
+          doc.rect(tx, ty, colWidths[i], rowH).fillAndStroke('#e0e0e0', '#333');
+          doc
+            .fillColor('#000')
+            .fontSize(9)
+            .font('Helvetica-Bold')
+            .text(h, tx + 4, ty + 5, { width: colWidths[i] - 8, lineBreak: false });
+          tx += colWidths[i];
+        });
+        ty += rowH;
+
+        doc.font('Helvetica').fontSize(9);
+        room.entries.forEach((e, idx) => {
+          if (ty + rowH > doc.page.height - doc.page.margins.bottom) {
+            doc.addPage();
+            ty = doc.page.margins.top;
+          }
+          tx = doc.page.margins.left;
+          const cells = [e.class_name, e.subject_name, e.invigilator_name, String(e.student_count)];
+          const fill = idx % 2 === 0 ? '#fff' : '#f7f7f7';
+          cells.forEach((cell, i) => {
+            doc.rect(tx, ty, colWidths[i], rowH).fillAndStroke(fill, '#ccc');
+            doc.fillColor('#000').text(cell, tx + 4, ty + 5, { width: colWidths[i] - 8, lineBreak: false });
+            tx += colWidths[i];
+          });
+          ty += rowH;
+        });
+
+        doc.y = ty + 16;
+      }
+
+      doc.end();
+    });
+
+    const safeExamName = data.exam_name.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="master-seating-${safeExamName}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.end(pdfBuffer);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get single sitting plan entry' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {

@@ -1,7 +1,7 @@
 import { pgTable, varchar, boolean, timestamp, pgEnum, text, unique } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 import { academicYears } from './academic-years.schema';
-import { exams } from './exams.schema';
+import { exams } from './exam.schema';
 import { examSchedules } from './exam-schedule.schema';
 import { students } from './students.schema';
 
