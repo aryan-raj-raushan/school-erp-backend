@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 import { DrizzleModule } from '../../database/drizzle/drizzle.module';
 import { RedisModule } from '../redis/redis.module';
+import { ClassSubjectTeacherModule } from '../class-subject-teacher/class-subject-teacher.module';
+import { HolidaysModule } from '../holidays/holidays.module';
+import { SchoolSettingsModule } from '../school-settings/school-settings.module';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 // Grading
 import { ExamGradingController } from './exam-setup/exam-grading.controller';
@@ -40,8 +44,20 @@ import { ExamAdmitCardController } from './exam-admit-card/exam-admit-card.contr
 import { ExamAttendanceCardRepository } from './exam-attendance/exam-attendance-card.repository';
 import { ExamAdmitCardRepository } from './exam-admit-card/exam-admit-card.repository';
 
+// Templates
+import { ExamTemplateController } from './exam-templates/exam-template.controller';
+import { ExamTemplateService } from './exam-templates/exam-template.service';
+import { ExamTemplateRepository } from './exam-templates/exam-template.repository';
+
 @Module({
-  imports: [DrizzleModule, RedisModule],
+  imports: [
+    DrizzleModule,
+    RedisModule,
+    ClassSubjectTeacherModule,
+    HolidaysModule,
+    SchoolSettingsModule,
+    AuditLogsModule,
+  ],
   controllers: [
     ExamGradingController,
     ExamController,
@@ -51,6 +67,7 @@ import { ExamAdmitCardRepository } from './exam-admit-card/exam-admit-card.repos
     ExamHallDetailController,
     ExamSittingController,
     ExamAdmitCardController,
+    ExamTemplateController,
   ],
   providers: [
     // Grading
@@ -76,6 +93,9 @@ import { ExamAdmitCardRepository } from './exam-admit-card/exam-admit-card.repos
     // Admit card
     ExamAdmitCardService,
     ExamAdmitCardRepository,
+    // Templates
+    ExamTemplateService,
+    ExamTemplateRepository,
   ],
   exports: [ExamService, ExamScheduleService, ExamHallService],
 })

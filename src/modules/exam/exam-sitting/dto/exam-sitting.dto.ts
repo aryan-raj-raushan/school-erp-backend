@@ -54,10 +54,18 @@ export class FilterSittingPlanDto extends ExamPaginationDto {
 }
 
 export class AutoShuffleSittingPlanDto {
-  @ApiProperty({ type: [String], description: 'Exam IDs to include (one per class)' })
+  @ApiProperty({ example: 'uuid-of-exam', description: 'The (whole-school) exam to seat' })
+  @IsUUID()
+  exam_id: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Classes to include (defaults to every class participating in the exam)',
+  })
+  @IsOptional()
   @IsArray()
   @IsUUID(undefined, { each: true })
-  exam_ids: string[];
+  class_ids?: string[];
 
   @ApiProperty({ example: 'uuid-of-academic-year' })
   @IsUUID()

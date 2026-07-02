@@ -61,13 +61,20 @@ export class ExamResultsService {
   private async resolveExamOrFail(examId: string, schoolId: string) {
     const exam = await this.repo.findExamWithDetails(examId, schoolId);
     if (!exam) throw new NotFoundException(`Exam '${examId}' not found`);
+    // Marks can only be entered/published once the exam has actually started —
+    // keeps the natural flow Exam -> Started -> Marks/Attendance -> Report Card.
+    if (exam.status && !['STARTED', 'COMPLETED'].includes(exam.status)) {
+      throw new BadRequestException(
+        `Exam '${exam.exam_name}' has not started yet (status: ${exam.status}) — marks cannot be entered until it does`,
+      );
+    }
     return exam;
   }
 
   // ─── Bulk Upsert Exam Results ─────────────────────────────────────────────
 
   async bulkUpsertResults(dto: BulkUpsertExamResultsDto, schoolId: string, userId: string) {
-    // const exam = await this.resolveExamOrFail(dto.exam_id, schoolId);
+    await this.resolveExamOrFail(dto.exam_id, schoolId);
 
     // Validate schedules belong to exam
     const schedules = await this.repo.findExamSchedules(schoolId, dto.exam_id);
@@ -172,6 +179,7 @@ export class ExamResultsService {
 
     const studentIds = students.map((s) => s.student_id);
     const sectionInfo = dto.section_id ? await this.repo.findSectionById(dto.section_id) : null;
+    const classInfo = await this.repo.findClassById(dto.class_id);
 
     // Fetch all results for these students in this exam
     const allResults = await this.repo.findResultsForReportCard(
@@ -262,7 +270,7 @@ export class ExamResultsService {
           section: sectionInfo?.name ?? '-',
           profile_image: student.profile_image ?? undefined,
         },
-        class_name: exam.class_name ?? '',
+        class_name: classInfo?.name ?? '',
         academic_year: exam.academic_year_name ?? '',
         exam_name: exam.exam_name,
         exam_term: exam.exam_term,

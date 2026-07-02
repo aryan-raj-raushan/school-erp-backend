@@ -7,18 +7,23 @@ import {
   FilterExamScheduleDto,
   CreateExamScheduleItemDto,
   CreateSubScheduleDto,
+  BulkLockScheduleDto,
+  BulkUpdateScheduleDto,
+  BulkDeleteScheduleDto,
 } from './dto/exam-schedule.dto';
 import { ExamSchedule, NewExamSchedule } from './types/exam-schedule.types';
 import { generateId } from '@utils/uuid.utils';
 import { PaginationResponse } from '@shared/responses/api-response';
 import { REDIS_EXAM_KEYS } from '@shared/redis/redis-key';
 import { SubjectType } from '@shared/enums/exam.enum';
+import { AuditLogsService } from '@modules/audit-logs/audit-logs.service';
 
 @Injectable()
 export class ExamScheduleService {
   constructor(
     private readonly repo: ExamScheduleRepository,
     private readonly redis: RedisService,
+    private readonly auditLogs: AuditLogsService,
   ) {}
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -260,5 +265,70 @@ export class ExamScheduleService {
       this.redis.delByPattern(REDIS_EXAM_KEYS.SCHEDULE.PATTERN(schoolId)),
       this.redis.delByPattern(REDIS_EXAM_KEYS.ATTENDANCE.PATTERN(schoolId, schedule.exam_id)),
     ]);
+  }
+
+  // ── Bulk operations ────────────────────────────────────────────────────────
+
+  async bulkLock(dto: BulkLockScheduleDto, schoolId: string, userId: string): Promise<void> {
+    await this.repo.setLocked(dto.ids, schoolId, dto.locked);
+    await this.redis.delByPattern(REDIS_EXAM_KEYS.SCHEDULE.PATTERN(schoolId));
+    for (const id of dto.ids) {
+      this.auditLogs
+        .log({ school_id: schoolId, entity: 'EXAM_SCHEDULE', entity_id: id, action: 'UPDATE', changed_by: userId, new_value: { locked: dto.locked } })
+        .catch(() => {});
+    }
+  }
+
+  /**
+   * Applies the same partial fields to every listed (unlocked) row, re-checking
+   * the class+room time-overlap conflict for each row individually and
+   * reporting failures non-blockingly instead of throwing.
+   */
+  async bulkUpdate(
+    dto: BulkUpdateScheduleDto,
+    schoolId: string,
+    userId: string,
+  ): Promise<{ updated: ExamSchedule[]; conflicts: { id: string; reason: string }[] }> {
+    const rows = await this.repo.findByIds(dto.ids, schoolId);
+    const conflicts: { id: string; reason: string }[] = [];
+    const okIds: string[] = [];
+
+    for (const row of rows) {
+      if (row.locked) {
+        conflicts.push({ id: row.id, reason: 'LOCKED' });
+        continue;
+      }
+      const date = dto.exam_date ?? row.exam_date;
+      const start = dto.start_time ?? row.start_time;
+      const end = dto.end_time ?? row.end_time;
+      if (dto.exam_date || dto.start_time || dto.end_time) {
+        const clashes = await this.repo.findConflict(schoolId, row.exam_id, row.class_id, date, start, end, row.id);
+        if (clashes.length > 0) {
+          conflicts.push({ id: row.id, reason: 'TIME_CLASH' });
+          continue;
+        }
+      }
+      okIds.push(row.id);
+    }
+
+    const { ids: _ids, ...fields } = dto;
+    const updated = await this.repo.bulkUpdate(okIds, schoolId, fields);
+    await this.redis.delByPattern(REDIS_EXAM_KEYS.SCHEDULE.PATTERN(schoolId));
+    for (const id of okIds) {
+      this.auditLogs
+        .log({ school_id: schoolId, entity: 'EXAM_SCHEDULE', entity_id: id, action: 'UPDATE', changed_by: userId, new_value: fields })
+        .catch(() => {});
+    }
+    return { updated, conflicts };
+  }
+
+  async bulkRemove(dto: BulkDeleteScheduleDto, schoolId: string, userId: string): Promise<void> {
+    await this.repo.bulkHardDelete(dto.ids, schoolId);
+    await this.redis.delByPattern(REDIS_EXAM_KEYS.SCHEDULE.PATTERN(schoolId));
+    for (const id of dto.ids) {
+      this.auditLogs
+        .log({ school_id: schoolId, entity: 'EXAM_SCHEDULE', entity_id: id, action: 'DELETE', changed_by: userId })
+        .catch(() => {});
+    }
   }
 }

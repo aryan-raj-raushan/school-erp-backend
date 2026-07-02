@@ -49,6 +49,8 @@ export * from './rfid-scan-events.schema';
 export * from './staff-attendance.schema';
 
 export * from './exam.schema';
+export * from './exam-classes.schema';
+export * from './exam-templates.schema';
 export * from './exam-attendance.schema';
 export * from './exam-grading.schema';
 export * from './exam-hall-details.schema';

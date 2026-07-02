@@ -17,6 +17,9 @@ import {
   CreateExamScheduleBulkDto,
   UpdateExamScheduleDto,
   FilterExamScheduleDto,
+  BulkLockScheduleDto,
+  BulkUpdateScheduleDto,
+  BulkDeleteScheduleDto,
 } from './dto/exam-schedule.dto';
 import { GetSchoolId } from '@common/decorators/school-id.decorator';
 import { ApiResponse } from '@shared/responses/api-response';
@@ -56,6 +59,31 @@ export class ExamScheduleController {
     return ApiResponse.created(data, 'Exam schedules created successfully');
   }
 
+  @Patch('bulk-lock')
+  @ApiOperation({ summary: 'Lock or unlock a set of schedule rows' })
+  async bulkLock(
+    @Body() dto: BulkLockScheduleDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    await this.service.bulkLock(dto, schoolId, userId);
+    return ApiResponse.success(null, `${dto.ids.length} schedule(s) ${dto.locked ? 'locked' : 'unlocked'}`);
+  }
+
+  @Patch('bulk-update')
+  @ApiOperation({
+    summary: 'Apply the same field changes to multiple (unlocked) schedule rows',
+    description: 'Re-checks the class+time conflict per row; failures are reported non-blockingly.',
+  })
+  async bulkUpdate(
+    @Body() dto: BulkUpdateScheduleDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    const data = await this.service.bulkUpdate(dto, schoolId, userId);
+    return ApiResponse.success(data, `${data.updated.length} schedule(s) updated`);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Update a single exam schedule entry' })
   async update(
@@ -66,6 +94,18 @@ export class ExamScheduleController {
   ) {
     const data = await this.service.update(id, schoolId, dto);
     return ApiResponse.success(data, 'Exam schedule updated successfully');
+  }
+
+  @Delete('bulk')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete multiple (unlocked) schedule entries' })
+  async bulkRemove(
+    @Body() dto: BulkDeleteScheduleDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    await this.service.bulkRemove(dto, schoolId, userId);
+    return ApiResponse.noContent('Exam schedules deleted successfully');
   }
 
   @Delete(':id')

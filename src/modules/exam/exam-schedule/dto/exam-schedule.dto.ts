@@ -8,6 +8,7 @@ import {
   IsUUID,
   IsInt,
   IsArray,
+  ArrayMinSize,
   ValidateNested,
   Min,
   MaxLength,
@@ -190,4 +191,58 @@ export class FilterExamScheduleDto extends ExamPaginationDto {
   @IsOptional()
   @IsDateString()
   exam_date?: string;
+}
+
+// ── Bulk operations ───────────────────────────────────────────────────────────
+
+export class BulkLockScheduleDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  ids: string[];
+
+  @ApiProperty({ example: true })
+  @IsBoolean()
+  locked: boolean;
+}
+
+export class BulkUpdateScheduleDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID(undefined, { each: true })
+  ids: string[];
+
+  @ApiPropertyOptional({ example: '2025-09-05' })
+  @IsOptional()
+  @IsDateString()
+  exam_date?: string;
+
+  @ApiPropertyOptional({ example: '09:00' })
+  @IsOptional()
+  @Matches(/^\d{2}:\d{2}(:\d{2})?$/, { message: 'start_time must be HH:mm or HH:mm:ss' })
+  start_time?: string;
+
+  @ApiPropertyOptional({ example: '12:00' })
+  @IsOptional()
+  @Matches(/^\d{2}:\d{2}(:\d{2})?$/, { message: 'end_time must be HH:mm or HH:mm:ss' })
+  end_time?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  exam_invigilator_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  hall_detail_id?: string;
+}
+
+export class BulkDeleteScheduleDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID(undefined, { each: true })
+  ids: string[];
 }

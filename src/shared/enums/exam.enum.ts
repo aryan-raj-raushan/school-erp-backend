@@ -5,6 +5,27 @@ export enum ExamTerm {
   ANNUAL = 'ANNUAL',
 }
 
+export enum ExamStatus {
+  DRAFT = 'DRAFT',
+  UNDER_REVIEW = 'UNDER_REVIEW',
+  PUBLISHED = 'PUBLISHED',
+  STARTED = 'STARTED',
+  COMPLETED = 'COMPLETED',
+  LOCKED = 'LOCKED',
+  ARCHIVED = 'ARCHIVED',
+}
+
+/** Allowed forward transitions. Admins may also be allowed to step back — not enforced here. */
+export const EXAM_STATUS_TRANSITIONS: Record<ExamStatus, ExamStatus[]> = {
+  [ExamStatus.DRAFT]: [ExamStatus.UNDER_REVIEW, ExamStatus.PUBLISHED],
+  [ExamStatus.UNDER_REVIEW]: [ExamStatus.DRAFT, ExamStatus.PUBLISHED],
+  [ExamStatus.PUBLISHED]: [ExamStatus.STARTED, ExamStatus.UNDER_REVIEW],
+  [ExamStatus.STARTED]: [ExamStatus.COMPLETED],
+  [ExamStatus.COMPLETED]: [ExamStatus.LOCKED],
+  [ExamStatus.LOCKED]: [ExamStatus.ARCHIVED],
+  [ExamStatus.ARCHIVED]: [],
+};
+
 export enum SubjectType {
   MAIN_EXAM = 'MAIN_EXAM',
   SECONDARY_EXAM = 'SECONDARY_EXAM',
