@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql, or, isNull, getTableColumns, gte, lte } from 'drizzle-orm';
+import { eq, and, sql, or, isNull, getTableColumns, gte, lte, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../../database/drizzle/drizzle.provider';
 import { ExamSchedule, NewExamSchedule } from './types/exam-schedule.types';
@@ -177,7 +177,7 @@ export class ExamScheduleRepository {
         and(
           eq(examSchedules.school_id, schoolId),
           eq(examSchedules.deleted, false),
-          sql`${examSchedules.exam_invigilator_id} = ANY(${teacherIds})`,
+          inArray(examSchedules.exam_invigilator_id, teacherIds),
           gte(examSchedules.exam_date, fromDate),
           lte(examSchedules.exam_date, toDate),
         ),
@@ -273,7 +273,7 @@ export class ExamScheduleRepository {
         and(
           eq(examSchedules.school_id, schoolId),
           eq(examSchedules.deleted, false),
-          sql`${examSchedules.id} = ANY(${ids})`,
+          inArray(examSchedules.id, ids),
         ),
       );
   }
@@ -296,7 +296,7 @@ export class ExamScheduleRepository {
     await this.db
       .update(examSchedules)
       .set({ locked, updated_at: new Date() })
-      .where(and(eq(examSchedules.school_id, schoolId), sql`${examSchedules.id} = ANY(${ids})`));
+      .where(and(eq(examSchedules.school_id, schoolId), inArray(examSchedules.id, ids)));
   }
 
   /** Applies the same partial fields to every (unlocked) row in `ids`. */
@@ -313,7 +313,7 @@ export class ExamScheduleRepository {
         and(
           eq(examSchedules.school_id, schoolId),
           eq(examSchedules.locked, false),
-          sql`${examSchedules.id} = ANY(${ids})`,
+          inArray(examSchedules.id, ids),
         ),
       )
       .returning();
@@ -329,7 +329,7 @@ export class ExamScheduleRepository {
         and(
           eq(examAttendance.school_id, schoolId),
           eq(examAttendance.deleted, false),
-          sql`${examAttendance.schedule_id} = ANY(${scheduleIds})`,
+          inArray(examAttendance.schedule_id, scheduleIds),
         ),
       );
     return new Set(rows.map((r) => r.schedule_id));
@@ -343,10 +343,7 @@ export class ExamScheduleRepository {
         and(
           eq(examSchedules.school_id, schoolId),
           eq(examSchedules.locked, false),
-          or(
-            sql`${examSchedules.id} = ANY(${ids})`,
-            sql`${examSchedules.parent_schedule_id} = ANY(${ids})`,
-          ),
+          or(inArray(examSchedules.id, ids), inArray(examSchedules.parent_schedule_id, ids)),
         ),
       );
   }
