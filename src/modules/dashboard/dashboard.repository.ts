@@ -12,7 +12,6 @@ import {
   feeBills,
   homeworks,
   classes,
-  departments,
   subjects,
   schoolEvents,
   academicYears,
@@ -59,14 +58,6 @@ export class DashboardRepository {
       .select({ count: sql<number>`count(*)` })
       .from(classes)
       .where(and(eq(classes.school_id, schoolId), eq(classes.deleted, false)));
-    return Number(count);
-  }
-
-  async countDepartments(schoolId: string): Promise<number> {
-    const [{ count }] = await this.db
-      .select({ count: sql<number>`count(*)` })
-      .from(departments)
-      .where(and(eq(departments.school_id, schoolId), eq(departments.deleted, false)));
     return Number(count);
   }
 

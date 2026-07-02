@@ -103,11 +103,6 @@ export class CreateStaffDto {
   @Transform(({ value }) => StringUtils.trim(value))
   employee_code?: string;
 
-  @ApiPropertyOptional({ description: 'Department ID (UUID)' })
-  @IsOptional()
-  @IsUUID()
-  department_id?: string;
-
   @ApiPropertyOptional({ description: 'Custom role ID used as designation (UUID)' })
   @IsOptional()
   @IsUUID()

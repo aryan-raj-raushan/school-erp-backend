@@ -27,7 +27,6 @@ export class ClassesRepository {
       // Default to current academic year when none specified
       conditions.push(eq(academicYears.is_current, true));
     }
-    if (filters.department) conditions.push(eq(classes.department, filters.department));
     if (filters.class_type) conditions.push(eq(classes.class_type, filters.class_type));
     return conditions;
   }
@@ -38,7 +37,6 @@ export class ClassesRepository {
       class_id: sections.class_id,
       class_name: classes.name,
       section_name: sections.name,
-      department: classes.department,
       class_type: classes.class_type,
       class_sequence: classes.class_sequence,
       no_of_sessions: classes.no_of_sessions,

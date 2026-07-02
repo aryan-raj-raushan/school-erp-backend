@@ -13,7 +13,6 @@ export const classes = pgTable(
       .notNull()
       .references(() => academicYears.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 50 }).notNull(),
-    department: varchar('department', { length: 100 }),
     class_type: varchar('class_type', { length: 50 }),
     class_sequence: integer('class_sequence'),
     no_of_sessions: integer('no_of_sessions'),

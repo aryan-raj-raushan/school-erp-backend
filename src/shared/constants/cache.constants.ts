@@ -3,7 +3,7 @@
 export const CacheTTL = {
   SHORT: 300, // attendance, dashboard — 5 min
   MEDIUM: 86400, // students, staff, fees, academics — 24h
-  LONG: 604800, // classes, departments, schools, subjects — 7 days
+  LONG: 604800, // classes, schools, subjects — 7 days
   HOUR: 86400, // master-data, company-schools — 24h
 } as const;
 

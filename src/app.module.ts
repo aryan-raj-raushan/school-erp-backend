@@ -32,7 +32,6 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { ExportsModule } from './modules/exports/exports.module';
 import { MasterDataModule } from './modules/master-data/master-data.module';
 import { SyllabiModule } from './modules/syllabi/syllabi.module';
-import { DepartmentsModule } from './modules/departments/departments.module';
 import { ClassTypesModule } from './modules/class-types/class-types.module';
 import { TimetableModule } from './modules/timetable/timetable.module';
 import { ClassSubjectTeacherModule } from './modules/class-subject-teacher/class-subject-teacher.module';
@@ -100,7 +99,6 @@ import { StudentMovementsModule } from '@modules/student-movements/student-movem
     ExportsModule,
     MasterDataModule,
     SyllabiModule,
-    DepartmentsModule,
     ClassTypesModule,
     SchoolEventsModule,
     AdmissionModule,

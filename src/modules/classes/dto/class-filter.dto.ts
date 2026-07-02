@@ -10,17 +10,6 @@ export class ClassFilterDto extends PaginationDto {
   @IsUUID()
   academic_year_id?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by timetable session ID' })
-  @IsOptional()
-  @IsUUID()
-
-  @ApiPropertyOptional({ description: 'Filter by department' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  @Transform(({ value }) => StringUtils.trim(value))
-  department?: string;
-
   @ApiPropertyOptional({ description: 'Filter by class type' })
   @IsOptional()
   @IsString()

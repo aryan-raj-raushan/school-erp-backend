@@ -13,7 +13,6 @@ export interface ClassSectionView {
   class_id: string;
   class_name: string;
   section_name: string;
-  department: string | null;
   class_type: string | null;
   class_sequence: number | null;
   no_of_sessions: number | null;

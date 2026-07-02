@@ -98,7 +98,6 @@ export class StaffService {
       city: dto.city,
       joining_date: dto.joining_date ? new Date(dto.joining_date) : undefined,
       employee_code: dto.employee_code,
-      department_id: dto.department_id,
       custom_role_id: dto.custom_role_id,
       father_name: dto.father_name,
       husband_name: dto.husband_name,

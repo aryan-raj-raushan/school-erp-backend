@@ -31,7 +31,6 @@ export class SearchController {
           admissions: [],
           classes: [],
           subjects: [],
-          departments: [],
           feeTypes: [],
           events: [],
           academicYears: [],

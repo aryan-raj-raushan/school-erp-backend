@@ -1,7 +1,6 @@
 import { pgTable, varchar, boolean, timestamp, pgEnum, text, index } from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 import { roles } from './roles.schema';
-import { departments } from './departments.schema';
 
 export const schoolRoleEnum = pgEnum('school_role', [
   'SCHOOL_ADMIN',
@@ -36,9 +35,6 @@ export const schoolUsers = pgTable(
     city: varchar('city', { length: 100 }),
     joining_date: timestamp('joining_date', { withTimezone: true }),
     employee_code: varchar('employee_code', { length: 50 }),
-    department_id: varchar('department_id', { length: 36 }).references(() => departments.id, {
-      onDelete: 'set null',
-    }),
     father_name: varchar('father_name', { length: 100 }),
     husband_name: varchar('husband_name', { length: 100 }),
     reporting_to_id: varchar('reporting_to_id', { length: 36 }),

@@ -42,12 +42,6 @@ export const PERMISSION_REGISTRY = {
   },
   attendance: { view: 'attendance.view', create: 'attendance.create', update: 'attendance.update' },
   leave: { view: 'leave.view', approve: 'leave.approve', reject: 'leave.reject' },
-  departments: {
-    view: 'departments.view',
-    create: 'departments.create',
-    update: 'departments.update',
-    delete: 'departments.delete',
-  },
   classes: {
     view: 'classes.view',
     create: 'classes.create',

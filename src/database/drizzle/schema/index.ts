@@ -28,7 +28,6 @@ export * from './master-subjects.schema';
 export * from './class-section-subjects.schema';
 export * from './timetable.schema';
 export * from './syllabi.schema';
-export * from './departments.schema';
 export * from './class-types.schema';
 export * from './relations';
 export * from './admission-enquiries.schema';

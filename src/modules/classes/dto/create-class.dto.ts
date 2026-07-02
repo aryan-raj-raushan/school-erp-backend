@@ -25,13 +25,6 @@ export class CreateClassDto {
   @IsNotEmpty()
   academic_year_id: string;
 
-  @ApiPropertyOptional({ example: 'Science', maxLength: 100 })
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
-  @Transform(({ value }) => StringUtils.trim(value))
-  department?: string;
-
   @ApiPropertyOptional({ example: 'Regular', maxLength: 50 })
   @IsOptional()
   @IsString()

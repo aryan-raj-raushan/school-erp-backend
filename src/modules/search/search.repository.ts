@@ -11,7 +11,6 @@ import {
   parents,
   admissionEnquiries,
   subjects,
-  departments,
   feeTypes,
   schoolEvents,
   academicYears,
@@ -190,27 +189,6 @@ export class SearchRepository {
       type: 'subject' as const,
       name: r.name,
       subtitle: 'Subject',
-    }));
-  }
-
-  async searchDepartments(t: string, schoolId: string): Promise<SearchResultItem[]> {
-    const rows = await this.db
-      .select({ id: departments.id, name: departments.name })
-      .from(departments)
-      .where(
-        and(
-          eq(departments.school_id, schoolId),
-          eq(departments.deleted, false),
-          ilike(departments.name, t),
-        ),
-      )
-      .limit(LIMIT);
-
-    return rows.map((r) => ({
-      id: r.id,
-      type: 'department' as const,
-      name: r.name,
-      subtitle: 'Department',
     }));
   }
 

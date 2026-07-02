@@ -20,7 +20,6 @@ export class DashboardService {
         totalStaff,
         totalParents,
         totalClasses,
-        totalDepartments,
         totalSubjects,
         attendanceSummary,
         attendanceTrend,
@@ -42,7 +41,6 @@ export class DashboardService {
         this.dashboardRepo.countStaff(schoolId),
         this.dashboardRepo.countParents(schoolId),
         this.dashboardRepo.countClasses(schoolId),
-        this.dashboardRepo.countDepartments(schoolId),
         this.dashboardRepo.countSubjects(schoolId),
         this.dashboardRepo.getTodayAttendanceSummary(schoolId, today),
         this.dashboardRepo.getAttendanceTrend(schoolId, 7),
@@ -81,7 +79,6 @@ export class DashboardService {
           staff: totalStaff,
           parents: totalParents,
           classes: totalClasses,
-          departments: totalDepartments,
           subjects: totalSubjects,
         },
         attendance: {

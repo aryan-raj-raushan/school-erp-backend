@@ -131,21 +131,6 @@ export class SearchService {
           )
         : Promise.resolve([]),
 
-      perms.includes('departments.view')
-        ? this.withRedis(
-            `departments:${schoolId}:list:*`,
-            ['name'],
-            query,
-            (r) => ({
-              id: r.id,
-              type: 'department' as const,
-              name: s(r.name),
-              subtitle: 'Department',
-            }),
-            () => this.searchRepo.searchDepartments(t, schoolId),
-          )
-        : Promise.resolve([]),
-
       perms.includes('fees.view')
         ? this.withRedis(
             `fees:${schoolId}:types:*`,
@@ -220,11 +205,10 @@ export class SearchService {
       admissions: safe(3),
       classes: safe(4),
       subjects: safe(5),
-      departments: safe(6),
-      feeTypes: safe(7),
-      events: safe(8),
-      academicYears: safe(9),
-      homework: safe(10),
+      feeTypes: safe(6),
+      events: safe(7),
+      academicYears: safe(8),
+      homework: safe(9),
       query,
     };
   }
