@@ -283,6 +283,10 @@ export class ExamService {
     return h * 60 + m;
   }
 
+  private minutesToTime(mins: number): string {
+    return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+  }
+
   /** Calendar dates between start/end (inclusive) that are working days and not holidays. */
   private async buildWorkingDates(
     schoolId: string,
@@ -343,13 +347,16 @@ export class ExamService {
     const dailyStart = dto.daily_start_time ?? '09:00';
     const defaultMarks = dto.default_exam_marks ?? template?.default_exam_marks ?? 100;
     const defaultPassing = dto.default_passing_marks ?? template?.default_passing_marks ?? 35;
-    const durationMinutes = template?.default_duration_minutes ?? 180;
+    /** Length of a single subject's exam. */
+    const subjectDurationMinutes =
+      dto.subject_duration_minutes ?? template?.default_duration_minutes ?? 60;
+    /** Gap between two subjects scheduled back-to-back on the same day. */
+    const breakMinutes = dto.break_duration_minutes ?? 20;
+    /** Total exam window available per day — defaults to 3 hours, independent of subject duration. */
+    const DEFAULT_DAILY_WINDOW_MINUTES = 180;
     const dailyEnd =
       dto.daily_end_time ??
-      (() => {
-        const endMinutes = this.timeToMinutes(dailyStart) + durationMinutes;
-        return `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
-      })();
+      this.minutesToTime(this.timeToMinutes(dailyStart) + DEFAULT_DAILY_WINDOW_MINUTES);
     const slotStart = this.timeToMinutes(dailyStart);
     const slotEnd = this.timeToMinutes(dailyEnd);
 
@@ -405,24 +412,36 @@ export class ExamService {
     const scheduleRows: NewExamSchedule[] = [];
 
     for (const [classId, mappings] of mappingsByClass) {
-      mappings.forEach((mapping, idx) => {
-        if (idx >= workingDates.length) {
+      // Pack this class's subjects sequentially within each day's window
+      // (subjectDurationMinutes + breakMinutes apart), rolling over to the
+      // next working day once the current day's window is exhausted.
+      let dayIdx = 0;
+      let cursor = slotStart;
+
+      for (const mapping of mappings) {
+        while (dayIdx < workingDates.length && cursor + subjectDurationMinutes > slotEnd) {
+          dayIdx++;
+          cursor = slotStart;
+        }
+        if (dayIdx >= workingDates.length) {
           conflicts.push({
             class_id: classId,
             class_name: classNames.get(classId) ?? classId,
             subject_name: mapping.subject_name,
             reason: 'NOT_ENOUGH_WORKING_DAYS',
           });
-          return;
+          continue;
         }
-        const date = workingDates[idx];
+        const date = workingDates[dayIdx];
+        const startMinutes = cursor;
+        const endMinutes = cursor + subjectDurationMinutes;
 
         let invigilatorId: string | null = null;
         for (const candidate of allTeacherIds) {
           if (candidate === mapping.teacher_id) continue; // avoid conflict-of-interest
           const key = `${candidate}|${date}`;
           const busy = busyByTeacherDate.get(key) ?? [];
-          const clash = busy.some((r) => slotStart < r.end && slotEnd > r.start);
+          const clash = busy.some((r) => startMinutes < r.end && endMinutes > r.start);
           if (!clash) {
             invigilatorId = candidate;
             break;
@@ -439,7 +458,7 @@ export class ExamService {
         } else {
           const key = `${invigilatorId}|${date}`;
           const list = busyByTeacherDate.get(key) ?? [];
-          list.push({ start: slotStart, end: slotEnd });
+          list.push({ start: startMinutes, end: endMinutes });
           busyByTeacherDate.set(key, list);
         }
 
@@ -454,8 +473,8 @@ export class ExamService {
           subject_name: mapping.subject_name,
           subject_type: SubjectType.MAIN_EXAM,
           exam_date: date,
-          start_time: dailyStart,
-          end_time: dailyEnd,
+          start_time: this.minutesToTime(startMinutes),
+          end_time: this.minutesToTime(endMinutes),
           exam_marks: defaultMarks,
           passing_marks: defaultPassing,
           exam_invigilator_id: invigilatorId,
@@ -467,7 +486,9 @@ export class ExamService {
           deleted: false,
           created_by: createdBy,
         });
-      });
+
+        cursor = endMinutes + breakMinutes;
+      }
     }
 
     return { scheduleRows, conflicts };

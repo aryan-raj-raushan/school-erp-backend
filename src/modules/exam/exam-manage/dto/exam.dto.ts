@@ -169,6 +169,26 @@ export class AutoGenerateExamDto {
   @IsOptional()
   @IsUUID()
   template_id?: string;
+
+  @ApiPropertyOptional({
+    example: 60,
+    default: 60,
+    description: 'Length of a single subject exam, in minutes',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(15)
+  subject_duration_minutes?: number;
+
+  @ApiPropertyOptional({
+    example: 20,
+    default: 20,
+    description: 'Gap between two subjects scheduled on the same day, in minutes',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  break_duration_minutes?: number;
 }
 
 export class CopyExamDto {
