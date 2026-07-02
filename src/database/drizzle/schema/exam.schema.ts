@@ -1,4 +1,5 @@
-import { pgTable, varchar, boolean, timestamp, date, pgEnum, unique } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, boolean, timestamp, date, pgEnum, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { schools } from './schools.schema';
 import { academicYears } from './academic-years.schema';
 import { classes } from './classes.schema';
@@ -61,6 +62,10 @@ export const exams = pgTable(
     created_by: varchar('created_by', { length: 36 }),
   },
   (t) => ({
-    uniqueCodePerSchool: unique('exams_code_school_unique').on(t.school_id, t.code),
+    // Partial index — only live (non-deleted) exams compete for a code, so a
+    // soft-deleted exam's code can be reused without violating uniqueness.
+    uniqueCodePerSchool: uniqueIndex('exams_code_school_unique')
+      .on(t.school_id, t.code)
+      .where(sql`${t.deleted} = false`),
   }),
 );

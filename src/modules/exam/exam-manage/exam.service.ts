@@ -501,6 +501,13 @@ export class ExamService {
   ): Promise<AutoGenerateExamResult> {
     const { scheduleRows, conflicts } = await this.buildProposedSchedule(dto, schoolId, createdBy);
 
+    if (conflicts.length > 0) {
+      throw new BadRequestException({
+        message: `${conflicts.length} subject(s) could not be scheduled — widen the date range or adjust subject duration/break time and try again`,
+        conflicts,
+      });
+    }
+
     const exam = await this.repo.create({
       id: generateId(),
       school_id: schoolId,
@@ -616,6 +623,13 @@ export class ExamService {
   ): Promise<AutoGenerateExamResult> {
     const exam = await this.findById(examId, schoolId);
     const preview = await this.regeneratePreview(examId, schoolId, dto, createdBy);
+
+    if (preview.conflicts.length > 0) {
+      throw new BadRequestException({
+        message: `${preview.conflicts.length} subject(s) could not be scheduled — widen the date range or adjust subject duration/break time and try again`,
+        conflicts: preview.conflicts,
+      });
+    }
 
     const blockedByDownstreamData = preview.to_replace.filter((r) => r.has_downstream_data && !force);
     if (blockedByDownstreamData.length > 0) {

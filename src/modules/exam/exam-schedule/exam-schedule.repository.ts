@@ -40,7 +40,10 @@ export class ExamScheduleRepository {
     return conditions;
   }
 
-  async findAll(schoolId: string, filters: FilterExamScheduleDto): Promise<(ExamSchedule & { section_name: string | null })[]> {
+  async findAll(
+    schoolId: string,
+    filters: FilterExamScheduleDto,
+  ): Promise<(ExamSchedule & { section_name: string | null })[]> {
     const conditions = this.buildConditions(schoolId, filters);
     const limit = filters.limit ?? 50;
     const offset = ((filters.page ?? 1) - 1) * limit;
@@ -299,6 +302,30 @@ export class ExamScheduleRepository {
       .where(and(eq(examSchedules.school_id, schoolId), inArray(examSchedules.id, ids)));
   }
 
+  /**
+   * Sets the room for every (unlocked) schedule row of a class within an
+   * exam — used to sync exam_schedules.hall_detail_id after a sitting plan
+   * is created, so the schedule reflects the room students were seated in.
+   */
+  async setHallForClass(
+    examId: string,
+    classId: string,
+    schoolId: string,
+    hallDetailId: string,
+  ): Promise<void> {
+    await this.db
+      .update(examSchedules)
+      .set({ hall_detail_id: hallDetailId, updated_at: new Date() })
+      .where(
+        and(
+          eq(examSchedules.school_id, schoolId),
+          eq(examSchedules.exam_id, examId),
+          eq(examSchedules.class_id, classId),
+          eq(examSchedules.locked, false),
+        ),
+      );
+  }
+
   /** Applies the same partial fields to every (unlocked) row in `ids`. */
   async bulkUpdate(
     ids: string[],
@@ -320,7 +347,10 @@ export class ExamScheduleRepository {
   }
 
   /** Which of these schedule ids already have attendance recorded (downstream data guard). */
-  async findScheduleIdsWithAttendance(scheduleIds: string[], schoolId: string): Promise<Set<string>> {
+  async findScheduleIdsWithAttendance(
+    scheduleIds: string[],
+    schoolId: string,
+  ): Promise<Set<string>> {
     if (scheduleIds.length === 0) return new Set();
     const rows = await this.db
       .select({ schedule_id: examAttendance.schedule_id })

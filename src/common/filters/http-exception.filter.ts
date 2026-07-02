@@ -21,6 +21,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal server error';
     let errors: Record<string, string> | string[] | undefined;
+    let extra: Record<string, unknown> | undefined;
 
     if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
@@ -35,6 +36,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           errors = body.message as string[];
           message = 'Validation failed';
         }
+
+        // Preserve any additional structured payload (e.g. `conflicts`,
+        // `incomplete_schedule_ids`) beyond the standard fields, so callers
+        // that throw `new BadRequestException({ message, ...extra })` don't
+        // have that extra context silently dropped.
+        const { message: _m, errors: _e, statusCode: _s, error: _err, ...rest } = body;
+        if (Object.keys(rest).length > 0) extra = rest;
       } else {
         message = exceptionResponse as string;
       }
@@ -64,6 +72,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       statusCode,
       message,
       errors,
+      ...extra,
       timestamp: new Date().toISOString(),
       path: request.url,
     };

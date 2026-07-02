@@ -105,7 +105,11 @@ export class ExamSittingService {
       if (!roomCapacityMap.has(entry.hall_detail_id)) {
         const detail = await this.hallService.findDetailById(entry.hall_detail_id, schoolId);
         roomCapacityMap.set(entry.hall_detail_id, detail.sitting_capacity);
-        const occupied = await this.repo.countSeatsOccupied(exam_id, entry.hall_detail_id, schoolId);
+        const occupied = await this.repo.countSeatsOccupied(
+          exam_id,
+          entry.hall_detail_id,
+          schoolId,
+        );
         roomOccupiedMap.set(entry.hall_detail_id, occupied);
       }
 
@@ -140,7 +144,33 @@ export class ExamSittingService {
 
     const created = await this.repo.createMany(rows);
     await this.redis.delByPattern(REDIS_EXAM_KEYS.SITTING.PATTERN(schoolId, exam_id));
+    await this.syncScheduleHalls(exam_id, schoolId);
     return created;
+  }
+
+  /**
+   * After sitting-plan seats are written, sync exam_schedules.hall_detail_id
+   * to the room each class actually ended up in (majority room, if split
+   * across more than one) — otherwise the schedule page and master print
+   * never learn which room was assigned during seating.
+   */
+  private async syncScheduleHalls(examId: string, schoolId: string): Promise<void> {
+    const counts = await this.repo.countSeatsByRoomAndClassId(examId, schoolId);
+    const bestRoomByClass = new Map<string, { hall_detail_id: string; count: number }>();
+    for (const row of counts) {
+      const current = bestRoomByClass.get(row.class_id);
+      if (!current || row.count > current.count) {
+        bestRoomByClass.set(row.class_id, { hall_detail_id: row.hall_detail_id, count: row.count });
+      }
+    }
+    await Promise.all(
+      [...bestRoomByClass.entries()].map(([classId, room]) =>
+        this.scheduleRepo.setHallForClass(examId, classId, schoolId, room.hall_detail_id),
+      ),
+    );
+    if (bestRoomByClass.size > 0) {
+      await this.redis.delByPattern(REDIS_EXAM_KEYS.SCHEDULE.PATTERN(schoolId));
+    }
   }
 
   async update(id: string, schoolId: string, dto: UpdateSittingPlanDto): Promise<ExamSittingPlan> {
@@ -148,7 +178,11 @@ export class ExamSittingService {
 
     if (dto.hall_detail_id && dto.hall_detail_id !== existing.hall_detail_id) {
       const detail = await this.hallService.findDetailById(dto.hall_detail_id, schoolId);
-      const occupied = await this.repo.countSeatsOccupied(existing.exam_id, dto.hall_detail_id, schoolId);
+      const occupied = await this.repo.countSeatsOccupied(
+        existing.exam_id,
+        dto.hall_detail_id,
+        schoolId,
+      );
       if (occupied >= detail.sitting_capacity) {
         throw new BadRequestException(
           `Room '${dto.hall_detail_id}' has reached its sitting capacity of ${detail.sitting_capacity}`,
@@ -202,8 +236,7 @@ export class ExamSittingService {
     const { exam_id, academic_year_id, hall_detail_ids, clear_existing = true } = dto;
 
     const exam = await this.examService.findById(exam_id, schoolId);
-    const classIds =
-      dto.class_ids && dto.class_ids.length > 0 ? dto.class_ids : exam.class_ids;
+    const classIds = dto.class_ids && dto.class_ids.length > 0 ? dto.class_ids : exam.class_ids;
     if (classIds.length === 0) {
       throw new BadRequestException('This exam has no participating classes to seat');
     }
@@ -273,6 +306,7 @@ export class ExamSittingService {
     if (allRows.length > 0) {
       await this.repo.createMany(allRows);
       await this.redis.delByPattern(REDIS_EXAM_KEYS.SITTING.PATTERN(schoolId, exam_id));
+      await this.syncScheduleHalls(exam_id, schoolId);
     }
 
     const unassignedCount = shuffled.length - allRows.length;
@@ -299,7 +333,11 @@ export class ExamSittingService {
       const exam = await this.examService.findById(examId, schoolId);
       examNames.push(exam.exam_name);
     }
-    const studentRows = await this.repo.findRoomStudents(dto.exam_ids, dto.hall_detail_id, schoolId);
+    const studentRows = await this.repo.findRoomStudents(
+      dto.exam_ids,
+      dto.hall_detail_id,
+      schoolId,
+    );
     return {
       school_name: schoolName,
       room_name: room.room_name,
@@ -317,11 +355,7 @@ export class ExamSittingService {
    * invigilator, and seated student count — one document instead of
    * flipping through per-room PDFs.
    */
-  async getMasterPdfData(
-    examId: string,
-    schoolId: string,
-    date?: string,
-  ): Promise<MasterPdfData> {
+  async getMasterPdfData(examId: string, schoolId: string, date?: string): Promise<MasterPdfData> {
     const [exam, schoolName, scheduleRows, seatCounts] = await Promise.all([
       this.examService.findById(examId, schoolId),
       this.repo.findSchoolName(schoolId),
