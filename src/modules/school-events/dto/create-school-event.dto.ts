@@ -6,11 +6,18 @@ import {
   IsDateString,
   Matches,
   MaxLength,
+  IsArray,
 } from 'class-validator';
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SchoolEventType } from '@shared/enums/holiday-events.enum';
 import { REGEX } from '@utils/regex.utils';
+
+export enum AppliesToType {
+  STUDENTS = 'STUDENTS',
+  STAFF = 'STAFF',
+  BOTH = 'BOTH',
+}
 
 export class CreateSchoolEventDto {
   @ApiProperty({ example: 'Republic Day' })
@@ -48,4 +55,17 @@ export class CreateSchoolEventDto {
   @IsOptional()
   @Matches(REGEX.TIME_REGEX, { message: 'to_time must be in HH:mm or HH:mm:ss format' })
   to_time?: string;
+
+  @ApiPropertyOptional({ enum: AppliesToType, default: 'BOTH' })
+  @IsOptional()
+  @IsEnum(AppliesToType)
+  applies_to?: AppliesToType;
+
+  @ApiPropertyOptional({
+    example: ['role-id-1', 'role-id-2'],
+    description: 'Staff role IDs that work during this holiday',
+  })
+  @IsOptional()
+  @IsArray()
+  exempt_role_ids?: string[];
 }

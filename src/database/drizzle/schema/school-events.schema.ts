@@ -1,8 +1,19 @@
-import { pgTable, varchar, boolean, timestamp, date, time, text, pgEnum } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  varchar,
+  boolean,
+  timestamp,
+  date,
+  time,
+  text,
+  pgEnum,
+  jsonb,
+} from 'drizzle-orm/pg-core';
 import { schools } from './schools.schema';
 import { academicYears } from './academic-years.schema';
 
 export const schoolEventTypeEnum = pgEnum('school_event_type', ['EVENT', 'HOLIDAY']);
+export const appliesToEnum = pgEnum('applies_to', ['STUDENTS', 'STAFF', 'BOTH']);
 
 export const schoolEvents = pgTable('school_events', {
   id: varchar('id', { length: 36 }).primaryKey(),
@@ -19,6 +30,8 @@ export const schoolEvents = pgTable('school_events', {
   from_time: time('from_time'),
   to_date: date('to_date').notNull(),
   to_time: time('to_time'),
+  applies_to: appliesToEnum('applies_to').default('BOTH').notNull(),
+  exempt_role_ids: jsonb('exempt_role_ids').default([]).notNull(),
   is_active: boolean('is_active').default(true).notNull(),
   deleted: boolean('deleted').default(false).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
