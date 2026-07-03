@@ -4,6 +4,7 @@ import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { admissionEnquiries } from '../../database/drizzle/schema/admission-enquiries.schema';
 import { enquiryHistory } from '../../database/drizzle/schema/enquiry-history.schema';
+import { students } from '../../database/drizzle/schema/students.schema';
 import {
   AdmissionEnquiry,
   NewAdmissionEnquiry,
@@ -124,6 +125,18 @@ export class AdmissionEnquiriesRepository {
       .update(admissionEnquiries)
       .set({ deleted: true, is_active: false, updated_at: new Date() })
       .where(and(eq(admissionEnquiries.id, id), eq(admissionEnquiries.school_id, schoolId)));
+  }
+
+  async findLinkedStudentId(enquiryId: string, schoolId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ id: students.id })
+      .from(students)
+      .where(and(
+        eq(students.admission_enquiry_id, enquiryId),
+        eq(students.school_id, schoolId),
+        eq(students.deleted, false),
+      ));
+    return row?.id ?? null;
   }
 
   // ─── History ────────────────────────────────────────

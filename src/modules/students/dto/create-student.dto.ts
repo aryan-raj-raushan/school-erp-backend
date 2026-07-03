@@ -87,6 +87,9 @@ export class StudentDocumentDto {
 // ─── Main Create DTO ──────────────────────────────────────────────────────────
 
 export class CreateStudentDto {
+  // Onboarding link — set when this student is created from a confirmed admission enquiry
+  @ApiPropertyOptional() @IsOptional() @IsString() admission_enquiry_id?: string;
+
   // Basic Info
   @ApiProperty() @IsString() @MaxLength(100) first_name: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) last_name?: string;

@@ -43,6 +43,13 @@ export class AdmissionEnquiriesController {
     return ApiResponse.success(data, 'Admission enquiry fetched successfully');
   }
 
+  @Get(':id/onboarding-status')
+  @ApiOperation({ summary: 'Check whether a student has been onboarded for this enquiry' })
+  async getOnboardingStatus(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
+    const data = await this.enquiriesService.getOnboardingStatus(id, schoolId);
+    return ApiResponse.success(data, 'Onboarding status fetched successfully');
+  }
+
   @Get(':id/history')
   @ApiOperation({ summary: 'Get history timeline for an enquiry' })
   async getHistory(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {

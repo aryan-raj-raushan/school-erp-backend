@@ -87,6 +87,15 @@ export class AdmissionEnquiriesService {
     return updated;
   }
 
+  async getOnboardingStatus(
+    id: string,
+    schoolId: string,
+  ): Promise<{ onboarded: boolean; student_id: string | null }> {
+    await this.findById(id, schoolId);
+    const studentId = await this.enquiriesRepo.findLinkedStudentId(id, schoolId);
+    return { onboarded: !!studentId, student_id: studentId };
+  }
+
   async remove(id: string, schoolId: string): Promise<void> {
     await this.findById(id, schoolId);
     await this.enquiriesRepo.softDelete(id, schoolId);
@@ -116,6 +125,7 @@ export class AdmissionEnquiriesService {
     // Block history additions on terminal statuses
     if (
       enquiry.status === 'ADMISSION_CONFIRMED' ||
+      enquiry.status === 'ONBOARDING_IN_PROGRESS' ||
       enquiry.status === 'REJECTED'
     ) {
       throw new ForbiddenException(
@@ -156,10 +166,11 @@ export class AdmissionEnquiriesService {
       });
     }
 
-    // Side-effect: sync status for terminal actions
+    // Side-effect: confirming admission moves the enquiry into onboarding —
+    // the student record still needs to be created via the onboarding form.
     if (dto.action === EnquiryAction.ADMISSION_CONFIRMED) {
       await this.enquiriesRepo.update(enquiryId, schoolId, {
-        status: 'ADMISSION_CONFIRMED',
+        status: 'ONBOARDING_IN_PROGRESS',
       });
     }
 

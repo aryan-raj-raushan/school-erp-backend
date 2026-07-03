@@ -7,6 +7,7 @@ export const enquiryStatusEnum = pgEnum('enquiry_status', [
   'NEW',
   'FOLLOW_UP',
   'ADMISSION_CONFIRMED',
+  'ONBOARDING_IN_PROGRESS',
   'REJECTED',
 ]);
 
