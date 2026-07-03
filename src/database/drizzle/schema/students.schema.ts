@@ -14,6 +14,7 @@ import { schools } from './schools.schema';
 import { academicYears } from './academic-years.schema';
 import { classes } from './classes.schema';
 import { sections } from './sections.schema';
+import { admissionEnquiries } from './admission-enquiries.schema';
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
@@ -99,6 +100,12 @@ export const students = pgTable(
     // System auto-generated reference number
     system_number: integer('system_number').notNull().default(0),
 
+    // Link back to the admission enquiry this student was onboarded from, if any
+    admission_enquiry_id: varchar('admission_enquiry_id', { length: 36 }).references(
+      () => admissionEnquiries.id,
+      { onDelete: 'set null' },
+    ),
+
     // Basic Info
     first_name: varchar('first_name', { length: 100 }).notNull(),
     last_name: varchar('last_name', { length: 100 }),
@@ -134,6 +141,7 @@ export const students = pgTable(
     idx_school_deleted: index('students_school_deleted_idx').on(t.school_id, t.deleted),
     idx_school_status: index('students_school_status_idx').on(t.school_id, t.status),
     idx_phone: index('students_phone_idx').on(t.phone_number),
+    idx_admission_enquiry: index('students_admission_enquiry_id_idx').on(t.admission_enquiry_id),
   }),
 );
 

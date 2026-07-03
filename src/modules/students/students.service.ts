@@ -78,6 +78,7 @@ export class StudentsService {
       id: studentId,
       school_id: schoolId,
       system_number: systemNumber,
+      admission_enquiry_id: dto.admission_enquiry_id,
       first_name: dto.first_name,
       last_name: dto.last_name,
       date_of_birth: dto.date_of_birth,
