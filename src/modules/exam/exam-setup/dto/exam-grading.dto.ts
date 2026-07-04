@@ -5,9 +5,13 @@ import {
   IsBoolean,
   IsInt,
   IsNumberString,
+  IsArray,
+  ArrayMinSize,
+  ValidateNested,
   Min,
   MaxLength,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -45,3 +49,13 @@ export class CreateExamGradingDto {
 }
 
 export class UpdateExamGradingDto extends PartialType(CreateExamGradingDto) {}
+
+/** Create every grade band for a school in one call (e.g. Auto Generate). */
+export class CreateExamGradingBulkDto {
+  @ApiProperty({ type: [CreateExamGradingDto] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateExamGradingDto)
+  grades: CreateExamGradingDto[];
+}

@@ -9,6 +9,15 @@ import { students, studentAcademicInfo } from '@database/drizzle/schema/students
 import { classes } from '@database/drizzle/schema/classes.schema';
 import { sections } from '@database/drizzle/schema/sections.schema';
 import { schools } from '@database/drizzle/schema/schools.schema';
+import { examHallDetails } from '@database/drizzle/schema/exam-hall-details.schema';
+
+export interface RoomBreakdownRow {
+  hall_detail_id: string;
+  room_name: string;
+  class_id: string;
+  class_name: string;
+  count: number;
+}
 
 export interface StudentForShuffle {
   student_id: string;
@@ -163,6 +172,13 @@ export class ExamSittingRepository {
       );
   }
 
+  /** Hard-deletes every sitting-plan row for an exam — used by the exam.deleted cascade. */
+  async hardDeleteByExam(examId: string, schoolId: string): Promise<void> {
+    await this.db
+      .delete(examSittingPlans)
+      .where(and(eq(examSittingPlans.school_id, schoolId), eq(examSittingPlans.exam_id, examId)));
+  }
+
   /** Fetch all students per exam (via studentAcademicInfo join) for shuffle logic */
   async findStudentsForExam(
     examId: string,
@@ -254,6 +270,51 @@ export class ExamSittingRepository {
         ),
       )
       .groupBy(examSittingPlans.hall_detail_id, studentAcademicInfo.class_id);
+
+    return rows.map((r) => ({ ...r, count: Number(r.count) }));
+  }
+
+  /**
+   * Every room actually used to seat this exam's students, broken down by
+   * class — the source of truth for the master print sheet. Reads directly
+   * from exam_sitting_plans (which supports many rooms per class) instead of
+   * exam_schedules.hall_detail_id (which only stores one "majority" room per
+   * class and drops any overflow room a class was split into).
+   */
+  async findRoomBreakdownForMasterPdf(
+    examId: string,
+    schoolId: string,
+  ): Promise<RoomBreakdownRow[]> {
+    const rows = await this.db
+      .select({
+        hall_detail_id: examSittingPlans.hall_detail_id,
+        room_name: examHallDetails.room_name,
+        class_id: studentAcademicInfo.class_id,
+        class_name: classes.name,
+        count: sql<number>`count(*)`,
+      })
+      .from(examSittingPlans)
+      .innerJoin(
+        studentAcademicInfo,
+        eq(studentAcademicInfo.student_id, examSittingPlans.student_id),
+      )
+      .innerJoin(classes, eq(classes.id, studentAcademicInfo.class_id))
+      .innerJoin(examHallDetails, eq(examHallDetails.id, examSittingPlans.hall_detail_id))
+      .where(
+        and(
+          eq(examSittingPlans.school_id, schoolId),
+          eq(examSittingPlans.exam_id, examId),
+          eq(examSittingPlans.deleted, false),
+          eq(studentAcademicInfo.is_current, true),
+          eq(studentAcademicInfo.deleted, false),
+        ),
+      )
+      .groupBy(
+        examSittingPlans.hall_detail_id,
+        examHallDetails.room_name,
+        studentAcademicInfo.class_id,
+        classes.name,
+      );
 
     return rows.map((r) => ({ ...r, count: Number(r.count) }));
   }

@@ -1,11 +1,11 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../../database/drizzle/drizzle.provider';
 import { ExamAttendance, NewExamAttendance } from './types/exam-attendance.types';
 import { FilterAttendanceDto } from './dto/exam-attendance.dto';
 import { examAttendance } from '@database/drizzle/schema/exam-attendance.schema';
-import { students } from '@database/drizzle/schema/students.schema';
+import { students, studentAcademicInfo } from '@database/drizzle/schema/students.schema';
 import { examSchedules } from '@database/drizzle/schema/exam-schedule.schema';
 
 export type EnrichedExamAttendance = ExamAttendance & {
@@ -24,6 +24,7 @@ export class ExamAttendanceRepository {
       conditions.push(eq(examAttendance.academic_year_id, filters.academic_year_id));
     if (filters.exam_id) conditions.push(eq(examAttendance.exam_id, filters.exam_id));
     if (filters.schedule_id) conditions.push(eq(examAttendance.schedule_id, filters.schedule_id));
+    if (filters.class_id) conditions.push(eq(examSchedules.class_id, filters.class_id));
     if (filters.student_id) conditions.push(eq(examAttendance.student_id, filters.student_id));
     if (filters.status) conditions.push(eq(examAttendance.status, filters.status));
     return conditions;
@@ -67,6 +68,10 @@ export class ExamAttendanceRepository {
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(examAttendance)
+      .innerJoin(
+        examSchedules,
+        and(eq(examAttendance.schedule_id, examSchedules.id), eq(examSchedules.deleted, false)),
+      )
       .where(and(...this.buildConditions(schoolId, filters)));
     return Number(count);
   }
@@ -120,4 +125,35 @@ export class ExamAttendanceRepository {
       );
   }
 
+  /** Current class_id for each of the given students — used to guard bulkMark against cross-class entries. */
+  async findStudentClassMap(
+    studentIds: string[],
+    academicYearId: string,
+    schoolId: string,
+  ): Promise<Map<string, string>> {
+    if (studentIds.length === 0) return new Map();
+    const rows = await this.db
+      .select({
+        student_id: studentAcademicInfo.student_id,
+        class_id: studentAcademicInfo.class_id,
+      })
+      .from(studentAcademicInfo)
+      .where(
+        and(
+          eq(studentAcademicInfo.school_id, schoolId),
+          eq(studentAcademicInfo.academic_year_id, academicYearId),
+          eq(studentAcademicInfo.is_current, true),
+          eq(studentAcademicInfo.deleted, false),
+          inArray(studentAcademicInfo.student_id, studentIds),
+        ),
+      );
+    return new Map(rows.map((r) => [r.student_id, r.class_id]));
+  }
+
+  /** Hard-deletes every attendance row for an exam — used by the exam.deleted cascade. */
+  async hardDeleteByExam(examId: string, schoolId: string): Promise<void> {
+    await this.db
+      .delete(examAttendance)
+      .where(and(eq(examAttendance.school_id, schoolId), eq(examAttendance.exam_id, examId)));
+  }
 }

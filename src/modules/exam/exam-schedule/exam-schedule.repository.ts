@@ -365,6 +365,13 @@ export class ExamScheduleRepository {
     return new Set(rows.map((r) => r.schedule_id));
   }
 
+  /** Hard-deletes every schedule row (incl. sub-schedules) for an exam — used by the exam.deleted cascade. */
+  async hardDeleteByExam(examId: string, schoolId: string): Promise<void> {
+    await this.db
+      .delete(examSchedules)
+      .where(and(eq(examSchedules.school_id, schoolId), eq(examSchedules.exam_id, examId)));
+  }
+
   async bulkHardDelete(ids: string[], schoolId: string): Promise<void> {
     if (ids.length === 0) return;
     await this.db

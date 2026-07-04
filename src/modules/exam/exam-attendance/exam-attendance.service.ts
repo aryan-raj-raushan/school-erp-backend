@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { ExamAttendanceRepository } from './exam-attendance.repository';
+import { ExamScheduleRepository } from '../exam-schedule/exam-schedule.repository';
 import { RedisService } from '../../redis/redis.service';
 import { BulkMarkAttendanceDto, FilterAttendanceDto } from './dto/exam-attendance.dto';
 import { ExamAttendance, NewExamAttendance } from './types/exam-attendance.types';
@@ -12,6 +13,7 @@ import { generateId } from '@utils/uuid.utils';
 export class ExamAttendanceService {
   constructor(
     private readonly repo: ExamAttendanceRepository,
+    private readonly scheduleRepo: ExamScheduleRepository,
     private readonly redis: RedisService,
   ) {}
 
@@ -45,6 +47,8 @@ export class ExamAttendanceService {
     schoolId: string,
     markedBy: string,
   ): Promise<ExamAttendance[]> {
+    await this.assertEntriesMatchStudentClass(dto, schoolId);
+
     const rows: NewExamAttendance[] = dto.entries.map((entry) => ({
       id: generateId(),
       school_id: schoolId,
@@ -60,5 +64,37 @@ export class ExamAttendanceService {
     const result = await this.repo.upsertMany(rows);
     await this.redis.delByPattern(REDIS_EXAM_KEYS.ATTENDANCE.PATTERN(schoolId, dto.exam_id));
     return result;
+  }
+
+  /**
+   * Defense-in-depth: rejects any entry whose student isn't actually in the
+   * class that schedule_id belongs to. Catches this bug class regardless of
+   * what the client sends (the frontend can leak cross-class schedule rows
+   * if it forgets to filter by class_id when fetching schedules).
+   */
+  private async assertEntriesMatchStudentClass(
+    dto: BulkMarkAttendanceDto,
+    schoolId: string,
+  ): Promise<void> {
+    const scheduleIds = [...new Set(dto.entries.map((e) => e.schedule_id))];
+    const studentIds = [...new Set(dto.entries.map((e) => e.student_id))];
+
+    const [schedules, studentClassMap] = await Promise.all([
+      this.scheduleRepo.findByIds(scheduleIds, schoolId),
+      this.repo.findStudentClassMap(studentIds, dto.academic_year_id, schoolId),
+    ]);
+    const scheduleClassMap = new Map(schedules.map((s) => [s.id, s.class_id]));
+
+    const mismatches = dto.entries.filter((entry) => {
+      const scheduleClassId = scheduleClassMap.get(entry.schedule_id);
+      const studentClassId = studentClassMap.get(entry.student_id);
+      return !scheduleClassId || !studentClassId || scheduleClassId !== studentClassId;
+    });
+
+    if (mismatches.length > 0) {
+      throw new BadRequestException(
+        `${mismatches.length} attendance entr${mismatches.length === 1 ? 'y belongs' : 'ies belong'} to a student whose class doesn't match the schedule's class — refresh and try again`,
+      );
+    }
   }
 }

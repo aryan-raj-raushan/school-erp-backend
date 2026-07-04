@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ExamScheduleService } from './exam-schedule.service';
 import {
   CreateExamScheduleBulkDto,
+  CreateExamScheduleMultiClassDto,
   UpdateExamScheduleDto,
   FilterExamScheduleDto,
   BulkLockScheduleDto,
@@ -56,6 +57,20 @@ export class ExamScheduleController {
     @GetCurrentUserId() userId: string,
   ) {
     const data = await this.service.bulkCreate(dto, schoolId, userId);
+    return ApiResponse.created(data, 'Exam schedules created successfully');
+  }
+
+  @Post('bulk-multi-class')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Bulk create the same subject list across multiple classes for an exam in one call',
+  })
+  async bulkCreateMultiClass(
+    @Body() dto: CreateExamScheduleMultiClassDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    const data = await this.service.bulkCreateMultiClass(dto, schoolId, userId);
     return ApiResponse.created(data, 'Exam schedules created successfully');
   }
 

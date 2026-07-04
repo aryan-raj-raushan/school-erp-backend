@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { APP_EVENTS } from '@shared/events/event-names';
 import { generateId } from '../../../utils/uuid.utils';
 import { PaginationResponse } from '../../../shared/responses/api-response';
 import {
@@ -51,7 +53,32 @@ export class ExamService {
     private readonly templates: ExamTemplateService,
     private readonly redis: RedisService,
     private readonly auditLogs: AuditLogsService,
+    private readonly events: EventEmitter2,
   ) {}
+
+  /** Rejects create/update when the exam's date range overlaps another exam sharing a class. */
+  private async assertNoTimelineOverlap(
+    schoolId: string,
+    academicYearId: string,
+    classIds: string[],
+    startDate: string,
+    endDate: string,
+    excludeExamId?: string,
+  ): Promise<void> {
+    const overlapping = await this.repo.findOverlapping(
+      schoolId,
+      academicYearId,
+      classIds,
+      startDate,
+      endDate,
+      excludeExamId,
+    );
+    if (overlapping.length > 0) {
+      throw new BadRequestException(
+        `Exam dates overlap with '${overlapping[0].exam_name}' (${overlapping[0].start_date} to ${overlapping[0].end_date}) for a shared class — adjust the dates or classes`,
+      );
+    }
+  }
 
   private logAudit(
     schoolId: string,
@@ -95,6 +122,13 @@ export class ExamService {
 
   async create(dto: CreateExamDto, schoolId: string, createdBy: string): Promise<ExamWithClasses> {
     const { class_ids, code, ...examFields } = dto;
+    await this.assertNoTimelineOverlap(
+      schoolId,
+      dto.academic_year_id,
+      class_ids,
+      dto.start_date,
+      dto.end_date,
+    );
     const exam = await this.repo.create({
       id: generateId(),
       school_id: schoolId,
@@ -116,6 +150,14 @@ export class ExamService {
   ): Promise<ExamWithClasses> {
     const existing = await this.findById(id, schoolId);
     const { class_ids, ...examFields } = dto;
+    await this.assertNoTimelineOverlap(
+      schoolId,
+      dto.academic_year_id ?? existing.academic_year_id,
+      class_ids ?? existing.class_ids,
+      dto.start_date ?? existing.start_date,
+      dto.end_date ?? existing.end_date,
+      id,
+    );
     const updated = await this.repo.update(id, schoolId, examFields);
     if (class_ids) {
       await this.repo.replaceExamClasses(
@@ -142,6 +184,9 @@ export class ExamService {
     await this.repo.softDelete(id, schoolId);
     await this.redis.delByPattern(REDIS_EXAM_KEYS.EXAM.PATTERN(schoolId));
     if (userId) this.logAudit(schoolId, 'DELETE', id, userId);
+    // Exam row stays soft-deleted (restore() still works); its schedules,
+    // attendance and sitting-plan rows are hard-deleted by the listener.
+    this.events.emit(APP_EVENTS.EXAM.DELETED, { examId: id, schoolId });
   }
 
   async restore(id: string, schoolId: string): Promise<ExamWithClasses> {
@@ -220,6 +265,15 @@ export class ExamService {
       return d.toISOString().slice(0, 10);
     };
 
+    const newEndDate = shiftDate(source.end_date);
+    await this.assertNoTimelineOverlap(
+      schoolId,
+      dto.target_academic_year_id,
+      source.class_ids,
+      dto.new_start_date,
+      newEndDate,
+    );
+
     const newExam = await this.repo.create({
       id: generateId(),
       school_id: schoolId,
@@ -228,7 +282,7 @@ export class ExamService {
       exam_name: source.exam_name,
       exam_term: source.exam_term,
       start_date: dto.new_start_date,
-      end_date: shiftDate(source.end_date),
+      end_date: newEndDate,
       include_in_marks: source.include_in_marks,
       status: ExamStatus.DRAFT,
       is_published: false,
@@ -507,6 +561,14 @@ export class ExamService {
         conflicts,
       });
     }
+
+    await this.assertNoTimelineOverlap(
+      schoolId,
+      dto.academic_year_id,
+      dto.class_ids,
+      dto.start_date,
+      dto.end_date,
+    );
 
     const exam = await this.repo.create({
       id: generateId(),

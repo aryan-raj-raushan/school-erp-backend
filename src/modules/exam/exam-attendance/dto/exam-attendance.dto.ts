@@ -61,6 +61,11 @@ export class FilterAttendanceDto extends ExamPaginationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsUUID()
+  class_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
   student_id?: string;
 
   @ApiPropertyOptional({ enum: AttendanceStatus })

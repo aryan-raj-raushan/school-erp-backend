@@ -64,8 +64,12 @@ export const exams = pgTable(
   (t) => ({
     // Partial index — only live (non-deleted) exams compete for a code, so a
     // soft-deleted exam's code can be reused without violating uniqueness.
+    // Scoped per academic year: the auto-derived code is `${term}-${year}`,
+    // so without academic_year_id here, two unrelated exams in different
+    // academic years (e.g. a stray live row from another year) could collide
+    // on the same term+year and produce a confusing "already exists" error.
     uniqueCodePerSchool: uniqueIndex('exams_code_school_unique')
-      .on(t.school_id, t.code)
+      .on(t.school_id, t.academic_year_id, t.code)
       .where(sql`${t.deleted} = false`),
   }),
 );

@@ -154,6 +154,29 @@ export class CreateExamScheduleBulkDto {
   schedules: CreateExamScheduleItemDto[];
 }
 
+/** Bulk create the same subject list across every given class in one call. */
+export class CreateExamScheduleMultiClassDto {
+  @ApiProperty({ example: 'uuid-of-exam' })
+  @IsUUID()
+  exam_id: string;
+
+  @ApiProperty({ example: 'uuid-of-academic-year' })
+  @IsUUID()
+  academic_year_id: string;
+
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID(undefined, { each: true })
+  class_ids: string[];
+
+  @ApiProperty({ type: [CreateExamScheduleItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateExamScheduleItemDto)
+  schedules: CreateExamScheduleItemDto[];
+}
+
 export class UpdateExamScheduleDto extends PartialType(CreateExamScheduleItemDto) {}
 
 export class FilterExamScheduleDto extends ExamPaginationDto {

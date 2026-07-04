@@ -50,6 +50,10 @@ export class ExamGradingRepository {
     return row;
   }
 
+  async createMany(data: NewExamGrading[]): Promise<ExamGrading[]> {
+    return this.db.insert(examGrading).values(data).returning();
+  }
+
   async update(id: string, schoolId: string, data: Partial<NewExamGrading>): Promise<ExamGrading> {
     const [row] = await this.db
       .update(examGrading)

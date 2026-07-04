@@ -7,6 +7,7 @@ import { appConfig, databaseConfig, redisConfig, jwtConfig, awsConfig } from './
 import { DrizzleModule } from './database/drizzle/drizzle.module';
 import { MongoModule } from './database/mongo/mongo.module';
 import { RedisModule } from './modules/redis/redis.module';
+import { EventsModule } from './modules/events/events.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SchoolsModule } from './modules/schools/schools.module';
@@ -74,6 +75,7 @@ import { StudentMovementsModule } from '@modules/student-movements/student-movem
     DrizzleModule,
     MongoModule,
     RedisModule,
+    EventsModule,
     HealthModule,
     AuthModule,
     SchoolsModule,

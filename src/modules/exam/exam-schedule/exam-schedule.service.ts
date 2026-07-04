@@ -3,6 +3,7 @@ import { ExamScheduleRepository } from './exam-schedule.repository';
 import { RedisService } from '../../redis/redis.service';
 import {
   CreateExamScheduleBulkDto,
+  CreateExamScheduleMultiClassDto,
   UpdateExamScheduleDto,
   FilterExamScheduleDto,
   CreateExamScheduleItemDto,
@@ -221,6 +222,31 @@ export class ExamScheduleService {
     const created = await this.repo.createMany(rows);
     await this.redis.delByPattern(REDIS_EXAM_KEYS.SCHEDULE.PATTERN(schoolId));
     return created;
+  }
+
+  /**
+   * Bulk create the same subject list across every given class in one call,
+   * instead of the caller looping bulkCreate per class client-side. Each
+   * class is still validated (duplicate subject / time-conflict) and
+   * inserted independently — a failure partway through leaves earlier
+   * classes' rows committed, same as calling bulkCreate per class manually.
+   */
+  async bulkCreateMultiClass(
+    dto: CreateExamScheduleMultiClassDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<ExamSchedule[]> {
+    const { exam_id, academic_year_id, class_ids, schedules } = dto;
+    const allCreated: ExamSchedule[] = [];
+    for (const classId of class_ids) {
+      const created = await this.bulkCreate(
+        { exam_id, academic_year_id, class_id: classId, schedules },
+        schoolId,
+        createdBy,
+      );
+      allCreated.push(...created);
+    }
+    return allCreated;
   }
 
   async update(

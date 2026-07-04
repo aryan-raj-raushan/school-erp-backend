@@ -4,11 +4,13 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ExamSittingRepository } from './exam-sitting.repository';
 import { ExamHallService } from '../exam-hall/exam-hall.service';
 import { ExamService } from '../exam-manage/exam.service';
 import { ExamScheduleRepository } from '../exam-schedule/exam-schedule.repository';
 import { RedisService } from '../../redis/redis.service';
+import { APP_EVENTS } from '@shared/events/event-names';
 import {
   CreateSittingPlanBulkDto,
   UpdateSittingPlanDto,
@@ -66,6 +68,7 @@ export class ExamSittingService {
     private readonly examService: ExamService,
     private readonly scheduleRepo: ExamScheduleRepository,
     private readonly redis: RedisService,
+    private readonly events: EventEmitter2,
   ) {}
 
   async findAll(
@@ -144,33 +147,8 @@ export class ExamSittingService {
 
     const created = await this.repo.createMany(rows);
     await this.redis.delByPattern(REDIS_EXAM_KEYS.SITTING.PATTERN(schoolId, exam_id));
-    await this.syncScheduleHalls(exam_id, schoolId);
+    this.events.emit(APP_EVENTS.SITTING_PLAN.ROOMS_ASSIGNED, { examId: exam_id, schoolId });
     return created;
-  }
-
-  /**
-   * After sitting-plan seats are written, sync exam_schedules.hall_detail_id
-   * to the room each class actually ended up in (majority room, if split
-   * across more than one) — otherwise the schedule page and master print
-   * never learn which room was assigned during seating.
-   */
-  private async syncScheduleHalls(examId: string, schoolId: string): Promise<void> {
-    const counts = await this.repo.countSeatsByRoomAndClassId(examId, schoolId);
-    const bestRoomByClass = new Map<string, { hall_detail_id: string; count: number }>();
-    for (const row of counts) {
-      const current = bestRoomByClass.get(row.class_id);
-      if (!current || row.count > current.count) {
-        bestRoomByClass.set(row.class_id, { hall_detail_id: row.hall_detail_id, count: row.count });
-      }
-    }
-    await Promise.all(
-      [...bestRoomByClass.entries()].map(([classId, room]) =>
-        this.scheduleRepo.setHallForClass(examId, classId, schoolId, room.hall_detail_id),
-      ),
-    );
-    if (bestRoomByClass.size > 0) {
-      await this.redis.delByPattern(REDIS_EXAM_KEYS.SCHEDULE.PATTERN(schoolId));
-    }
   }
 
   async update(id: string, schoolId: string, dto: UpdateSittingPlanDto): Promise<ExamSittingPlan> {
@@ -306,7 +284,7 @@ export class ExamSittingService {
     if (allRows.length > 0) {
       await this.repo.createMany(allRows);
       await this.redis.delByPattern(REDIS_EXAM_KEYS.SITTING.PATTERN(schoolId, exam_id));
-      await this.syncScheduleHalls(exam_id, schoolId);
+      this.events.emit(APP_EVENTS.SITTING_PLAN.ROOMS_ASSIGNED, { examId: exam_id, schoolId });
     }
 
     const unassignedCount = shuffled.length - allRows.length;
@@ -356,34 +334,43 @@ export class ExamSittingService {
    * flipping through per-room PDFs.
    */
   async getMasterPdfData(examId: string, schoolId: string, date?: string): Promise<MasterPdfData> {
-    const [exam, schoolName, scheduleRows, seatCounts] = await Promise.all([
+    const [exam, schoolName, scheduleRows, roomBreakdown] = await Promise.all([
       this.examService.findById(examId, schoolId),
       this.repo.findSchoolName(schoolId),
       this.scheduleRepo.findSchedulesForMasterPdf(schoolId, examId, date),
-      this.repo.countSeatsByRoomAndClass(examId, schoolId),
+      this.repo.findRoomBreakdownForMasterPdf(examId, schoolId),
     ]);
 
-    const seatCountMap = new Map<string, number>();
-    for (const s of seatCounts) {
-      seatCountMap.set(`${s.hall_detail_id}__${s.class_name}`, s.count);
+    // Subject/invigilator per class, keyed by class name — a class can have
+    // several rows here (one per subject/date); each gets replicated onto
+    // every room that class was actually seated in below.
+    const scheduleByClass = new Map<string, typeof scheduleRows>();
+    for (const row of scheduleRows) {
+      const className = row.class_name ?? 'Unknown Class';
+      const list = scheduleByClass.get(className) ?? [];
+      list.push(row);
+      scheduleByClass.set(className, list);
     }
 
     const roomMap = new Map<string, MasterPdfRoomSection>();
-    for (const row of scheduleRows) {
-      if (!row.hall_detail_id || !row.room_name) continue; // no room assigned yet
-      if (!roomMap.has(row.hall_detail_id)) {
-        roomMap.set(row.hall_detail_id, { room_name: row.room_name, entries: [] });
+    for (const room of roomBreakdown) {
+      const scheduleRowsForClass = scheduleByClass.get(room.class_name) ?? [];
+      if (scheduleRowsForClass.length === 0) continue; // no schedule (subject) for this class yet
+
+      if (!roomMap.has(room.hall_detail_id)) {
+        roomMap.set(room.hall_detail_id, { room_name: room.room_name, entries: [] });
       }
-      const invigilatorName =
-        [row.invigilator_first_name, row.invigilator_last_name].filter(Boolean).join(' ') ||
-        'Unassigned';
-      const className = row.class_name ?? 'Unknown Class';
-      roomMap.get(row.hall_detail_id)!.entries.push({
-        class_name: className,
-        subject_name: row.subject_name,
-        invigilator_name: invigilatorName,
-        student_count: seatCountMap.get(`${row.hall_detail_id}__${className}`) ?? 0,
-      });
+      for (const sched of scheduleRowsForClass) {
+        const invigilatorName =
+          [sched.invigilator_first_name, sched.invigilator_last_name].filter(Boolean).join(' ') ||
+          'Unassigned';
+        roomMap.get(room.hall_detail_id)!.entries.push({
+          class_name: room.class_name,
+          subject_name: sched.subject_name,
+          invigilator_name: invigilatorName,
+          student_count: room.count,
+        });
+      }
     }
 
     return {

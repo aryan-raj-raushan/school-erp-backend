@@ -12,7 +12,11 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ExamGradingService } from './exam-grading.service';
-import { CreateExamGradingDto, UpdateExamGradingDto } from './dto/exam-grading.dto';
+import {
+  CreateExamGradingDto,
+  UpdateExamGradingDto,
+  CreateExamGradingBulkDto,
+} from './dto/exam-grading.dto';
 import { GetSchoolId } from '@common/decorators/school-id.decorator';
 import { ApiResponse } from '@shared/responses/api-response';
 import { GetCurrentUserId } from '@common/decorators/current-user.decorator';
@@ -46,6 +50,18 @@ export class ExamGradingController {
     @GetCurrentUserId() userId: string,
   ) {
     const data = await this.service.create(dto, schoolId, userId);
+    return ApiResponse.created(data, 'Exam grading created successfully');
+  }
+
+  @Post('bulk')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create all grading rules for a school in one call' })
+  async bulkCreate(
+    @Body() dto: CreateExamGradingBulkDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    const data = await this.service.bulkCreate(dto, schoolId, userId);
     return ApiResponse.created(data, 'Exam grading created successfully');
   }
 

@@ -1,5 +1,5 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { Injectable, Inject, ConflictException } from '@nestjs/common';
+import { eq, and, ne, sql, inArray, lte, gte } from 'drizzle-orm';
 import { Exam, NewExam, NewExamClass, ExamWithClasses } from './types/exam.types';
 import { FilterExamDto } from './dto/exam.dto';
 import { DRIZZLE_ORM } from '@database/drizzle/drizzle.constants';
@@ -89,18 +89,74 @@ export class ExamRepository {
     return enriched;
   }
 
+  /** Translates the `exams_code_school_unique` violation into a specific, actionable message. */
+  private rethrowIfDuplicateCode(error: unknown, code: string): never {
+    const pgError = error as Error & { code?: string; constraint?: string };
+    if (pgError?.code === '23505' && pgError.constraint === 'exams_code_school_unique') {
+      throw new ConflictException(
+        `An exam with code '${code}' already exists for this academic year — edit the exam code or choose different dates/term`,
+      );
+    }
+    throw error;
+  }
+
   async create(data: NewExam): Promise<Exam> {
-    const [row] = await this.db.insert(exams).values(data).returning();
-    return row;
+    try {
+      const [row] = await this.db.insert(exams).values(data).returning();
+      return row;
+    } catch (error) {
+      this.rethrowIfDuplicateCode(error, data.code ?? '');
+    }
   }
 
   async update(id: string, schoolId: string, data: Partial<NewExam>): Promise<Exam> {
-    const [row] = await this.db
-      .update(exams)
-      .set({ ...data, updated_at: new Date() })
-      .where(and(eq(exams.id, id), eq(exams.school_id, schoolId)))
-      .returning();
-    return row;
+    try {
+      const [row] = await this.db
+        .update(exams)
+        .set({ ...data, updated_at: new Date() })
+        .where(and(eq(exams.id, id), eq(exams.school_id, schoolId)))
+        .returning();
+      return row;
+    } catch (error) {
+      this.rethrowIfDuplicateCode(error, data.code ?? '');
+    }
+  }
+
+  /**
+   * Other non-deleted exams sharing at least one class with the given
+   * class_ids whose [start_date, end_date] window intersects the given
+   * range — used to block overlapping exam timelines for the same class.
+   */
+  async findOverlapping(
+    schoolId: string,
+    academicYearId: string,
+    classIds: string[],
+    startDate: string,
+    endDate: string,
+    excludeExamId?: string,
+  ): Promise<Exam[]> {
+    if (classIds.length === 0) return [];
+    const examIdsForClasses = this.db
+      .select({ exam_id: examClasses.exam_id })
+      .from(examClasses)
+      .where(
+        and(eq(examClasses.school_id, schoolId), inArray(examClasses.class_id, classIds)),
+      );
+
+    const conditions = [
+      eq(exams.school_id, schoolId),
+      eq(exams.academic_year_id, academicYearId),
+      eq(exams.deleted, false),
+      inArray(exams.id, examIdsForClasses),
+      lte(exams.start_date, endDate),
+      gte(exams.end_date, startDate),
+    ];
+    if (excludeExamId) conditions.push(ne(exams.id, excludeExamId));
+
+    return this.db
+      .select()
+      .from(exams)
+      .where(and(...conditions));
   }
 
   async softDelete(id: string, schoolId: string): Promise<void> {

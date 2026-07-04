@@ -49,6 +49,10 @@ import { ExamTemplateController } from './exam-templates/exam-template.controlle
 import { ExamTemplateService } from './exam-templates/exam-template.service';
 import { ExamTemplateRepository } from './exam-templates/exam-template.repository';
 
+// Event listeners (cross-module cascades — see src/modules/events/events.module.ts)
+import { ExamCascadeListener } from './events/exam-cascade.listener';
+import { ScheduleHallSyncListener } from './events/schedule-hall-sync.listener';
+
 @Module({
   imports: [
     DrizzleModule,
@@ -96,6 +100,9 @@ import { ExamTemplateRepository } from './exam-templates/exam-template.repositor
     // Templates
     ExamTemplateService,
     ExamTemplateRepository,
+    // Event listeners
+    ExamCascadeListener,
+    ScheduleHallSyncListener,
   ],
   exports: [ExamService, ExamScheduleService, ExamHallService],
 })
