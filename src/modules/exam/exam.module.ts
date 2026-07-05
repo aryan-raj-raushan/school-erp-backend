@@ -104,6 +104,6 @@ import { ScheduleHallSyncListener } from './events/schedule-hall-sync.listener';
     ExamCascadeListener,
     ScheduleHallSyncListener,
   ],
-  exports: [ExamService, ExamScheduleService, ExamHallService],
+  exports: [ExamService, ExamScheduleService, ExamHallService, ExamScheduleRepository],
 })
 export class ExamModule {}

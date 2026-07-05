@@ -157,6 +157,21 @@ export class ExamResultsRepository {
       );
   }
 
+  /** Re-opens marks entry for (student, schedule) pairs previously auto-locked absent by the attendance sync listener. */
+  async clearAbsentFlag(
+    pairs: { studentId: string; scheduleId: string }[],
+    schoolId: string,
+  ): Promise<void> {
+    if (pairs.length === 0) return;
+    const pairConditions = pairs.map((p) =>
+      and(eq(examResults.student_id, p.studentId), eq(examResults.exam_schedule_id, p.scheduleId)),
+    );
+    await this.db
+      .update(examResults)
+      .set({ is_absent: false, updated_at: new Date() })
+      .where(and(eq(examResults.school_id, schoolId), eq(examResults.is_absent, true), or(...pairConditions)));
+  }
+
   async softDeleteByExam(schoolId: string, examId: string): Promise<void> {
     await this.db
       .update(examResults)

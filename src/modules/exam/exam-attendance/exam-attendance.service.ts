@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ExamAttendanceRepository } from './exam-attendance.repository';
 import { ExamScheduleRepository } from '../exam-schedule/exam-schedule.repository';
 import { ExamRepository } from '../exam-manage/exam.repository';
@@ -8,6 +9,9 @@ import { ExamAttendance, NewExamAttendance } from './types/exam-attendance.types
 import { EnrichedExamAttendance } from './exam-attendance.repository';
 import { PaginationResponse } from '@shared/responses/api-response';
 import { REDIS_EXAM_KEYS } from '@shared/redis/redis-key';
+import { APP_EVENTS } from '@shared/events/event-names';
+import { ExamAttendanceSyncEvent } from './events/exam-attendance.events';
+import { AttendanceStatus } from '@shared/enums/exam.enum';
 import { generateId } from '@utils/uuid.utils';
 
 @Injectable()
@@ -17,6 +21,7 @@ export class ExamAttendanceService {
     private readonly scheduleRepo: ExamScheduleRepository,
     private readonly examRepo: ExamRepository,
     private readonly redis: RedisService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async findAll(
@@ -66,7 +71,49 @@ export class ExamAttendanceService {
 
     const result = await this.repo.upsertMany(rows);
     await this.redis.delByPattern(REDIS_EXAM_KEYS.ATTENDANCE.PATTERN(schoolId, dto.exam_id));
+
+    this.emitResultSyncEvents(dto, schoolId, markedBy);
+
     return result;
+  }
+
+  /**
+   * Marks entry must follow attendance: an absentee can't have marks entered,
+   * and un-marking absent (a correction) must re-open that cell. Rather than
+   * calling into the results module's service directly, emit events so the
+   * two modules stay decoupled — see [[event_orchestrator]].
+   */
+  private emitResultSyncEvents(
+    dto: BulkMarkAttendanceDto,
+    schoolId: string,
+    markedBy: string,
+  ): void {
+    const toRef = (e: BulkMarkAttendanceDto['entries'][number]) => ({
+      studentId: e.student_id,
+      scheduleId: e.schedule_id,
+    });
+    const absentEntries = dto.entries.filter((e) => e.status === AttendanceStatus.ABSENT).map(toRef);
+    const presentEntries = dto.entries.filter((e) => e.status !== AttendanceStatus.ABSENT).map(toRef);
+
+    const basePayload = {
+      schoolId,
+      academicYearId: dto.academic_year_id,
+      examId: dto.exam_id,
+      markedBy,
+    };
+
+    if (absentEntries.length > 0) {
+      this.eventEmitter.emit(APP_EVENTS.EXAM_ATTENDANCE.ABSENT_MARKED, {
+        ...basePayload,
+        entries: absentEntries,
+      } satisfies ExamAttendanceSyncEvent);
+    }
+    if (presentEntries.length > 0) {
+      this.eventEmitter.emit(APP_EVENTS.EXAM_ATTENDANCE.PRESENT_MARKED, {
+        ...basePayload,
+        entries: presentEntries,
+      } satisfies ExamAttendanceSyncEvent);
+    }
   }
 
   /**

@@ -11,4 +11,8 @@ export const APP_EVENTS = {
   SITTING_PLAN: {
     ROOMS_ASSIGNED: 'sitting-plan.rooms-assigned',
   },
+  EXAM_ATTENDANCE: {
+    ABSENT_MARKED: 'exam-attendance.absent-marked',
+    PRESENT_MARKED: 'exam-attendance.present-marked',
+  },
 } as const;
