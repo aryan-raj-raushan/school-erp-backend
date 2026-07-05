@@ -8,6 +8,12 @@ export interface AttendanceCardData {
   className: string;
   sectionName?: string;
   academicYear: string;
+  school: {
+    name: string;
+    address: string | null;
+    phone: string | null;
+    logoUrl: string | null;
+  };
   schedules: {
     subjectName: string;
     examDate: string;
@@ -18,6 +24,8 @@ export interface AttendanceCardData {
     rollNumber: string;
     admissionNumber: string;
     studentName: string;
+    parentName: string | null;
+    photoUrl: string | null;
     signatures: string[]; // empty slots — one per schedule
   }[];
 }
@@ -46,42 +54,61 @@ export class ExamAttendanceCardService {
     const key = REDIS_EXAM_KEYS.ATTENDANCE_CARD.ITEM(schoolId, examId, classId, sectionId);
 
     return this.redis.getOrSet(key, REDIS_EXAM_KEYS.ITEM_TTL, async () => {
-      // 1. Fetch exam
-      const exam = await this.attendanceCardRepository.findExamByIdAndSchool(examId, schoolId);
+      const [exam, classRow, sectionRow, academicYearRow, school] = await Promise.all([
+        this.attendanceCardRepository.findExamByIdAndSchool(examId, schoolId),
+        this.attendanceCardRepository.findClassById(classId, schoolId),
+        sectionId
+          ? this.attendanceCardRepository.findSectionById(sectionId, schoolId)
+          : Promise.resolve(null),
+        this.attendanceCardRepository.findAcademicYearById(academicYearId, schoolId),
+        this.attendanceCardRepository.findSchoolProfile(schoolId),
+      ]);
       if (!exam) throw new NotFoundException(`Exam '${examId}' not found`);
+      if (!classRow) throw new NotFoundException(`Class '${classId}' not found`);
 
-      // 2. Fetch schedules for this exam / class
-      const scheduleRows = await this.attendanceCardRepository.findExamSchedulesByClassAndExam(
-        examId,
-        classId,
-        schoolId,
-      );
+      const [scheduleRows, studentRows] = await Promise.all([
+        this.attendanceCardRepository.findExamSchedulesByClassAndExam(examId, classId, schoolId),
+        this.attendanceCardRepository.findStudentsByClass(
+          classId,
+          academicYearId,
+          schoolId,
+          sectionId,
+        ),
+      ]);
 
-      // 3. Fetch students for the class (optionally filtered by section)
-      const studentRows = await this.attendanceCardRepository.findStudentsByClass(
-        classId,
-        academicYearId,
+      const parentsByStudent = await this.attendanceCardRepository.findPrimaryParentsByStudentIds(
+        studentRows.map((s) => s.studentId),
         schoolId,
-        sectionId,
       );
 
       return {
         examName: exam.exam_name,
-        className: classId, // caller should resolve names from IDs as needed
-        sectionName: sectionId,
-        academicYear: academicYearId,
+        className: classRow.name,
+        sectionName: sectionRow?.name,
+        academicYear: academicYearRow?.name ?? '',
+        school: {
+          name: school?.name ?? '',
+          address: [school?.address, school?.city, school?.state].filter(Boolean).join(', ') || null,
+          phone: school?.contactNumber ? `${school.dialCode ?? ''}${school.contactNumber}` : null,
+          logoUrl: school?.logoUrl ?? null,
+        },
         schedules: scheduleRows.map((s) => ({
           subjectName: s.subject_name,
           examDate: s.exam_date,
           startTime: s.start_time,
           endTime: s.end_time,
         })),
-        students: studentRows.map((s) => ({
-          rollNumber: s.rollNumber ?? '-',
-          admissionNumber: s.admissionNumber,
-          studentName: `${s.firstName} ${s.lastName ?? ''}`.trim(),
-          signatures: scheduleRows.map(() => ''), // blank signature slot per subject
-        })),
+        students: studentRows.map((s) => {
+          const parent = parentsByStudent.get(s.studentId);
+          return {
+            rollNumber: s.rollNumber ?? '-',
+            admissionNumber: s.admissionNumber,
+            studentName: `${s.firstName} ${s.lastName ?? ''}`.trim(),
+            parentName: parent ? `${parent.firstName} ${parent.lastName ?? ''}`.trim() : null,
+            photoUrl: s.profileImage ?? null,
+            signatures: scheduleRows.map(() => ''), // blank signature slot per subject
+          };
+        }),
       };
     });
   }

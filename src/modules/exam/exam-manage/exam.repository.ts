@@ -1,5 +1,5 @@
 import { Injectable, Inject, ConflictException } from '@nestjs/common';
-import { eq, and, ne, sql, inArray, lte, gte } from 'drizzle-orm';
+import { eq, and, ne, sql, inArray, lte, gte, like } from 'drizzle-orm';
 import { Exam, NewExam, NewExamClass, ExamWithClasses } from './types/exam.types';
 import { FilterExamDto } from './dto/exam.dto';
 import { DRIZZLE_ORM } from '@database/drizzle/drizzle.constants';
@@ -211,6 +211,26 @@ export class ExamRepository {
       .from(examClasses)
       .where(and(eq(examClasses.exam_id, examId), eq(examClasses.school_id, schoolId)));
     return rows.map((r) => r.class_id);
+  }
+
+  /** Live exam codes in this academic year starting with `prefix` — used to derive a free auto-generated code. */
+  async findCodesWithPrefix(
+    schoolId: string,
+    academicYearId: string,
+    prefix: string,
+  ): Promise<Set<string>> {
+    const rows = await this.db
+      .select({ code: exams.code })
+      .from(exams)
+      .where(
+        and(
+          eq(exams.school_id, schoolId),
+          eq(exams.academic_year_id, academicYearId),
+          eq(exams.deleted, false),
+          like(exams.code, `${prefix}%`),
+        ),
+      );
+    return new Set(rows.map((r) => r.code).filter((c): c is string => c !== null));
   }
 
   async findClassNames(schoolId: string, classIds: string[]): Promise<Map<string, string>> {

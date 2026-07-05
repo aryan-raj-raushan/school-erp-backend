@@ -115,9 +115,24 @@ export class ExamService {
     });
   }
 
-  private deriveExamCode(examTerm: string, startDate: string): string {
-    const year = startDate.slice(0, 4);
-    return `${examTerm}-${year}`;
+  /**
+   * Derives a free exam code for this academic year, e.g. "TERM1-2026". If
+   * that base code is already taken by another live exam, appends "-2",
+   * "-3", ... until a free one is found — so auto-generate can create
+   * multiple exams for the same term/year without a manual code edit.
+   */
+  private async deriveExamCode(
+    schoolId: string,
+    academicYearId: string,
+    examTerm: string,
+    startDate: string,
+  ): Promise<string> {
+    const base = `${examTerm}-${startDate.slice(0, 4)}`;
+    const taken = await this.repo.findCodesWithPrefix(schoolId, academicYearId, base);
+    if (!taken.has(base)) return base;
+    let n = 2;
+    while (taken.has(`${base}-${n}`)) n++;
+    return `${base}-${n}`;
   }
 
   async create(dto: CreateExamDto, schoolId: string, createdBy: string): Promise<ExamWithClasses> {
@@ -133,7 +148,9 @@ export class ExamService {
       id: generateId(),
       school_id: schoolId,
       created_by: createdBy,
-      code: code ?? this.deriveExamCode(dto.exam_term, dto.start_date),
+      code:
+        code ??
+        (await this.deriveExamCode(schoolId, dto.academic_year_id, dto.exam_term, dto.start_date)),
       ...examFields,
     });
     await this.repo.replaceExamClasses(exam.id, schoolId, dto.academic_year_id, class_ids);
@@ -278,7 +295,12 @@ export class ExamService {
       id: generateId(),
       school_id: schoolId,
       academic_year_id: dto.target_academic_year_id,
-      code: this.deriveExamCode(source.exam_term, dto.new_start_date),
+      code: await this.deriveExamCode(
+        schoolId,
+        dto.target_academic_year_id,
+        source.exam_term,
+        dto.new_start_date,
+      ),
       exam_name: source.exam_name,
       exam_term: source.exam_term,
       start_date: dto.new_start_date,
@@ -574,7 +596,7 @@ export class ExamService {
       id: generateId(),
       school_id: schoolId,
       academic_year_id: dto.academic_year_id,
-      code: this.deriveExamCode(dto.exam_term, dto.start_date),
+      code: await this.deriveExamCode(schoolId, dto.academic_year_id, dto.exam_term, dto.start_date),
       exam_name: dto.exam_name,
       exam_term: dto.exam_term,
       start_date: dto.start_date,

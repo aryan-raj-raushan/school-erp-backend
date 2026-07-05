@@ -1,6 +1,7 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ExamAttendanceRepository } from './exam-attendance.repository';
 import { ExamScheduleRepository } from '../exam-schedule/exam-schedule.repository';
+import { ExamRepository } from '../exam-manage/exam.repository';
 import { RedisService } from '../../redis/redis.service';
 import { BulkMarkAttendanceDto, FilterAttendanceDto } from './dto/exam-attendance.dto';
 import { ExamAttendance, NewExamAttendance } from './types/exam-attendance.types';
@@ -14,6 +15,7 @@ export class ExamAttendanceService {
   constructor(
     private readonly repo: ExamAttendanceRepository,
     private readonly scheduleRepo: ExamScheduleRepository,
+    private readonly examRepo: ExamRepository,
     private readonly redis: RedisService,
   ) {}
 
@@ -47,6 +49,7 @@ export class ExamAttendanceService {
     schoolId: string,
     markedBy: string,
   ): Promise<ExamAttendance[]> {
+    await this.assertExamIsPublished(dto.exam_id, schoolId);
     await this.assertEntriesMatchStudentClass(dto, schoolId);
 
     const rows: NewExamAttendance[] = dto.entries.map((entry) => ({
@@ -64,6 +67,21 @@ export class ExamAttendanceService {
     const result = await this.repo.upsertMany(rows);
     await this.redis.delByPattern(REDIS_EXAM_KEYS.ATTENDANCE.PATTERN(schoolId, dto.exam_id));
     return result;
+  }
+
+  /**
+   * Attendance can only be recorded once an exam has been published (or has
+   * moved further along — started/completed) — a schedule is only reliable
+   * once every row has a hall/invigilator assigned, which publish enforces.
+   */
+  private async assertExamIsPublished(examId: string, schoolId: string): Promise<void> {
+    const exam = await this.examRepo.findById(examId, schoolId);
+    if (!exam) throw new NotFoundException(`Exam '${examId}' not found`);
+    if (!exam.is_published) {
+      throw new BadRequestException(
+        `Attendance can only be marked once the exam is published — '${exam.exam_name}' is currently ${exam.status}`,
+      );
+    }
   }
 
   /**
