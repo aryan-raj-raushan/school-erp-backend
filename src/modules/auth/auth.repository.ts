@@ -174,6 +174,52 @@ export class AuthRepository {
       .where(eq(schoolUsers.id, userId));
   }
 
+  async findSchoolAdminBySchoolId(schoolId: string) {
+    const [user] = await this.db
+      .select({
+        id: schoolUsers.id,
+        first_name: schoolUsers.first_name,
+        last_name: schoolUsers.last_name,
+        email: schoolUsers.email,
+        dial_code: schoolUsers.dial_code,
+        phone_number: schoolUsers.phone_number,
+      })
+      .from(schoolUsers)
+      .where(
+        and(
+          eq(schoolUsers.school_id, schoolId),
+          eq(schoolUsers.role, 'SCHOOL_ADMIN'),
+          eq(schoolUsers.deleted, false),
+        ),
+      )
+      .limit(1);
+    return user ?? null;
+  }
+
+  async updateSchoolUserProfile(
+    id: string,
+    data: Partial<{
+      first_name: string;
+      last_name: string;
+      email: string;
+      dial_code: string;
+      phone_number: string;
+    }>,
+  ): Promise<void> {
+    await this.db
+      .update(schoolUsers)
+      .set({ ...data, updated_at: new Date() })
+      .where(eq(schoolUsers.id, id));
+  }
+
+  /** Super Admin-initiated password reset: forces a change on the admin's next login. */
+  async adminResetSchoolUserPassword(userId: string, password_hash: string): Promise<void> {
+    await this.db
+      .update(schoolUsers)
+      .set({ password_hash, must_change_password: true, updated_at: new Date() })
+      .where(eq(schoolUsers.id, userId));
+  }
+
   async findSchoolUserByPhoneExists(
     phone_number: string,
     dial_code: string,

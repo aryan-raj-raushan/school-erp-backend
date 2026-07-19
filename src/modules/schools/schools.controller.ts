@@ -68,6 +68,17 @@ export class SchoolsController {
     return ApiResponse.success(data);
   }
 
+  @Get(':id/admin')
+  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
+  @ApiOperation({ summary: "Get a school's admin account details, if provisioned" })
+  async findAdmin(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetCurrentUser() user: JwtPayload,
+  ) {
+    const data = await this.schoolsService.getAdmin(id, user.sub, user.role as string);
+    return ApiResponse.success(data);
+  }
+
   @Post()
   @Roles(CompanyRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.CREATED)

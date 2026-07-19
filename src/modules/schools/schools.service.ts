@@ -7,8 +7,10 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SchoolsRepository } from './schools.repository';
+import { AuthRepository } from '../auth/auth.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
+import { hashPassword } from '../../utils/hash.utils';
 import { StringUtils } from '../../utils/string.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateSchoolDto } from './dto/create-school.dto';
@@ -23,6 +25,7 @@ import { APP_EVENTS } from '../../shared/events/event-names';
 export class SchoolsService {
   constructor(
     private readonly schoolsRepo: SchoolsRepository,
+    private readonly authRepo: AuthRepository,
     private readonly redisService: RedisService,
     private readonly events: EventEmitter2,
   ) {}
@@ -141,10 +144,115 @@ export class SchoolsService {
       }
     }
 
-    const updated = await this.schoolsRepo.update(id, dto);
+    const {
+      admin_first_name,
+      admin_last_name,
+      admin_phone,
+      admin_email,
+      admin_dial_code,
+      admin_password,
+      ...schoolData
+    } = dto;
+
+    const updated = await this.schoolsRepo.update(id, schoolData);
     await this.redisService.del(`schools:${id}`);
     await this.redisService.delByPattern(`schools:list:*`);
+
+    if (admin_first_name || admin_last_name || admin_phone || admin_email || admin_password) {
+      await this.syncSchoolAdmin(id, userId, {
+        admin_first_name,
+        admin_last_name,
+        admin_phone,
+        admin_email,
+        admin_dial_code,
+        admin_password,
+      });
+    }
+
     return updated;
+  }
+
+  private async syncSchoolAdmin(
+    schoolId: string,
+    createdBy: string,
+    fields: {
+      admin_first_name?: string;
+      admin_last_name?: string;
+      admin_phone?: string;
+      admin_email?: string;
+      admin_dial_code?: string;
+      admin_password?: string;
+    },
+  ): Promise<void> {
+    const existing = await this.authRepo.findSchoolAdminBySchoolId(schoolId);
+
+    if (existing) {
+      const patch: Partial<{
+        first_name: string;
+        last_name: string;
+        email: string;
+        dial_code: string;
+        phone_number: string;
+      }> = {};
+      if (fields.admin_first_name) patch.first_name = fields.admin_first_name;
+      if (fields.admin_last_name !== undefined) patch.last_name = fields.admin_last_name;
+      if (fields.admin_email) patch.email = fields.admin_email;
+      if (fields.admin_phone) {
+        patch.phone_number = fields.admin_phone;
+        patch.dial_code = fields.admin_dial_code ?? existing.dial_code;
+      }
+      if (Object.keys(patch).length > 0) {
+        await this.authRepo.updateSchoolUserProfile(existing.id, patch);
+      }
+      if (fields.admin_password) {
+        const password_hash = await hashPassword(fields.admin_password);
+        await this.authRepo.adminResetSchoolUserPassword(existing.id, password_hash);
+      }
+      return;
+    }
+
+    // No admin yet — create one, mirroring school-creation provisioning.
+    if (!fields.admin_phone && !fields.admin_email) return;
+    if (!fields.admin_first_name) {
+      throw new BadRequestException('admin_first_name is required to create a school admin');
+    }
+
+    const dialCode = fields.admin_dial_code ?? '+91';
+    const phone = fields.admin_phone ?? '0000000000';
+
+    if (fields.admin_password) {
+      const password_hash = await hashPassword(fields.admin_password);
+      await this.authRepo.createSchoolUser({
+        id: generateId(),
+        school_id: schoolId,
+        first_name: fields.admin_first_name,
+        last_name: fields.admin_last_name,
+        dial_code: dialCode,
+        phone_number: phone,
+        email: fields.admin_email,
+        password_hash,
+        role: 'SCHOOL_ADMIN',
+        created_by: createdBy,
+        must_change_password: true,
+      });
+      return;
+    }
+
+    await this.authRepo.createSchoolUserWithoutPassword({
+      id: generateId(),
+      school_id: schoolId,
+      first_name: fields.admin_first_name,
+      last_name: fields.admin_last_name,
+      dial_code: dialCode,
+      phone_number: phone,
+      email: fields.admin_email,
+      created_by: createdBy,
+    });
+  }
+
+  async getAdmin(id: string, userId: string, role: string) {
+    await this.assertSchoolAccess(id, userId, role);
+    return this.authRepo.findSchoolAdminBySchoolId(id);
   }
 
   async getMyProfile(schoolId: string): Promise<School> {
