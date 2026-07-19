@@ -5,6 +5,9 @@
  * keeps event names discoverable in one place instead of scattered string literals.
  */
 export const APP_EVENTS = {
+  SCHOOL: {
+    CREATED: 'school.created',
+  },
   EXAM: {
     DELETED: 'exam.deleted',
   },

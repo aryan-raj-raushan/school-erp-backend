@@ -8,8 +8,10 @@
  *   2. Use in controller: @Permissions(PERMISSION_REGISTRY.library.view)
  *   3. Seeder picks up ALL_PERMISSIONS automatically — no other change needed
  *
- * Roles are created entirely via the UI (POST /roles + POST /roles/:id/permissions).
- * No default role seeding happens — admins configure roles manually.
+ * Custom roles are created via the UI (POST /roles + POST /roles/:id/permissions).
+ * The 7 predefined system roles (School Admin + 6 staff roles) are auto-seeded per
+ * school on creation — see RolesService.seedSystemRoles(). School Admins can still
+ * adjust their permissions afterward via POST /roles/:id/permissions.
  */
 
 export const PERMISSION_REGISTRY = {

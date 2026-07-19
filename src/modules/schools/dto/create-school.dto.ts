@@ -121,4 +121,14 @@ export class CreateSchoolDto {
   @Matches(REGEX.EMAIL, { message: 'Invalid email address' })
   @Transform(({ value }) => StringUtils.trim(value)?.toLowerCase())
   admin_email?: string;
+
+  // When provided, the School Admin can log in with it immediately; first
+  // successful login forces a password change (see must_change_password).
+  @ApiPropertyOptional({ example: 'Admin@1234', minLength: 8 })
+  @IsOptional()
+  @IsString()
+  @Matches(REGEX.PASSWORD, {
+    message: 'Password must be 8+ chars with uppercase, lowercase, number and special character',
+  })
+  admin_password?: string;
 }

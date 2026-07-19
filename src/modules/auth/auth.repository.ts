@@ -150,6 +150,7 @@ export class AuthRepository {
     password_hash: string;
     role: string;
     created_by: string;
+    must_change_password?: boolean;
   }) {
     const [user] = await this.db
       .insert(schoolUsers)
@@ -169,7 +170,7 @@ export class AuthRepository {
   async setSchoolUserPassword(userId: string, password_hash: string): Promise<void> {
     await this.db
       .update(schoolUsers)
-      .set({ password_hash, updated_at: new Date() })
+      .set({ password_hash, must_change_password: false, updated_at: new Date() })
       .where(eq(schoolUsers.id, userId));
   }
 

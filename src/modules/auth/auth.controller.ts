@@ -19,6 +19,7 @@ import { LoginCompanyDto } from './dto/login-company.dto';
 import { LoginSchoolDto } from './dto/login-school.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
 import { SetupPasswordDto } from './dto/setup-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
@@ -102,6 +103,18 @@ export class AuthController {
   async setupPassword(@Body() dto: SetupPasswordDto) {
     const result = await this.authService.setupPassword(dto);
     return ApiResponse.success(result, 'Password set successfully');
+  }
+
+  @Public()
+  @Post('school/change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Forced first-login password change using change_token from login response (must_change_password:true)',
+  })
+  async changePassword(@Body() dto: ChangePasswordDto) {
+    const result = await this.authService.changePassword(dto);
+    return ApiResponse.success(result, 'Password changed successfully');
   }
 
   @Public()

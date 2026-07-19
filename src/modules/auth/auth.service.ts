@@ -20,20 +20,21 @@ import { LoginCompanyDto } from './dto/login-company.dto';
 import { LoginSchoolDto } from './dto/login-school.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
 import { SetupPasswordDto } from './dto/setup-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
 import {
   LoginResponse,
   TokenPair,
   LoginOrSetupResponse,
   PasswordSetupRequired,
+  PasswordChangeRequired,
 } from './types/auth.types';
 import { REGEX } from '../../utils/regex.utils';
 import { SchoolsRepository } from '../schools/schools.repository';
 import { School } from '../schools/types/school.types';
 import { AuthTTL } from '../../shared/constants';
 import { PermissionsService } from '../permissions/permissions.service';
-import { PermissionsRepository } from '../permissions/permissions.repository';
-import { RolesRepository } from '../roles/roles.repository';
+import { RolesService } from '../roles/roles.service';
 
 @Injectable()
 export class AuthService {
@@ -44,32 +45,8 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
     private readonly permissionsService: PermissionsService,
-    private readonly permissionsRepo: PermissionsRepository,
-    private readonly rolesRepo: RolesRepository,
+    private readonly rolesService: RolesService,
   ) {}
-
-  private async seedSchoolAdminRole(schoolId: string): Promise<void> {
-    const allPerms = await this.permissionsRepo.findAll();
-    if (!allPerms.length) return;
-
-    await this.rolesRepo.upsertSystemRole({
-      id: generateId(),
-      school_id: schoolId,
-      name: 'School Admin',
-      slug: 'school_admin',
-      description: 'Full access role auto-created on school registration',
-      is_system: true,
-      is_active: true,
-    });
-
-    const roleId = await this.permissionsRepo.findRoleIdBySlug(schoolId, 'school_admin');
-    if (!roleId) return;
-
-    await this.permissionsRepo.setRolePermissions(
-      roleId,
-      allPerms.map((p) => p.id),
-    );
-  }
 
   async schoolSignup(dto: SchoolSignupDto): Promise<LoginResponse> {
     const dialCode = dto.dial_code ?? '+91';
@@ -86,7 +63,7 @@ export class AuthService {
       created_by: 'self-signup',
     });
 
-    await this.seedSchoolAdminRole(school.id);
+    await this.rolesService.seedSystemRoles(school.id);
 
     const password_hash = await hashPassword(dto.password);
 
@@ -189,10 +166,16 @@ export class AuthService {
     };
   }
 
-  async loginSchool(dto: LoginSchoolDto): Promise<LoginResponse> {
+  async loginSchool(dto: LoginSchoolDto): Promise<LoginResponse | PasswordChangeRequired> {
     const user = await this.authRepo.findSchoolUserByPhone(dto.phone_number, dto.dial_code);
     if (!user) throw new UnauthorizedException('Invalid credentials');
     if (!user.is_active) throw new UnauthorizedException('Account is deactivated');
+
+    const school = await this.authRepo.findSchoolById(user.school_id);
+    if (!school || !school.is_active) {
+      throw new UnauthorizedException('School is deactivated');
+    }
+
     if (!user.password_hash)
       throw new UnauthorizedException(
         'Account setup incomplete — use /auth/login to set your password',
@@ -201,26 +184,7 @@ export class AuthService {
     const passwordMatch = await comparePassword(dto.password, user.password_hash);
     if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
 
-    await this.authRepo.updateSchoolUserLastLogin(user.id);
-
-    const tokens = await this.generateTokens({
-      sub: user.id,
-      phone: user.phone_number,
-      role: user.role as SchoolRole,
-      school_id: user.school_id,
-      context: AuthContext.SCHOOL,
-    });
-
-    return {
-      ...tokens,
-      user: {
-        id: user.id,
-        phone: user.phone_number,
-        role: user.role,
-        schoolId: user.school_id,
-        context: AuthContext.SCHOOL,
-      },
-    };
+    return this.issueSchoolTokensOrChangeRequired(user);
   }
 
   async loginUnified(dto: LoginUnifiedDto): Promise<LoginOrSetupResponse> {
@@ -263,6 +227,11 @@ export class AuthService {
     if (!schoolUser) throw new UnauthorizedException('Invalid credentials');
     if (!schoolUser.is_active) throw new UnauthorizedException('Account is deactivated');
 
+    const school = await this.authRepo.findSchoolById(schoolUser.school_id);
+    if (!school || !school.is_active) {
+      throw new UnauthorizedException('School is deactivated');
+    }
+
     // No password set → school admin must complete signup
     if (!schoolUser.password_hash) {
       const setupToken = this.generateSetupToken(schoolUser.id);
@@ -275,24 +244,48 @@ export class AuthService {
     const match = await comparePassword(dto.password, schoolUser.password_hash);
     if (!match) throw new UnauthorizedException('Invalid credentials');
 
-    await this.authRepo.updateSchoolUserLastLogin(schoolUser.id);
+    return this.issueSchoolTokensOrChangeRequired(schoolUser);
+  }
+
+  /**
+   * Called after a school user's password has already been verified. Gates access
+   * behind a forced password change when the current password_hash was set by a
+   * Super Admin at school-creation time (must_change_password) and hasn't been
+   * rotated by the user yet — the initial password is otherwise usable only once.
+   */
+  private async issueSchoolTokensOrChangeRequired(user: {
+    id: string;
+    phone_number: string;
+    role: string;
+    school_id: string;
+    custom_role_id?: string | null;
+    must_change_password: boolean;
+  }): Promise<LoginResponse | PasswordChangeRequired> {
+    if (user.must_change_password) {
+      return {
+        must_change_password: true,
+        change_token: this.generateChangePasswordToken(user.id),
+      } satisfies PasswordChangeRequired;
+    }
+
+    await this.authRepo.updateSchoolUserLastLogin(user.id);
 
     const tokens = await this.generateTokens({
-      sub: schoolUser.id,
-      phone: schoolUser.phone_number,
-      role: schoolUser.role as SchoolRole,
-      school_id: schoolUser.school_id,
-      custom_role_id: schoolUser.custom_role_id ?? null,
+      sub: user.id,
+      phone: user.phone_number,
+      role: user.role as SchoolRole,
+      school_id: user.school_id,
+      custom_role_id: user.custom_role_id ?? null,
       context: AuthContext.SCHOOL,
     });
 
     return {
       ...tokens,
       user: {
-        id: schoolUser.id,
-        phone: schoolUser.phone_number,
-        role: schoolUser.role,
-        schoolId: schoolUser.school_id,
+        id: user.id,
+        phone: user.phone_number,
+        role: user.role,
+        schoolId: user.school_id,
         context: AuthContext.SCHOOL,
       },
     };
@@ -320,6 +313,64 @@ export class AuthService {
     if (!user) throw new NotFoundException('User not found');
     if (user.password_hash)
       throw new BadRequestException('Password already set — use login instead');
+
+    const school = await this.authRepo.findSchoolById(user.school_id);
+    if (!school || !school.is_active) {
+      throw new UnauthorizedException('School is deactivated');
+    }
+
+    const password_hash = await hashPassword(dto.password);
+    await this.authRepo.setSchoolUserPassword(user.id, password_hash);
+    await this.authRepo.updateSchoolUserLastLogin(user.id);
+
+    const tokens = await this.generateTokens({
+      sub: user.id,
+      phone: user.phone_number,
+      role: user.role as SchoolRole,
+      school_id: user.school_id,
+      custom_role_id: user.custom_role_id ?? null,
+      context: AuthContext.SCHOOL,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        phone: user.phone_number,
+        role: user.role,
+        schoolId: user.school_id,
+        context: AuthContext.SCHOOL,
+      },
+    };
+  }
+
+  async changePassword(dto: ChangePasswordDto): Promise<LoginResponse> {
+    if (dto.password !== dto.confirm_password) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    let payload: { sub: string; purpose: string };
+    try {
+      payload = this.jwtService.verify(dto.change_token, {
+        secret: this.configService.get<string>('jwt.accessSecret'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired change-password token');
+    }
+
+    if (payload.purpose !== 'password_change_required') {
+      throw new UnauthorizedException('Invalid change-password token');
+    }
+
+    const user = await this.authRepo.findSchoolUserById(payload.sub);
+    if (!user) throw new NotFoundException('User not found');
+    if (!user.must_change_password)
+      throw new BadRequestException('Password change is not required for this account');
+
+    const school = await this.authRepo.findSchoolById(user.school_id);
+    if (!school || !school.is_active) {
+      throw new UnauthorizedException('School is deactivated');
+    }
 
     const password_hash = await hashPassword(dto.password);
     await this.authRepo.setSchoolUserPassword(user.id, password_hash);
@@ -356,6 +407,16 @@ export class AuthService {
     );
   }
 
+  private generateChangePasswordToken(userId: string): string {
+    return this.jwtService.sign(
+      { sub: userId, purpose: 'password_change_required' },
+      {
+        secret: this.configService.get<string>('jwt.accessSecret'),
+        expiresIn: '24h',
+      },
+    );
+  }
+
   async refresh(userId: string, tokenId: string, context: AuthContext): Promise<TokenPair> {
     const exists = await this.redisService.exists(`refresh_token:${userId}:${tokenId}`);
     if (!exists) throw new UnauthorizedException('Refresh token revoked or expired');
@@ -376,6 +437,12 @@ export class AuthService {
     } else {
       const user = await this.authRepo.findSchoolUserById(userId);
       if (!user) throw new NotFoundException('User not found');
+
+      const school = await this.authRepo.findSchoolById(user.school_id);
+      if (!school || !school.is_active) {
+        throw new UnauthorizedException('School is deactivated');
+      }
+
       payload = {
         sub: user.id,
         phone: user.phone_number,
@@ -414,6 +481,16 @@ export class AuthService {
   }
 
   async getMe(userId: string, context: AuthContext, role?: string, schoolId?: string) {
+    // SUPER_ADMIN impersonating a school (via switchSchool) — full access, identified
+    // as themselves. PermissionsGuard already bypasses checks for this role; mirror
+    // that here so the frontend's permission-gated UI matches actual backend access.
+    if (context === AuthContext.SCHOOL && role === CompanyRole.SUPER_ADMIN && schoolId) {
+      const user = await this.authRepo.findCompanyUserProfile(userId);
+      if (!user) throw new NotFoundException('User not found');
+      const permissions = await this.permissionsService.getAllPermissionSlugs();
+      return { ...user, school_id: schoolId, permissions };
+    }
+
     if (context === AuthContext.COMPANY || role === CompanyRole.SUPER_ADMIN) {
       const user = await this.authRepo.findCompanyUserProfile(userId);
       if (!user) throw new NotFoundException('User not found');

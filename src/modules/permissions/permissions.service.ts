@@ -33,6 +33,12 @@ export class PermissionsService implements OnModuleInit {
     this.logger.log(`Seeded ${data.length} permissions`);
   }
 
+  /** Flat list of every permission slug — used to grant a SUPER_ADMIN full access when impersonating a school. */
+  async getAllPermissionSlugs(): Promise<string[]> {
+    const rows = await this.permissionsRepo.findAll();
+    return rows.map((r) => r.name);
+  }
+
   async findAll() {
     const rows = await this.permissionsRepo.findAll();
     const grouped: Record<

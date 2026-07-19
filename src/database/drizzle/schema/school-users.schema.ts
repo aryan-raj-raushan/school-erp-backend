@@ -25,6 +25,8 @@ export const schoolUsers = pgTable(
     dial_code: varchar('dial_code', { length: 10 }).notNull().default('+91'),
     phone_number: varchar('phone_number', { length: 15 }).notNull(),
     password_hash: varchar('password_hash', { length: 255 }),
+    /** True when password_hash was set by a Super Admin during school creation and hasn't been rotated by the user yet. */
+    must_change_password: boolean('must_change_password').default(false).notNull(),
     role: schoolRoleEnum('role').notNull(),
     profile_image: text('profile_image'),
     gender: varchar('gender', { length: 10 }),

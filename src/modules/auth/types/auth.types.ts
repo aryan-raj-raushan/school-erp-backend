@@ -23,4 +23,9 @@ export interface PasswordSetupRequired {
   setup_token: string;
 }
 
-export type LoginOrSetupResponse = LoginResponse | PasswordSetupRequired;
+export interface PasswordChangeRequired {
+  must_change_password: true;
+  change_token: string;
+}
+
+export type LoginOrSetupResponse = LoginResponse | PasswordSetupRequired | PasswordChangeRequired;
