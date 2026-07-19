@@ -16,10 +16,20 @@ export enum SubscriptionStatus {
 
 export enum PaymentStatus {
   PENDING = 'PENDING',
+  PENDING_VERIFICATION = 'PENDING_VERIFICATION',
   SUCCESS = 'SUCCESS',
   FAILED = 'FAILED',
   REFUNDED = 'REFUNDED',
   PARTIALLY_REFUNDED = 'PARTIALLY_REFUNDED',
+}
+
+export enum InvoiceStatus {
+  DRAFT = 'DRAFT',
+  ISSUED = 'ISSUED',
+  PARTIALLY_PAID = 'PARTIALLY_PAID',
+  PAID = 'PAID',
+  OVERDUE = 'OVERDUE',
+  VOID = 'VOID',
 }
 
 export enum PromotionStatus {

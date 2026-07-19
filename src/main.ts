@@ -20,8 +20,17 @@ async function bootstrap() {
 
   const logger = new Logger('Bootstrap');
 
-  // Body parsers before helmet — msgpack raw body must be buffered before any other middleware
-  app.use(express.json({ limit: '10mb' }));
+  // Body parsers before helmet — msgpack raw body must be buffered before any other middleware.
+  // `verify` stashes the raw bytes on the request too — needed by the Razorpay webhook to
+  // recompute the HMAC signature over the exact payload Razorpay signed, not our re-serialized JSON.
+  app.use(
+    express.json({
+      limit: '10mb',
+      verify: (req: express.Request & { rawBody?: Buffer }, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.headers['content-type'] === 'application/msgpack') {

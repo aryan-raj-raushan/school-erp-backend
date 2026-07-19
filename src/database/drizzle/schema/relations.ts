@@ -11,7 +11,11 @@ import { studentAcademicInfo, students } from './students.schema';
 import { studentDocuments } from './student-documents.schema';
 import { parents, parentStudentLinks } from './parents.schema';
 import { subscriptions } from './subscriptions.schema';
+import { subscriptionPlans } from './subscription-plans.schema';
 import { subscriptionPayments } from './subscription-payments.schema';
+import { subscriptionOneTimeCharges } from './subscription-one-time-charges.schema';
+import { invoices, invoiceLineItems } from './invoices.schema';
+import { rfidDevices } from './rfid-devices.schema';
 import { promotionLogs } from './promotion-logs.schema';
 import { syllabi, syllabusAttachments } from './syllabi.schema';
 
@@ -154,7 +158,15 @@ export const parentStudentLinksRelations = relations(parentStudentLinks, ({ one 
 
 export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({
   school: one(schools, { fields: [subscriptions.school_id], references: [schools.id] }),
+  plan: one(subscriptionPlans, {
+    fields: [subscriptions.plan_id],
+    references: [subscriptionPlans.id],
+  }),
   payments: many(subscriptionPayments),
+}));
+
+export const subscriptionPlansRelations = relations(subscriptionPlans, ({ many }) => ({
+  subscriptions: many(subscriptions),
 }));
 
 export const subscriptionPaymentsRelations = relations(subscriptionPayments, ({ one }) => ({
@@ -162,6 +174,40 @@ export const subscriptionPaymentsRelations = relations(subscriptionPayments, ({ 
   subscription: one(subscriptions, {
     fields: [subscriptionPayments.subscription_id],
     references: [subscriptions.id],
+  }),
+}));
+
+export const subscriptionOneTimeChargesRelations = relations(
+  subscriptionOneTimeCharges,
+  ({ one }) => ({
+    school: one(schools, {
+      fields: [subscriptionOneTimeCharges.school_id],
+      references: [schools.id],
+    }),
+    subscription: one(subscriptions, {
+      fields: [subscriptionOneTimeCharges.subscription_id],
+      references: [subscriptions.id],
+    }),
+  }),
+);
+
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  school: one(schools, { fields: [invoices.school_id], references: [schools.id] }),
+  subscription: one(subscriptions, {
+    fields: [invoices.subscription_id],
+    references: [subscriptions.id],
+  }),
+  lineItems: many(invoiceLineItems),
+}));
+
+export const invoiceLineItemsRelations = relations(invoiceLineItems, ({ one }) => ({
+  invoice: one(invoices, { fields: [invoiceLineItems.invoice_id], references: [invoices.id] }),
+}));
+
+export const rfidDevicesRelations = relations(rfidDevices, ({ one }) => ({
+  assignedSchool: one(schools, {
+    fields: [rfidDevices.assigned_school_id],
+    references: [schools.id],
   }),
 }));
 

@@ -47,7 +47,13 @@ export class SchoolsController {
   }
 
   @Get()
-  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
+  @Roles(
+    CompanyRole.SUPER_ADMIN,
+    CompanyRole.ADMIN,
+    CompanyRole.SUPPORT,
+    CompanyRole.SALES,
+    CompanyRole.OPERATOR,
+  )
   @ApiOperation({ summary: 'List all schools with pagination & filters' })
   async findAll(
     @Query() filters: SchoolFilterDto,
@@ -58,7 +64,13 @@ export class SchoolsController {
   }
 
   @Get(':id')
-  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
+  @Roles(
+    CompanyRole.SUPER_ADMIN,
+    CompanyRole.ADMIN,
+    CompanyRole.SUPPORT,
+    CompanyRole.SALES,
+    CompanyRole.OPERATOR,
+  )
   @ApiOperation({ summary: 'Get school by ID' })
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
@@ -92,8 +104,8 @@ export class SchoolsController {
   }
 
   @Patch(':id')
-  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
-  @ApiOperation({ summary: 'Update school details' })
+  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SALES, CompanyRole.OPERATOR)
+  @ApiOperation({ summary: 'Update school details (scoped to assigned schools for Sales)' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSchoolDto,

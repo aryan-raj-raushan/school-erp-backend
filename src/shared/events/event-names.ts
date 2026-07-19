@@ -18,4 +18,20 @@ export const APP_EVENTS = {
     ABSENT_MARKED: 'exam-attendance.absent-marked',
     PRESENT_MARKED: 'exam-attendance.present-marked',
   },
+  BILLING: {
+    SUBSCRIPTION_ASSIGNED: 'billing.subscription-assigned',
+    ONE_TIME_CHARGE_ADDED: 'billing.one-time-charge-added',
+    INVOICE_GENERATED: 'billing.invoice-generated',
+    INVOICE_PAID: 'billing.invoice-paid',
+    PAYMENT_SUBMITTED: 'billing.payment-submitted',
+    PAYMENT_APPROVED: 'billing.payment-approved',
+    PAYMENT_REJECTED: 'billing.payment-rejected',
+  },
+  SCHOOL_RESTRICTION: {
+    APPLIED: 'school-restriction.applied',
+    LIFTED: 'school-restriction.lifted',
+  },
+  RFID_INVENTORY: {
+    DEVICE_ASSIGNED: 'rfid-inventory.device-assigned',
+  },
 } as const;

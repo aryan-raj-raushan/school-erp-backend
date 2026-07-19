@@ -74,6 +74,25 @@ export class SubscriptionsRepository {
     return row;
   }
 
+  /** True if the school has an EXPIRED (lapsed, not auto-renewed) subscription whose grace period has also passed. */
+  async hasLapsedSubscription(schoolId: string): Promise<boolean> {
+    const rows = await this.db
+      .select({
+        end_date: subscriptions.end_date,
+        grace_period_days: subscriptions.grace_period_days,
+        restriction_mode: subscriptions.restriction_mode,
+      })
+      .from(subscriptions)
+      .where(and(eq(subscriptions.school_id, schoolId), eq(subscriptions.status, 'EXPIRED')));
+
+    const now = Date.now();
+    return rows.some((row) => {
+      if (!row.end_date || !row.restriction_mode || row.restriction_mode === 'NONE') return false;
+      const graceMs = (row.grace_period_days ?? 0) * 24 * 60 * 60 * 1000;
+      return row.end_date.getTime() + graceMs <= now;
+    });
+  }
+
   async create(data: NewSubscription): Promise<Subscription> {
     const [row] = await this.db.insert(subscriptions).values(data).returning();
     return row;

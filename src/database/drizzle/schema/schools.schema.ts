@@ -8,6 +8,7 @@ import {
   integer,
   pgEnum,
 } from 'drizzle-orm/pg-core';
+import { restrictionModeEnum } from './billing-enums.schema';
 
 export const boardTypeEnum = pgEnum('board_type', ['CBSE', 'ICSE', 'STATE', 'IB', 'IGCSE']);
 export const markingSystemEnum = pgEnum('marking_system', ['MARKS', 'GRADES', 'CGPA']);
@@ -40,6 +41,11 @@ export const schools = pgTable('schools', {
   principal_phone: varchar('principal_phone', { length: 15 }),
   is_active: boolean('is_active').default(true).notNull(),
   deleted: boolean('deleted').default(false).notNull(),
+  // Postpaid service-restriction state — applied by the restriction-enforcement
+  // cron once an overdue invoice passes its subscription's grace period.
+  restriction_level: restrictionModeEnum('restriction_level').default('NONE').notNull(),
+  restriction_applied_at: timestamp('restriction_applied_at', { withTimezone: true }),
+  restriction_reason: varchar('restriction_reason', { length: 500 }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),
   created_by: varchar('created_by', { length: 36 }),

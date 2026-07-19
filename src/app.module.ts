@@ -3,7 +3,14 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 
-import { appConfig, databaseConfig, redisConfig, jwtConfig, awsConfig } from './config';
+import {
+  appConfig,
+  databaseConfig,
+  redisConfig,
+  jwtConfig,
+  awsConfig,
+  razorpayConfig,
+} from './config';
 import { DrizzleModule } from './database/drizzle/drizzle.module';
 import { MongoModule } from './database/mongo/mongo.module';
 import { RedisModule } from './modules/redis/redis.module';
@@ -17,6 +24,10 @@ import { SectionsModule } from './modules/sections/sections.module';
 import { SubjectsModule } from './modules/subjects/subjects.module';
 import { StudentsModule } from './modules/students/students.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { SubscriptionPlansModule } from './modules/subscription-plans/subscription-plans.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
+import { RfidInventoryModule } from './modules/rfid-inventory/rfid-inventory.module';
+import { CompanyUsersModule } from './modules/company-users/company-users.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
@@ -42,6 +53,7 @@ import { RolesModule } from './modules/roles/roles.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
+import { SchoolRestrictionGuard } from './common/guards/school-restriction.guard';
 import { MsgpackInterceptor } from './common/interceptors/msgpack.interceptor';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -68,7 +80,7 @@ import { StudentMovementsModule } from '@modules/student-movements/student-movem
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, redisConfig, jwtConfig, awsConfig],
+      load: [appConfig, databaseConfig, redisConfig, jwtConfig, awsConfig, razorpayConfig],
       envFilePath: ['.env', '.env.local'],
     }),
     ScheduleModule.forRoot(),
@@ -85,6 +97,10 @@ import { StudentMovementsModule } from '@modules/student-movements/student-movem
     SubjectsModule,
     StudentsModule,
     SubscriptionsModule,
+    SubscriptionPlansModule,
+    InvoicesModule,
+    RfidInventoryModule,
+    CompanyUsersModule,
     PromotionsModule,
     UploadsModule,
     SchedulerModule,
@@ -127,6 +143,7 @@ import { StudentMovementsModule } from '@modules/student-movements/student-movem
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: SchoolRestrictionGuard },
     { provide: APP_INTERCEPTOR, useClass: MsgpackInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },

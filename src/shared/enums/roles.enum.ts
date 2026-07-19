@@ -3,6 +3,7 @@ export enum CompanyRole {
   ADMIN = 'ADMIN',
   SUPPORT = 'SUPPORT',
   SALES = 'SALES',
+  OPERATOR = 'OPERATOR',
 }
 
 export enum SchoolRole {

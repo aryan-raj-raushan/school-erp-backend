@@ -3,7 +3,9 @@ import { Reflector } from '@nestjs/core';
 import { ModuleRef } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { CompanyRole } from '../../shared/enums';
+import { CompanyRole, AuthContext } from '../../shared/enums';
+
+const COMPANY_ROLES: string[] = Object.values(CompanyRole);
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -33,6 +35,18 @@ export class PermissionsGuard implements CanActivate {
 
     // Company SUPER_ADMIN bypasses all permission checks
     if (user.role === CompanyRole.SUPER_ADMIN) return true;
+
+    // Any company user impersonating a school (via switchSchool) gets full
+    // access as that school's admin — switchSchool already gated which
+    // schools they're allowed to impersonate, so this only ever applies to
+    // a school they were already permitted into, not a blanket bypass.
+    if (
+      COMPANY_ROLES.includes(user.role) &&
+      user.context === AuthContext.SCHOOL &&
+      user.school_id
+    ) {
+      return true;
+    }
 
     // School context only — resolve permissions lazily
     const schoolId = user.school_id ?? request.tenantId;

@@ -10,6 +10,7 @@ import { subscriptions } from '../../../database/drizzle/schema/subscriptions.sc
 import { RedisService } from '../../redis/redis.service';
 import { NotificationLog } from '../../../database/mongo/schemas/notification-log.schema';
 import { SubscriptionStatus } from '../../../shared/enums';
+import { addBillingCycle } from '../../subscriptions/utils/billing-cycle.utils';
 
 const LOCK_KEY = 'cron_lock:subscription_expiry';
 const LOCK_TTL = 300;
@@ -21,7 +22,8 @@ export class SubscriptionExpiryTask {
   constructor(
     @Inject(DRIZZLE_ORM) private readonly db: DrizzleDB,
     private readonly redisService: RedisService,
-    @InjectModel(NotificationLog.name) private readonly notificationLogModel: Model<NotificationLog>,
+    @InjectModel(NotificationLog.name)
+    private readonly notificationLogModel: Model<NotificationLog>,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
@@ -38,8 +40,14 @@ export class SubscriptionExpiryTask {
     try {
       this.logger.log('Starting subscription expiry job');
 
-      const expired = await this.db
-        .select({ id: subscriptions.id, school_id: subscriptions.school_id })
+      const dueSubs = await this.db
+        .select({
+          id: subscriptions.id,
+          school_id: subscriptions.school_id,
+          end_date: subscriptions.end_date,
+          plan_type: subscriptions.plan_type,
+          auto_renew: subscriptions.auto_renew,
+        })
         .from(subscriptions)
         .where(
           and(
@@ -48,39 +56,69 @@ export class SubscriptionExpiryTask {
           ),
         );
 
-      if (expired.length === 0) {
-        this.logger.log('No subscriptions to expire');
+      if (dueSubs.length === 0) {
+        this.logger.log('No subscriptions due');
         return;
       }
 
-      const ids = expired.map((s) => s.id);
+      const toRenew = dueSubs.filter((s) => s.auto_renew);
+      const toExpire = dueSubs.filter((s) => !s.auto_renew);
+      const now = new Date();
 
-      await this.db
-        .update(subscriptions)
-        .set({ status: SubscriptionStatus.EXPIRED, updated_at: new Date() })
-        .where(inArray(subscriptions.id, ids));
+      // Auto-renew: keep the subscription ACTIVE and roll end_date forward one
+      // billing cycle at a time until it's back in the future — this catches
+      // it up correctly even if the cron missed a few cycles (e.g. downtime).
+      for (const sub of toRenew) {
+        let nextEndDate = sub.end_date as Date;
+        while (nextEndDate < now) {
+          nextEndDate = addBillingCycle(nextEndDate, sub.plan_type);
+        }
+        await this.db
+          .update(subscriptions)
+          .set({ end_date: nextEndDate, updated_at: now })
+          .where(eq(subscriptions.id, sub.id));
+      }
 
-      const schoolIds = [...new Set(expired.map((s) => s.school_id))];
+      if (toExpire.length > 0) {
+        const expireIds = toExpire.map((s) => s.id);
+        await this.db
+          .update(subscriptions)
+          .set({ status: SubscriptionStatus.EXPIRED, updated_at: now })
+          .where(inArray(subscriptions.id, expireIds));
+      }
+
+      const schoolIds = [...new Set(dueSubs.map((s) => s.school_id))];
 
       await Promise.all(
-        schoolIds.map((schoolId) =>
-          this.redisService.del(`subscription_status:${schoolId}`),
-        ),
+        schoolIds.map((schoolId) => this.redisService.del(`subscription_status:${schoolId}`)),
       );
 
-      const notificationDocs = expired.map((sub) => ({
-        school_id: sub.school_id,
-        subscription_id: sub.id,
-        type: 'SUBSCRIPTION_EXPIRED',
-        channel: 'SYSTEM',
-        status: 'PENDING',
-        payload: { message: `Subscription ${sub.id} expired` },
-        created_at: new Date(),
-      }));
+      const notificationDocs = [
+        ...toRenew.map((sub) => ({
+          school_id: sub.school_id,
+          subscription_id: sub.id,
+          type: 'SUBSCRIPTION_RENEWED',
+          channel: 'SYSTEM',
+          status: 'PENDING',
+          payload: { message: `Subscription ${sub.id} auto-renewed` },
+          created_at: now,
+        })),
+        ...toExpire.map((sub) => ({
+          school_id: sub.school_id,
+          subscription_id: sub.id,
+          type: 'SUBSCRIPTION_EXPIRED',
+          channel: 'SYSTEM',
+          status: 'PENDING',
+          payload: { message: `Subscription ${sub.id} expired` },
+          created_at: now,
+        })),
+      ];
 
       await this.notificationLogModel.insertMany(notificationDocs);
 
-      this.logger.log(`Expired ${expired.length} subscription(s) for ${schoolIds.length} school(s)`);
+      this.logger.log(
+        `Renewed ${toRenew.length}, expired ${toExpire.length} subscription(s) for ${schoolIds.length} school(s)`,
+      );
     } catch (error) {
       this.logger.error('Subscription expiry job failed', error);
     } finally {

@@ -93,4 +93,16 @@ export class SchoolsRepository {
       .where(eq(companyUserSchools.user_id, userId));
     return rows.map((r) => r.school_id);
   }
+
+  async clearRestriction(schoolId: string): Promise<void> {
+    await this.db
+      .update(schools)
+      .set({
+        restriction_level: 'NONE',
+        restriction_applied_at: null,
+        restriction_reason: null,
+        updated_at: new Date(),
+      })
+      .where(eq(schools.id, schoolId));
+  }
 }

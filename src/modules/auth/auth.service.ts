@@ -36,6 +36,8 @@ import { AuthTTL } from '../../shared/constants';
 import { PermissionsService } from '../permissions/permissions.service';
 import { RolesService } from '../roles/roles.service';
 
+const COMPANY_ROLE_VALUES: string[] = Object.values(CompanyRole);
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -481,10 +483,12 @@ export class AuthService {
   }
 
   async getMe(userId: string, context: AuthContext, role?: string, schoolId?: string) {
-    // SUPER_ADMIN impersonating a school (via switchSchool) — full access, identified
-    // as themselves. PermissionsGuard already bypasses checks for this role; mirror
-    // that here so the frontend's permission-gated UI matches actual backend access.
-    if (context === AuthContext.SCHOOL && role === CompanyRole.SUPER_ADMIN && schoolId) {
+    // Any company user impersonating a school (via switchSchool) — full access,
+    // identified as themselves. PermissionsGuard/RolesGuard already bypass checks
+    // for this case; mirror that here so the frontend's permission-gated UI
+    // matches actual backend access. switchSchool already gated which school
+    // a non-SUPER_ADMIN/OPERATOR company user is allowed to reach.
+    if (context === AuthContext.SCHOOL && role && COMPANY_ROLE_VALUES.includes(role) && schoolId) {
       const user = await this.authRepo.findCompanyUserProfile(userId);
       if (!user) throw new NotFoundException('User not found');
       const permissions = await this.permissionsService.getAllPermissionSlugs();
@@ -515,18 +519,29 @@ export class AuthService {
 
   async switchSchool(userId: string, schoolId: string): Promise<LoginResponse> {
     const user = await this.authRepo.findCompanyUserById(userId);
-    if (!user || user.role !== CompanyRole.SUPER_ADMIN) {
-      throw new ForbiddenException('Only SUPER_ADMIN can switch into a school');
+    if (!user) throw new ForbiddenException('Only company staff can switch into a school');
+
+    // SUPER_ADMIN/OPERATOR can impersonate any school; everyone else (ADMIN,
+    // SUPPORT, SALES) is restricted to schools explicitly assigned to them via
+    // company_user_schools — the same scoping already used for schools/invoices lists.
+    const isUnrestricted =
+      user.role === CompanyRole.SUPER_ADMIN || user.role === CompanyRole.OPERATOR;
+    if (!isUnrestricted) {
+      const permittedIds = await this.authRepo.getCompanyUserSchoolIds(userId);
+      if (!permittedIds.includes(schoolId)) {
+        throw new ForbiddenException('You do not have access to this school');
+      }
     }
 
     const school = await this.authRepo.findSchoolById(schoolId);
     if (!school) throw new NotFoundException(`School '${schoolId}' not found`);
     if (!school.is_active) throw new ForbiddenException(`School '${schoolId}' is inactive`);
 
+    const role = user.role as CompanyRole;
     const tokens = await this.generateTokens({
       sub: userId,
       email: user.email,
-      role: CompanyRole.SUPER_ADMIN,
+      role,
       school_id: schoolId,
       context: AuthContext.SCHOOL,
     });
@@ -536,7 +551,7 @@ export class AuthService {
       user: {
         id: userId,
         email: user.email,
-        role: CompanyRole.SUPER_ADMIN,
+        role,
         schoolId: schoolId,
         context: AuthContext.SCHOOL,
       },

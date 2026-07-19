@@ -22,6 +22,7 @@ import { SetupPasswordDto } from './dto/setup-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { BypassRestriction } from '../../common/decorators/bypass-restriction.decorator';
 import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { RefreshTokenGuard } from '../../common/guards/refresh-token.guard';
@@ -128,9 +129,13 @@ export class AuthController {
   }
 
   @Post('switch-school/:schoolId')
+  @BypassRestriction()
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'SUPER_ADMIN: switch into a school context to manage it' })
+  @ApiOperation({
+    summary:
+      'Switch into a school context — SUPER_ADMIN/OPERATOR: any school, others: assigned schools only',
+  })
   @K6({ authContext: 'company', paramSources: { schoolId: '/api/v1/schools' } })
   async switchSchool(
     @Param('schoolId', ParseUUIDPipe) schoolId: string,
@@ -141,6 +146,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @BypassRestriction()
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Logout — invalidates all refresh tokens for user' })
@@ -152,6 +158,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @BypassRestriction()
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get current authenticated user profile with permissions' })
   async getMe(

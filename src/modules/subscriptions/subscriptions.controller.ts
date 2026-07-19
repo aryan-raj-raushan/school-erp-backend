@@ -31,7 +31,13 @@ export class SubscriptionsController {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}
 
   @Get()
-  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
+  @Roles(
+    CompanyRole.SUPER_ADMIN,
+    CompanyRole.ADMIN,
+    CompanyRole.SUPPORT,
+    CompanyRole.SALES,
+    CompanyRole.OPERATOR,
+  )
   @ApiOperation({ summary: 'List all subscriptions (company admin)' })
   async findAll(@Query() filters: SubscriptionFilterDto, @GetCurrentUser() user: JwtPayload) {
     const data = await this.subscriptionsService.findAll(filters, user.sub, user.role as string);
@@ -46,7 +52,13 @@ export class SubscriptionsController {
   }
 
   @Get(':id')
-  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
+  @Roles(
+    CompanyRole.SUPER_ADMIN,
+    CompanyRole.ADMIN,
+    CompanyRole.SUPPORT,
+    CompanyRole.SALES,
+    CompanyRole.OPERATOR,
+  )
   @ApiOperation({ summary: 'Get subscription by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetCurrentUser() user: JwtPayload) {
     const data = await this.subscriptionsService.findById(id, user.sub, user.role as string);
