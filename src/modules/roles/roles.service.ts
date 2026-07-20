@@ -17,10 +17,13 @@ import { AssignPermissionsDto } from './dto/assign-permissions.dto';
 import { Role, NewRole } from './types/role.types';
 import { CacheTTL } from '../../shared/constants';
 import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
-import { ALL_SCHOOL_ROLES, SchoolRole } from '../../shared/enums';
+import { ALL_SCHOOL_ROLES, SchoolRole, SystemSchoolRole } from '../../shared/enums';
 
 /** name/slug/description for each auto-seeded system role, keyed by SchoolRole enum value */
-const SYSTEM_ROLE_META: Record<SchoolRole, { name: string; slug: string; description: string }> = {
+const SYSTEM_ROLE_META: Record<
+  SystemSchoolRole,
+  { name: string; slug: string; description: string }
+> = {
   [SchoolRole.SCHOOL_ADMIN]: {
     name: 'School Admin',
     slug: 'school_admin',

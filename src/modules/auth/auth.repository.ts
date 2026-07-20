@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNotNull } from 'drizzle-orm';
 
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
@@ -9,6 +9,7 @@ import {
   companyUserSchools,
   schools,
   schoolRoleEnum,
+  studentParents,
 } from '../../database/drizzle/schema';
 import { CompanyRole } from '../../shared/enums';
 
@@ -271,6 +272,35 @@ export class AuthRepository {
     return school ?? null;
   }
 
+  async findActiveParentCandidatesByPhone(phone_number: string, dial_code: string) {
+    return this.db
+      .select({
+        id: studentParents.id,
+        student_id: studentParents.student_id,
+        school_id: studentParents.school_id,
+        phone_number: studentParents.phone_number,
+        password_hash: studentParents.password_hash,
+        must_change_password: studentParents.must_change_password,
+      })
+      .from(studentParents)
+      .where(
+        and(
+          eq(studentParents.phone_number, phone_number),
+          eq(studentParents.dial_code, dial_code),
+          eq(studentParents.deleted, false),
+          eq(studentParents.is_active, true),
+          isNotNull(studentParents.password_hash),
+        ),
+      );
+  }
+
+  async updateParentLastLogin(id: string): Promise<void> {
+    await this.db
+      .update(studentParents)
+      .set({ last_login_at: new Date() })
+      .where(eq(studentParents.id, id));
+  }
+
   async findCompanyUserProfile(id: string) {
     const [user] = await this.db
       .select({
@@ -303,5 +333,23 @@ export class AuthRepository {
       .from(schoolUsers)
       .where(eq(schoolUsers.id, id));
     return user ?? null;
+  }
+
+  async findParentProfileById(id: string) {
+    const [parent] = await this.db
+      .select({
+        id: studentParents.id,
+        first_name: studentParents.first_name,
+        last_name: studentParents.last_name,
+        phone_number: studentParents.phone_number,
+        email: studentParents.email,
+        school_id: studentParents.school_id,
+        student_id: studentParents.student_id,
+        profile_image: studentParents.profile_image,
+        created_at: studentParents.created_at,
+      })
+      .from(studentParents)
+      .where(eq(studentParents.id, id));
+    return parent ?? null;
   }
 }

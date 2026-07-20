@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, or, ilike, sql, SQL } from 'drizzle-orm';
+import { eq, and, or, ilike, inArray, sql, SQL } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -17,13 +17,20 @@ import { sections } from '../../database/drizzle/schema/sections.schema';
 import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
 import { schools } from '../../database/drizzle/schema/schools.schema';
 import {
-  Student, NewStudent,
-  StudentAcademicInfo, NewStudentAcademicInfo,
-  StudentPreviousAcademics, NewStudentPreviousAcademics,
-  StudentAddress, NewStudentAddress,
-  StudentHostelInfo, NewStudentHostelInfo,
-  StudentParent, NewStudentParent,
-  StudentDocument, NewStudentDocument,
+  Student,
+  NewStudent,
+  StudentAcademicInfo,
+  NewStudentAcademicInfo,
+  StudentPreviousAcademics,
+  NewStudentPreviousAcademics,
+  StudentAddress,
+  NewStudentAddress,
+  StudentHostelInfo,
+  NewStudentHostelInfo,
+  NewStudentParent,
+  StudentParentSafe,
+  StudentDocument,
+  NewStudentDocument,
   StudentFilters,
   StudentListItem,
 } from './types/student.types';
@@ -53,14 +60,16 @@ export class StudentsRepository {
   // ─── Students ───────────────────────────────────────────────────────────────
 
   async findAll(schoolId: string, filters: StudentFilters): Promise<StudentListItem[]> {
-    const conditions: SQL[] = [
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const conditions: SQL<unknown>[] = [
       eq(students.school_id, schoolId),
       eq(students.deleted, false),
     ];
 
     if (filters.status) conditions.push(eq(students.status, filters.status as any));
     if (filters.gender) conditions.push(eq(students.gender, filters.gender as any));
-    if (filters.is_enabled !== undefined) conditions.push(eq(students.is_enabled, filters.is_enabled));
+    if (filters.is_enabled !== undefined)
+      conditions.push(eq(students.is_enabled, filters.is_enabled));
 
     if (filters.search) {
       const term = `%${filters.search}%`;
@@ -76,10 +85,15 @@ export class StudentsRepository {
     }
 
     // Academic info filters (join-based)
-    const acaConditions: SQL[] = [eq(studentAcademicInfo.student_id, students.id), eq(studentAcademicInfo.is_current, true)];
-    if (filters.academic_year_id) acaConditions.push(eq(studentAcademicInfo.academic_year_id, filters.academic_year_id));
+    const acaConditions: SQL[] = [
+      eq(studentAcademicInfo.student_id, students.id),
+      eq(studentAcademicInfo.is_current, true),
+    ];
+    if (filters.academic_year_id)
+      acaConditions.push(eq(studentAcademicInfo.academic_year_id, filters.academic_year_id));
     if (filters.class_id) acaConditions.push(eq(studentAcademicInfo.class_id, filters.class_id));
-    if (filters.section_id) acaConditions.push(eq(studentAcademicInfo.section_id, filters.section_id));
+    if (filters.section_id)
+      acaConditions.push(eq(studentAcademicInfo.section_id, filters.section_id));
 
     // If academic filters present, do inner join; otherwise left join
     const hasAcaFilter = filters.academic_year_id || filters.class_id || filters.section_id;
@@ -107,10 +121,7 @@ export class StudentsRepository {
         academic_year_name: academicYears.name,
       })
       .from(students)
-      [hasAcaFilter ? 'innerJoin' : 'leftJoin'](
-        studentAcademicInfo,
-        and(...acaConditions),
-      )
+      [hasAcaFilter ? 'innerJoin' : 'leftJoin'](studentAcademicInfo, and(...acaConditions))
       .leftJoin(classes, eq(studentAcademicInfo.class_id, classes.id))
       .leftJoin(sections, eq(studentAcademicInfo.section_id, sections.id))
       .leftJoin(academicYears, eq(studentAcademicInfo.academic_year_id, academicYears.id))
@@ -151,16 +162,21 @@ export class StudentsRepository {
 
   // ─── Academic Info ──────────────────────────────────────────────────────────
 
-  async findCurrentAcademicInfo(studentId: string, schoolId: string): Promise<StudentAcademicInfo | undefined> {
+  async findCurrentAcademicInfo(
+    studentId: string,
+    schoolId: string,
+  ): Promise<StudentAcademicInfo | undefined> {
     const [row] = await this.db
       .select()
       .from(studentAcademicInfo)
-      .where(and(
-        eq(studentAcademicInfo.student_id, studentId),
-        eq(studentAcademicInfo.school_id, schoolId),
-        eq(studentAcademicInfo.is_current, true),
-        eq(studentAcademicInfo.deleted, false),
-      ));
+      .where(
+        and(
+          eq(studentAcademicInfo.student_id, studentId),
+          eq(studentAcademicInfo.school_id, schoolId),
+          eq(studentAcademicInfo.is_current, true),
+          eq(studentAcademicInfo.deleted, false),
+        ),
+      );
     return row;
   }
 
@@ -168,11 +184,13 @@ export class StudentsRepository {
     return this.db
       .select()
       .from(studentAcademicInfo)
-      .where(and(
-        eq(studentAcademicInfo.student_id, studentId),
-        eq(studentAcademicInfo.school_id, schoolId),
-        eq(studentAcademicInfo.deleted, false),
-      ));
+      .where(
+        and(
+          eq(studentAcademicInfo.student_id, studentId),
+          eq(studentAcademicInfo.school_id, schoolId),
+          eq(studentAcademicInfo.deleted, false),
+        ),
+      );
   }
 
   async upsertAcademicInfo(data: NewStudentAcademicInfo): Promise<StudentAcademicInfo> {
@@ -180,16 +198,22 @@ export class StudentsRepository {
     await this.db
       .update(studentAcademicInfo)
       .set({ is_current: false })
-      .where(and(
-        eq(studentAcademicInfo.student_id, data.student_id),
-        eq(studentAcademicInfo.school_id, data.school_id!),
-      ));
+      .where(
+        and(
+          eq(studentAcademicInfo.student_id, data.student_id),
+          eq(studentAcademicInfo.school_id, data.school_id!),
+        ),
+      );
 
     const [row] = await this.db.insert(studentAcademicInfo).values(data).returning();
     return row;
   }
 
-  async updateAcademicInfo(id: string, schoolId: string, data: Partial<NewStudentAcademicInfo>): Promise<StudentAcademicInfo> {
+  async updateAcademicInfo(
+    id: string,
+    schoolId: string,
+    data: Partial<NewStudentAcademicInfo>,
+  ): Promise<StudentAcademicInfo> {
     const [row] = await this.db
       .update(studentAcademicInfo)
       .set({ ...data, updated_at: new Date() })
@@ -200,19 +224,26 @@ export class StudentsRepository {
 
   // ─── Previous Academics ─────────────────────────────────────────────────────
 
-  async findPreviousAcademics(studentId: string, schoolId: string): Promise<StudentPreviousAcademics | undefined> {
+  async findPreviousAcademics(
+    studentId: string,
+    schoolId: string,
+  ): Promise<StudentPreviousAcademics | undefined> {
     const [row] = await this.db
       .select()
       .from(studentPreviousAcademics)
-      .where(and(
-        eq(studentPreviousAcademics.student_id, studentId),
-        eq(studentPreviousAcademics.school_id, schoolId),
-        eq(studentPreviousAcademics.deleted, false),
-      ));
+      .where(
+        and(
+          eq(studentPreviousAcademics.student_id, studentId),
+          eq(studentPreviousAcademics.school_id, schoolId),
+          eq(studentPreviousAcademics.deleted, false),
+        ),
+      );
     return row;
   }
 
-  async upsertPreviousAcademics(data: NewStudentPreviousAcademics): Promise<StudentPreviousAcademics> {
+  async upsertPreviousAcademics(
+    data: NewStudentPreviousAcademics,
+  ): Promise<StudentPreviousAcademics> {
     const existing = await this.findPreviousAcademics(data.student_id, data.school_id!);
     if (existing) {
       const [row] = await this.db
@@ -232,11 +263,13 @@ export class StudentsRepository {
     const [row] = await this.db
       .select()
       .from(studentAddresses)
-      .where(and(
-        eq(studentAddresses.student_id, studentId),
-        eq(studentAddresses.school_id, schoolId),
-        eq(studentAddresses.deleted, false),
-      ));
+      .where(
+        and(
+          eq(studentAddresses.student_id, studentId),
+          eq(studentAddresses.school_id, schoolId),
+          eq(studentAddresses.deleted, false),
+        ),
+      );
     return row;
   }
 
@@ -256,15 +289,20 @@ export class StudentsRepository {
 
   // ─── Hostel Info ────────────────────────────────────────────────────────────
 
-  async findHostelInfo(studentId: string, schoolId: string): Promise<StudentHostelInfo | undefined> {
+  async findHostelInfo(
+    studentId: string,
+    schoolId: string,
+  ): Promise<StudentHostelInfo | undefined> {
     const [row] = await this.db
       .select()
       .from(studentHostelInfo)
-      .where(and(
-        eq(studentHostelInfo.student_id, studentId),
-        eq(studentHostelInfo.school_id, schoolId),
-        eq(studentHostelInfo.deleted, false),
-      ));
+      .where(
+        and(
+          eq(studentHostelInfo.student_id, studentId),
+          eq(studentHostelInfo.school_id, schoolId),
+          eq(studentHostelInfo.deleted, false),
+        ),
+      );
     return row;
   }
 
@@ -284,11 +322,25 @@ export class StudentsRepository {
 
   // ─── Parents ────────────────────────────────────────────────────────────────
 
-  async findAllGuardians(schoolId: string, search?: string): Promise<{
-    id: string; student_id: string; student_name: string; relation: string;
-    first_name: string; last_name: string | null; phone_number: string; dial_code: string | null;
-    email: string | null; occupation: string | null; is_primary: boolean; can_pickup: boolean;
-  }[]> {
+  async findAllGuardians(
+    schoolId: string,
+    search?: string,
+  ): Promise<
+    {
+      id: string;
+      student_id: string;
+      student_name: string;
+      relation: string;
+      first_name: string;
+      last_name: string | null;
+      phone_number: string;
+      dial_code: string | null;
+      email: string | null;
+      occupation: string | null;
+      is_primary: boolean;
+      can_pickup: boolean;
+    }[]
+  > {
     const rows = await this.db
       .select({
         id: studentParents.id,
@@ -307,18 +359,24 @@ export class StudentsRepository {
       })
       .from(studentParents)
       .innerJoin(students, eq(students.id, studentParents.student_id))
-      .where(and(
-        eq(studentParents.school_id, schoolId),
-        eq(studentParents.deleted, false),
-        eq(students.deleted, false),
-        ...(search ? [or(
-          ilike(studentParents.first_name, `%${search}%`),
-          ilike(studentParents.last_name, `%${search}%`),
-          ilike(studentParents.phone_number, `%${search}%`),
-          ilike(students.first_name, `%${search}%`),
-          ilike(students.last_name, `%${search}%`),
-        )] : []),
-      ))
+      .where(
+        and(
+          eq(studentParents.school_id, schoolId),
+          eq(studentParents.deleted, false),
+          eq(students.deleted, false),
+          ...(search
+            ? [
+                or(
+                  ilike(studentParents.first_name, `%${search}%`),
+                  ilike(studentParents.last_name, `%${search}%`),
+                  ilike(studentParents.phone_number, `%${search}%`),
+                  ilike(students.first_name, `%${search}%`),
+                  ilike(students.last_name, `%${search}%`),
+                ),
+              ]
+            : []),
+        ),
+      )
       .orderBy(students.first_name, studentParents.is_primary);
     return rows.map((r) => ({
       ...r,
@@ -326,14 +384,45 @@ export class StudentsRepository {
     }));
   }
 
-  async addGuardian(data: NewStudentParent): Promise<StudentParent> {
-    const [row] = await this.db.insert(studentParents).values(data).returning();
+  /** Column projection for parent rows returned to callers — never includes password_hash. */
+  private readonly parentSafeColumns = {
+    id: studentParents.id,
+    school_id: studentParents.school_id,
+    student_id: studentParents.student_id,
+    relation: studentParents.relation,
+    first_name: studentParents.first_name,
+    last_name: studentParents.last_name,
+    email: studentParents.email,
+    dial_code: studentParents.dial_code,
+    phone_number: studentParents.phone_number,
+    alternate_phone: studentParents.alternate_phone,
+    occupation: studentParents.occupation,
+    qualification: studentParents.qualification,
+    annual_income: studentParents.annual_income,
+    aadhaar_number: studentParents.aadhaar_number,
+    profile_image: studentParents.profile_image,
+    is_primary: studentParents.is_primary,
+    can_pickup: studentParents.can_pickup,
+    must_change_password: studentParents.must_change_password,
+    is_active: studentParents.is_active,
+    last_login_at: studentParents.last_login_at,
+    has_login: sql<boolean>`${studentParents.password_hash} is not null`,
+    deleted: studentParents.deleted,
+    created_at: studentParents.created_at,
+    updated_at: studentParents.updated_at,
+  };
+
+  async addGuardian(data: NewStudentParent): Promise<StudentParentSafe> {
+    const [row] = await this.db
+      .insert(studentParents)
+      .values(data)
+      .returning(this.parentSafeColumns);
     return row;
   }
 
-  async findGuardianById(id: string, schoolId: string): Promise<StudentParent | null> {
+  async findGuardianById(id: string, schoolId: string): Promise<StudentParentSafe | null> {
     const [row] = await this.db
-      .select()
+      .select(this.parentSafeColumns)
       .from(studentParents)
       .where(and(eq(studentParents.id, id), eq(studentParents.school_id, schoolId)));
     return row ?? null;
@@ -346,26 +435,74 @@ export class StudentsRepository {
       .where(and(eq(studentParents.id, id), eq(studentParents.school_id, schoolId)));
   }
 
-  async findParents(studentId: string, schoolId: string): Promise<StudentParent[]> {
+  async findParents(studentId: string, schoolId: string): Promise<StudentParentSafe[]> {
     return this.db
-      .select()
+      .select(this.parentSafeColumns)
       .from(studentParents)
-      .where(and(
-        eq(studentParents.student_id, studentId),
-        eq(studentParents.school_id, schoolId),
-        eq(studentParents.deleted, false),
-      ));
+      .where(
+        and(
+          eq(studentParents.student_id, studentId),
+          eq(studentParents.school_id, schoolId),
+          eq(studentParents.deleted, false),
+        ),
+      );
   }
 
-  async replaceParents(studentId: string, schoolId: string, data: NewStudentParent[]): Promise<StudentParent[]> {
-    // Soft-delete existing
-    await this.db
-      .update(studentParents)
-      .set({ deleted: true, updated_at: new Date() })
-      .where(and(eq(studentParents.student_id, studentId), eq(studentParents.school_id, schoolId)));
+  /**
+   * Syncs the incoming parent rows for a student: soft-deletes rows the caller removed,
+   * inserts rows with no matching existing id, and updates rows that do — preserving
+   * password_hash for any row that isn't given a new one (see StudentsService.buildParentRows).
+   */
+  async syncParents(
+    studentId: string,
+    schoolId: string,
+    incoming: (NewStudentParent & { id: string })[],
+  ): Promise<StudentParentSafe[]> {
+    const existing = await this.db
+      .select({ id: studentParents.id })
+      .from(studentParents)
+      .where(
+        and(
+          eq(studentParents.student_id, studentId),
+          eq(studentParents.school_id, schoolId),
+          eq(studentParents.deleted, false),
+        ),
+      );
+    const existingIds = new Set(existing.map((r) => r.id));
+    const incomingIds = new Set(incoming.map((p) => p.id));
 
-    if (!data.length) return [];
-    return this.db.insert(studentParents).values(data).returning();
+    const removedIds = [...existingIds].filter((id) => !incomingIds.has(id));
+    if (removedIds.length) {
+      await this.db
+        .update(studentParents)
+        .set({ deleted: true, updated_at: new Date() })
+        .where(and(inArray(studentParents.id, removedIds), eq(studentParents.school_id, schoolId)));
+    }
+
+    const toInsert = incoming.filter((p) => !existingIds.has(p.id));
+    const toUpdate = incoming.filter((p) => existingIds.has(p.id));
+
+    const results: StudentParentSafe[] = [];
+
+    if (toInsert.length) {
+      const inserted = await this.db
+        .insert(studentParents)
+        .values(toInsert)
+        .returning(this.parentSafeColumns);
+      results.push(...inserted);
+    }
+
+    for (const p of toUpdate) {
+      const { id, ...rest } = p;
+      const [row] = await this.db
+        .update(studentParents)
+        .set({ ...rest, updated_at: new Date() })
+        .where(eq(studentParents.id, id))
+        .returning(this.parentSafeColumns);
+      results.push(row);
+    }
+
+    return results;
   }
 
   // ─── Documents ──────────────────────────────────────────────────────────────
@@ -374,11 +511,13 @@ export class StudentsRepository {
     return this.db
       .select()
       .from(studentDocuments)
-      .where(and(
-        eq(studentDocuments.student_id, studentId),
-        eq(studentDocuments.school_id, schoolId),
-        eq(studentDocuments.deleted, false),
-      ));
+      .where(
+        and(
+          eq(studentDocuments.student_id, studentId),
+          eq(studentDocuments.school_id, schoolId),
+          eq(studentDocuments.deleted, false),
+        ),
+      );
   }
 
   async addDocuments(data: NewStudentDocument[]): Promise<StudentDocument[]> {
@@ -390,18 +529,26 @@ export class StudentsRepository {
     await this.db
       .update(studentDocuments)
       .set({ deleted: true, updated_at: new Date() })
-      .where(and(
-        eq(studentDocuments.id, id),
-        eq(studentDocuments.student_id, studentId),
-        eq(studentDocuments.school_id, schoolId),
-      ));
+      .where(
+        and(
+          eq(studentDocuments.id, id),
+          eq(studentDocuments.student_id, studentId),
+          eq(studentDocuments.school_id, schoolId),
+        ),
+      );
   }
 
-  async replaceDocuments(studentId: string, schoolId: string, data: NewStudentDocument[]): Promise<StudentDocument[]> {
+  async replaceDocuments(
+    studentId: string,
+    schoolId: string,
+    data: NewStudentDocument[],
+  ): Promise<StudentDocument[]> {
     await this.db
       .update(studentDocuments)
       .set({ deleted: true, updated_at: new Date() })
-      .where(and(eq(studentDocuments.student_id, studentId), eq(studentDocuments.school_id, schoolId)));
+      .where(
+        and(eq(studentDocuments.student_id, studentId), eq(studentDocuments.school_id, schoolId)),
+      );
 
     if (!data.length) return [];
     return this.db.insert(studentDocuments).values(data).returning();
@@ -437,14 +584,23 @@ export class StudentsRepository {
         school_website: schools.website,
       })
       .from(students)
-      .leftJoin(studentAcademicInfo, and(
-        eq(studentAcademicInfo.student_id, students.id),
-        eq(studentAcademicInfo.is_current, true),
-      ))
+      .leftJoin(
+        studentAcademicInfo,
+        and(
+          eq(studentAcademicInfo.student_id, students.id),
+          eq(studentAcademicInfo.is_current, true),
+        ),
+      )
       .leftJoin(classes, eq(studentAcademicInfo.class_id, classes.id))
       .leftJoin(sections, eq(studentAcademicInfo.section_id, sections.id))
       .leftJoin(schools, eq(students.school_id, schools.id))
-      .where(and(eq(students.id, studentId), eq(students.school_id, schoolId), eq(students.deleted, false)));
+      .where(
+        and(
+          eq(students.id, studentId),
+          eq(students.school_id, schoolId),
+          eq(students.deleted, false),
+        ),
+      );
 
     return row;
   }

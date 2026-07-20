@@ -10,6 +10,7 @@ export const schoolRoleEnum = pgEnum('school_role', [
   'CLASS_TEACHER',
   'ACCOUNTANT',
   'LIBRARIAN',
+  'OTHER',
 ]);
 
 export const schoolUsers = pgTable(

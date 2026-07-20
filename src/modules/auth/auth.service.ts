@@ -13,11 +13,12 @@ import { AuthRepository } from './auth.repository';
 import { RedisService } from '../redis/redis.service';
 import { hashPassword, comparePassword } from '../../utils/hash.utils';
 import { generateId } from '../../utils/uuid.utils';
-import { AuthContext, CompanyRole, SchoolRole } from '../../shared/enums';
+import { AuthContext, CompanyRole, SchoolRole, ParentRole } from '../../shared/enums';
 import { JwtPayload, RefreshTokenPayload } from '../../shared/types/jwt-payload.types';
 import { RegisterCompanyDto } from './dto/register-company.dto';
 import { LoginCompanyDto } from './dto/login-company.dto';
 import { LoginSchoolDto } from './dto/login-school.dto';
+import { LoginParentDto } from './dto/login-parent.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
 import { SetupPasswordDto } from './dto/setup-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -187,6 +188,50 @@ export class AuthService {
     if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
 
     return this.issueSchoolTokensOrChangeRequired(user);
+  }
+
+  async loginParent(dto: LoginParentDto): Promise<LoginResponse> {
+    const candidates = await this.authRepo.findActiveParentCandidatesByPhone(
+      dto.phone_number,
+      dto.dial_code,
+    );
+    if (!candidates.length) throw new UnauthorizedException('Invalid credentials');
+
+    let matched: (typeof candidates)[number] | undefined;
+    for (const candidate of candidates) {
+      if (await comparePassword(dto.password, candidate.password_hash!)) {
+        matched = candidate;
+        break;
+      }
+    }
+    if (!matched) throw new UnauthorizedException('Invalid credentials');
+
+    const school = await this.authRepo.findSchoolById(matched.school_id);
+    if (!school || !school.is_active) {
+      throw new UnauthorizedException('School is deactivated');
+    }
+
+    await this.authRepo.updateParentLastLogin(matched.id);
+
+    const tokens = await this.generateTokens({
+      sub: matched.id,
+      phone: matched.phone_number,
+      role: ParentRole.PARENT,
+      school_id: matched.school_id,
+      student_id: matched.student_id,
+      context: AuthContext.PARENT,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: matched.id,
+        phone: matched.phone_number,
+        role: ParentRole.PARENT,
+        schoolId: matched.school_id,
+        context: AuthContext.PARENT,
+      },
+    };
   }
 
   async loginUnified(dto: LoginUnifiedDto): Promise<LoginOrSetupResponse> {
@@ -499,6 +544,12 @@ export class AuthService {
       const user = await this.authRepo.findCompanyUserProfile(userId);
       if (!user) throw new NotFoundException('User not found');
       return user;
+    }
+
+    if (context === AuthContext.PARENT) {
+      const parent = await this.authRepo.findParentProfileById(userId);
+      if (!parent) throw new NotFoundException('User not found');
+      return { ...parent, role: ParentRole.PARENT, permissions: [] };
     }
 
     const user = await this.authRepo.findSchoolUserProfile(userId);

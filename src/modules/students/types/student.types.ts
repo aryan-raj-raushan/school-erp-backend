@@ -27,6 +27,9 @@ export type NewStudentHostelInfo = InferInsertModel<typeof studentHostelInfo>;
 export type StudentParent = InferSelectModel<typeof studentParents>;
 export type NewStudentParent = InferInsertModel<typeof studentParents>;
 
+/** Parent row shape safe to return from the API — never carries password_hash. */
+export type StudentParentSafe = Omit<StudentParent, 'password_hash'> & { has_login: boolean };
+
 export type StudentDocument = InferSelectModel<typeof studentDocuments>;
 export type NewStudentDocument = InferInsertModel<typeof studentDocuments>;
 
@@ -36,7 +39,7 @@ export interface StudentFull {
   previousAcademics: StudentPreviousAcademics | null;
   address: StudentAddress | null;
   hostelInfo: StudentHostelInfo | null;
-  parents: StudentParent[];
+  parents: StudentParentSafe[];
   documents: StudentDocument[];
 }
 

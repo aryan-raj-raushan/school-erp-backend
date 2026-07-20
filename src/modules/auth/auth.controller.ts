@@ -17,6 +17,7 @@ import { AuthService } from './auth.service';
 import { RegisterCompanyDto } from './dto/register-company.dto';
 import { LoginCompanyDto } from './dto/login-company.dto';
 import { LoginSchoolDto } from './dto/login-school.dto';
+import { LoginParentDto } from './dto/login-parent.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
 import { SetupPasswordDto } from './dto/setup-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -80,6 +81,15 @@ export class AuthController {
   @ApiOperation({ summary: 'School user login (phone + password)' })
   async loginSchool(@Body() dto: LoginSchoolDto) {
     const result = await this.authService.loginSchool(dto);
+    return ApiResponse.success(result, 'Login successful');
+  }
+
+  @Public()
+  @Post('parent/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Parent/guardian login (phone + password)' })
+  async loginParent(@Body() dto: LoginParentDto) {
+    const result = await this.authService.loginParent(dto);
     return ApiResponse.success(result, 'Login successful');
   }
 

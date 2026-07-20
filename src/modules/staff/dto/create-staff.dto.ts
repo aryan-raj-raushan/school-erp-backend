@@ -52,10 +52,15 @@ export class CreateStaffDto {
   @Transform(({ value }) => value?.toLowerCase()?.trim())
   email?: string;
 
-  @ApiProperty({ enum: SchoolRole, example: SchoolRole.TEACHER })
+  @ApiPropertyOptional({
+    enum: SchoolRole,
+    example: SchoolRole.TEACHER,
+    description:
+      'Base system role tier. Optional if custom_role_id is provided — defaults to OTHER. Required otherwise.',
+  })
+  @IsOptional()
   @IsEnum(SchoolRole)
-  @IsNotEmpty()
-  role: SchoolRole;
+  role?: SchoolRole;
 
   @ApiPropertyOptional({ enum: Gender })
   @IsOptional()
