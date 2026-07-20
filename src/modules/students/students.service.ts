@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { StudentsRepository } from './students.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
-import { CreateStudentDto, StudentDocumentDto } from './dto/create-student.dto';
+import { hashPassword } from '../../utils/hash.utils';
+import { CreateStudentDto, StudentDocumentDto, StudentParentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import {
   StudentFull,
@@ -23,6 +24,54 @@ export class StudentsService {
 
   private cacheKey(schoolId: string) {
     return REDIS_STUDENT_KEY.STUDENT(schoolId);
+  }
+
+  /**
+   * Resolves each incoming parent row's login fields (enable_login/password) into
+   * password_hash/is_active, ready to hand to StudentsRepository.syncParents.
+   * A row that enables login without a new password must already have one — otherwise
+   * a partial update with no password_hash key would silently leave login unusable.
+   */
+  private async buildParentRows(
+    parents: StudentParentDto[] | undefined,
+    schoolId: string,
+    studentId: string,
+  ): Promise<(NewStudentParent & { id: string })[]> {
+    if (!parents?.length) return [];
+
+    return Promise.all(
+      parents.map(async (p) => {
+        const { id, enable_login, password, ...rest } = p;
+        const base: NewStudentParent & { id: string } = {
+          id: id ?? generateId(),
+          school_id: schoolId,
+          student_id: studentId,
+          ...rest,
+          relation: rest.relation as NewStudentParent['relation'],
+          qualification: rest.qualification as NewStudentParent['qualification'],
+        };
+
+        if (enable_login) {
+          if (password) {
+            return {
+              ...base,
+              password_hash: await hashPassword(password),
+              must_change_password: false,
+              is_active: true,
+            };
+          }
+          const existing = id ? await this.repo.findGuardianById(id, schoolId) : null;
+          if (!existing?.has_login) {
+            throw new BadRequestException(
+              `Password is required to enable login for parent "${p.first_name}"`,
+            );
+          }
+          return { ...base, is_active: true };
+        }
+
+        return { ...base, is_active: false };
+      }),
+    );
   }
 
   // ─── List ───────────────────────────────────────────────────────────────────
@@ -147,17 +196,8 @@ export class StudentsService {
           : Promise.resolve(undefined),
 
         dto.parents?.length
-          ? this.repo.replaceParents(
-              studentId,
-              schoolId,
-              dto.parents.map((p) => ({
-                id: generateId(),
-                school_id: schoolId,
-                student_id: studentId,
-                ...p,
-                relation: p.relation as NewStudentParent['relation'],
-                qualification: p.qualification as NewStudentParent['qualification'],
-              })),
+          ? this.buildParentRows(dto.parents, schoolId, studentId).then((rows) =>
+              this.repo.syncParents(studentId, schoolId, rows),
             )
           : Promise.resolve([]),
 
@@ -264,18 +304,8 @@ export class StudentsService {
     }
 
     if (dto.parents !== undefined) {
-      await this.repo.replaceParents(
-        id,
-        schoolId,
-        dto.parents.map((p) => ({
-          id: generateId(),
-          school_id: schoolId,
-          student_id: id,
-          ...p,
-          relation: p.relation as NewStudentParent['relation'],
-          qualification: p.qualification as NewStudentParent['qualification'],
-        })),
-      );
+      const rows = await this.buildParentRows(dto.parents, schoolId, id);
+      await this.repo.syncParents(id, schoolId, rows);
     }
 
     if (dto.documents !== undefined) {
@@ -377,11 +407,22 @@ export class StudentsService {
     return this.repo.findAllGuardians(schoolId, search);
   }
 
-  async addGuardian(studentId: string, schoolId: string, data: {
-    relation: string; first_name: string; last_name?: string;
-    phone_number: string; dial_code?: string; email?: string;
-    occupation?: string; is_primary?: boolean; can_pickup?: boolean;
-  }, createdBy: string) {
+  async addGuardian(
+    studentId: string,
+    schoolId: string,
+    data: {
+      relation: string;
+      first_name: string;
+      last_name?: string;
+      phone_number: string;
+      dial_code?: string;
+      email?: string;
+      occupation?: string;
+      is_primary?: boolean;
+      can_pickup?: boolean;
+    },
+    _createdBy: string,
+  ) {
     const student = await this.repo.findById(studentId, schoolId);
     if (!student) throw new NotFoundException(`Student '${studentId}' not found`);
     const parent = await this.repo.addGuardian({

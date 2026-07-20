@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { StaffRepository } from './staff.repository';
+import { RolesRepository } from '../roles/roles.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
 import { hashPassword } from '../../utils/hash.utils';
@@ -34,6 +35,7 @@ const TEMPLATE_HEADERS = [
 export class StaffService {
   constructor(
     private readonly staffRepo: StaffRepository,
+    private readonly rolesRepo: RolesRepository,
     private readonly redisService: RedisService,
   ) {}
 
@@ -75,6 +77,17 @@ export class StaffService {
       throw new ConflictException('A staff member with this phone number already exists');
     }
 
+    if (!dto.role && !dto.custom_role_id) {
+      throw new BadRequestException('Either role or custom_role_id must be provided');
+    }
+
+    if (dto.custom_role_id) {
+      const customRole = await this.rolesRepo.findById(dto.custom_role_id, schoolId);
+      if (!customRole) {
+        throw new NotFoundException(`Role with id '${dto.custom_role_id}' not found`);
+      }
+    }
+
     const password_hash = await hashPassword(dto.password ?? TEMP_PASSWORD);
     const id = generateId();
 
@@ -89,7 +102,7 @@ export class StaffService {
       first_name: dto.first_name,
       last_name: dto.last_name,
       email: dto.email,
-      role: dto.role,
+      role: dto.role ?? SchoolRole.OTHER,
       gender: dto.gender,
       date_of_birth: dto.date_of_birth ? new Date(dto.date_of_birth) : undefined,
       blood_group: dto.blood_group,
@@ -120,6 +133,14 @@ export class StaffService {
 
   async update(id: string, schoolId: string, dto: UpdateStaffDto): Promise<StaffMember> {
     await this.findById(id, schoolId);
+
+    if (dto.custom_role_id) {
+      const customRole = await this.rolesRepo.findById(dto.custom_role_id, schoolId);
+      if (!customRole) {
+        throw new NotFoundException(`Role with id '${dto.custom_role_id}' not found`);
+      }
+    }
+
     const updated = await this.staffRepo.update(id, schoolId, {
       ...dto,
       date_of_birth: dto.date_of_birth ? new Date(dto.date_of_birth) : undefined,

@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsNumberString,
   MaxLength,
+  MinLength,
   IsArray,
   ValidateNested,
 } from 'class-validator';
@@ -60,6 +61,10 @@ export class StudentHostelInfoDto {
 }
 
 export class StudentParentDto {
+  @ApiPropertyOptional({ description: 'Existing parent row id — omit for new parents' })
+  @IsOptional()
+  @IsString()
+  id?: string;
   @ApiProperty({ enum: ParentRelation }) @IsEnum(ParentRelation) relation: ParentRelation;
   @ApiProperty() @IsString() @MaxLength(100) first_name: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) last_name?: string;
@@ -74,6 +79,19 @@ export class StudentParentDto {
   @ApiPropertyOptional() @IsOptional() @IsString() profile_image?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() is_primary?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() can_pickup?: boolean;
+  @ApiPropertyOptional({ default: false, description: 'Enable portal login for this parent' })
+  @IsOptional()
+  @IsBoolean()
+  enable_login?: boolean;
+  @ApiPropertyOptional({
+    example: 'Parent@123',
+    description:
+      'Required to enable login the first time; omit on later saves to keep the existing password',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string;
 }
 
 export class StudentDocumentDto {

@@ -1,11 +1,12 @@
-import { AuthContext, CompanyRole, SchoolRole } from '../enums';
+import { AuthContext, CompanyRole, SchoolRole, ParentRole } from '../enums';
 
 export interface JwtPayload {
   sub: string;
   email?: string;
   phone?: string;
-  role: CompanyRole | SchoolRole;
+  role: CompanyRole | SchoolRole | ParentRole;
   school_id?: string;
+  student_id?: string;
   custom_role_id?: string | null;
   context: AuthContext;
   iat?: number;
