@@ -190,7 +190,7 @@ export class AuthService {
     return this.issueSchoolTokensOrChangeRequired(user);
   }
 
-  async loginParent(dto: LoginParentDto): Promise<LoginResponse> {
+  async loginParent(dto: LoginParentDto): Promise<LoginResponse | PasswordChangeRequired> {
     const candidates = await this.authRepo.findActiveParentCandidatesByPhone(
       dto.phone_number,
       dto.dial_code,
@@ -209,6 +209,13 @@ export class AuthService {
     const school = await this.authRepo.findSchoolById(matched.school_id);
     if (!school || !school.is_active) {
       throw new UnauthorizedException('School is deactivated');
+    }
+
+    if (matched.must_change_password) {
+      return {
+        must_change_password: true,
+        change_token: this.generateParentChangePasswordToken(matched.id),
+      } satisfies PasswordChangeRequired;
     }
 
     await this.authRepo.updateParentLastLogin(matched.id);
@@ -462,6 +469,74 @@ export class AuthService {
         expiresIn: '24h',
       },
     );
+  }
+
+  private generateParentChangePasswordToken(userId: string): string {
+    return this.jwtService.sign(
+      { sub: userId, purpose: 'parent_password_change_required' },
+      {
+        secret: this.configService.get<string>('jwt.accessSecret'),
+        expiresIn: '24h',
+      },
+    );
+  }
+
+  /**
+   * Forced first-login password change for a parent whose password was set by a
+   * school admin/staff member at student-creation time (must_change_password) —
+   * mirrors changePassword() but reads/writes student_parents instead of school_users.
+   */
+  async changePasswordParent(dto: ChangePasswordDto): Promise<LoginResponse> {
+    if (dto.password !== dto.confirm_password) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    let payload: { sub: string; purpose: string };
+    try {
+      payload = this.jwtService.verify(dto.change_token, {
+        secret: this.configService.get<string>('jwt.accessSecret'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired change-password token');
+    }
+
+    if (payload.purpose !== 'parent_password_change_required') {
+      throw new UnauthorizedException('Invalid change-password token');
+    }
+
+    const parent = await this.authRepo.findParentById(payload.sub);
+    if (!parent) throw new NotFoundException('User not found');
+    if (!parent.must_change_password)
+      throw new BadRequestException('Password change is not required for this account');
+
+    const school = await this.authRepo.findSchoolById(parent.school_id);
+    if (!school || !school.is_active) {
+      throw new UnauthorizedException('School is deactivated');
+    }
+
+    const password_hash = await hashPassword(dto.password);
+    await this.authRepo.setParentPassword(parent.id, password_hash);
+    await this.authRepo.updateParentLastLogin(parent.id);
+
+    const tokens = await this.generateTokens({
+      sub: parent.id,
+      phone: parent.phone_number,
+      role: ParentRole.PARENT,
+      school_id: parent.school_id,
+      student_id: parent.student_id,
+      context: AuthContext.PARENT,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: parent.id,
+        phone: parent.phone_number,
+        role: ParentRole.PARENT,
+        schoolId: parent.school_id,
+        context: AuthContext.PARENT,
+      },
+    };
   }
 
   async refresh(userId: string, tokenId: string, context: AuthContext): Promise<TokenPair> {
