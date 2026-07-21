@@ -96,6 +96,7 @@ export class StaffService {
       school_id: schoolId,
       created_by: createdBy,
       password_hash,
+      must_change_password: true,
       is_active: dto.is_active ?? true,
       dial_code: dto.dial_code,
       phone_number: dto.phone_number,
@@ -337,6 +338,7 @@ export class StaffService {
             gender: gender ? String(gender) : undefined,
             date_of_birth: date_of_birth ? new Date(String(date_of_birth)) : undefined,
             password_hash,
+            must_change_password: true,
           });
           created++;
         } catch {

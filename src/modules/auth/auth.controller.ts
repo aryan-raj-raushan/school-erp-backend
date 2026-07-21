@@ -129,6 +129,18 @@ export class AuthController {
   }
 
   @Public()
+  @Post('parent/change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Forced first-login password change for parents using change_token from parent login response (must_change_password:true)',
+  })
+  async changePasswordParent(@Body() dto: ChangePasswordDto) {
+    const result = await this.authService.changePasswordParent(dto);
+    return ApiResponse.success(result, 'Password changed successfully');
+  }
+
+  @Public()
   @UseGuards(RefreshTokenGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)

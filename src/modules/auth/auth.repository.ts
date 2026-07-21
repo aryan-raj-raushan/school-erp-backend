@@ -301,6 +301,21 @@ export class AuthRepository {
       .where(eq(studentParents.id, id));
   }
 
+  async findParentById(id: string) {
+    const [user] = await this.db
+      .select()
+      .from(studentParents)
+      .where(and(eq(studentParents.id, id), eq(studentParents.deleted, false)));
+    return user ?? null;
+  }
+
+  async setParentPassword(id: string, password_hash: string): Promise<void> {
+    await this.db
+      .update(studentParents)
+      .set({ password_hash, must_change_password: false, updated_at: new Date() })
+      .where(eq(studentParents.id, id));
+  }
+
   async findCompanyUserProfile(id: string) {
     const [user] = await this.db
       .select({

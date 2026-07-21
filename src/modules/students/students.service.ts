@@ -56,7 +56,7 @@ export class StudentsService {
             return {
               ...base,
               password_hash: await hashPassword(password),
-              must_change_password: false,
+              must_change_password: true,
               is_active: true,
             };
           }
