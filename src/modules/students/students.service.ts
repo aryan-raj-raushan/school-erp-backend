@@ -52,6 +52,26 @@ export class StudentsService {
         };
 
         if (enable_login) {
+          // A brand-new parent row (no id yet) for a phone that's already an
+          // active parent elsewhere inherits that existing login instead of
+          // minting a fresh one — otherwise linking the same parent to a
+          // second child would force them through "set new password" again,
+          // even though their real password already works.
+          if (!id) {
+            const existingCreds = await this.repo.findActiveCredentialsByPhone(
+              rest.phone_number,
+              rest.dial_code ?? '+91',
+            );
+            if (existingCreds) {
+              return {
+                ...base,
+                password_hash: existingCreds.password_hash,
+                must_change_password: existingCreds.must_change_password,
+                is_active: true,
+              };
+            }
+          }
+
           if (password) {
             return {
               ...base,

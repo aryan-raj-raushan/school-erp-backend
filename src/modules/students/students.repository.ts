@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, or, ilike, inArray, sql, SQL } from 'drizzle-orm';
+import { eq, and, or, ilike, inArray, isNotNull, asc, desc, sql, SQL } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -420,6 +420,30 @@ export class StudentsRepository {
       .values(data)
       .returning(this.parentSafeColumns);
     return row;
+  }
+
+  async findActiveCredentialsByPhone(
+    phoneNumber: string,
+    dialCode: string,
+  ): Promise<{ password_hash: string; must_change_password: boolean } | null> {
+    const [row] = await this.db
+      .select({
+        password_hash: studentParents.password_hash,
+        must_change_password: studentParents.must_change_password,
+      })
+      .from(studentParents)
+      .where(
+        and(
+          eq(studentParents.phone_number, phoneNumber),
+          eq(studentParents.dial_code, dialCode),
+          eq(studentParents.deleted, false),
+          eq(studentParents.is_active, true),
+          isNotNull(studentParents.password_hash),
+        ),
+      )
+      .orderBy(asc(studentParents.must_change_password), desc(studentParents.updated_at))
+      .limit(1);
+    return row?.password_hash ? { password_hash: row.password_hash, must_change_password: row.must_change_password } : null;
   }
 
   async findGuardianById(id: string, schoolId: string): Promise<StudentParentSafe | null> {
