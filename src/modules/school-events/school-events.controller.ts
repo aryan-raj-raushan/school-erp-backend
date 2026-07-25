@@ -19,6 +19,7 @@ import { SchoolEventFilterDto } from './dto/school-event-filter.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
+import { ParentAccessible } from '../../common/decorators/parent-accessible.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
@@ -29,6 +30,7 @@ export class SchoolEventsController {
   constructor(private readonly schoolEventsService: SchoolEventsService) {}
 
   @Get()
+  @ParentAccessible()
   @ApiOperation({ summary: 'List all events and holidays with filters' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: SchoolEventFilterDto) {
     const data = await this.schoolEventsService.findAll(schoolId, filters);

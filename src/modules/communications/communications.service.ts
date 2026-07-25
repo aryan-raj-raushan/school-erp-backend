@@ -44,10 +44,14 @@ export class CommunicationsService {
     return notif;
   }
 
-  async getNotificationsForUser(userId: string, schoolId: string): Promise<Notification[]> {
-    const key = `${this.notifKey(schoolId)}:user:${userId}`;
+  async getNotificationsForUser(
+    userId: string,
+    schoolId: string,
+    callerRole: string,
+  ): Promise<Notification[]> {
+    const key = `${this.notifKey(schoolId)}:user:${userId}:${callerRole}`;
     return this.redisService.getOrSet(key, CacheTTL.MEDIUM, () =>
-      this.repo.findNotificationsForUser(userId, schoolId),
+      this.repo.findNotificationsForUser(userId, schoolId, callerRole),
     );
   }
 

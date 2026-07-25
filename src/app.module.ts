@@ -51,6 +51,7 @@ import { PermissionsModule } from './modules/permissions/permissions.module';
 import { RolesModule } from './modules/roles/roles.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { ParentScopeGuard } from './common/guards/parent-scope.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { SchoolRestrictionGuard } from './common/guards/school-restriction.guard';
@@ -75,6 +76,7 @@ import { GatePassesModule } from '@modules/gate-passes/gate-passes.module';
 import { NotificationRulesModule } from '@modules/notification-rules/notification-rules.module';
 import { AuditLogsModule } from '@modules/audit-logs/audit-logs.module';
 import { StudentMovementsModule } from '@modules/student-movements/student-movements.module';
+import { ParentPortalModule } from '@modules/parent-portal/parent-portal.module';
 
 @Module({
   imports: [
@@ -138,9 +140,11 @@ import { StudentMovementsModule } from '@modules/student-movements/student-movem
     NotificationRulesModule,
     AuditLogsModule,
     StudentMovementsModule,
+    ParentPortalModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: ParentScopeGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_GUARD, useClass: SchoolRestrictionGuard },

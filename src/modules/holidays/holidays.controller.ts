@@ -19,6 +19,7 @@ import { FilterHolidayDto } from './dto/filter-holiday.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { ParentAccessible } from '../../common/decorators/parent-accessible.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
@@ -42,6 +43,7 @@ export class HolidaysController {
   }
 
   @Get()
+  @ParentAccessible()
   @ApiOperation({ summary: 'List holidays with optional filters' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterHolidayDto) {
     const data = await this.holidaysService.findAll(schoolId, filters);

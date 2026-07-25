@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { DashboardService } from './dashboard.service';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { ParentAccessible } from '../../common/decorators/parent-accessible.decorator';
+import { GetCurrentStudentId } from '../../common/decorators/current-student-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 
 @ApiTags('Dashboard')
@@ -26,9 +28,13 @@ export class DashboardController {
   }
 
   @Get('parent')
-  @ApiOperation({ summary: 'Parent dashboard — homework, exams, fees' })
-  async parentDashboard(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
-    const data = await this.dashboardService.getParentDashboard(schoolId, userId);
+  @ParentAccessible()
+  @ApiOperation({ summary: 'Parent dashboard — attendance, homework, exams, fees (own child)' })
+  async parentDashboard(
+    @GetSchoolId() schoolId: string,
+    @GetCurrentStudentId() studentId: string,
+  ) {
+    const data = await this.dashboardService.getParentDashboard(schoolId, studentId);
     return ApiResponse.success(data, 'Parent dashboard fetched');
   }
 }

@@ -23,6 +23,7 @@ import { SetupPasswordDto } from './dto/setup-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { ParentAccessible } from '../../common/decorators/parent-accessible.decorator';
 import { BypassRestriction } from '../../common/decorators/bypass-restriction.decorator';
 import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
@@ -150,6 +151,33 @@ export class AuthController {
     return ApiResponse.success(tokens, 'Tokens refreshed');
   }
 
+  @Get('parent/children')
+  @ParentAccessible()
+  @BypassRestriction()
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: "List every child linked to the logged-in parent's phone number" })
+  async getParentChildren(
+    @GetCurrentUserId() userId: string,
+    @GetCurrentUser() user: { student_id?: string },
+  ) {
+    const children = await this.authService.getParentChildren(userId, user.student_id);
+    return ApiResponse.success(children);
+  }
+
+  @Post('parent/switch-student/:studentId')
+  @ParentAccessible()
+  @BypassRestriction()
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: "Switch the parent session to a different linked child" })
+  async switchStudent(
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    const result = await this.authService.switchStudent(userId, studentId);
+    return ApiResponse.success(result, 'Switched to student context');
+  }
+
   @Post('switch-school/:schoolId')
   @BypassRestriction()
   @HttpCode(HttpStatus.OK)
@@ -168,6 +196,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @ParentAccessible()
   @BypassRestriction()
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
@@ -180,6 +209,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @ParentAccessible()
   @BypassRestriction()
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get current authenticated user profile with permissions' })

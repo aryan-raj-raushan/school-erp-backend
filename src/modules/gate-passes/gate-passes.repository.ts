@@ -15,13 +15,14 @@ export class GatePassesRepository {
     return row;
   }
 
-  async findAll(schoolId: string, date?: string, status?: string) {
+  async findAll(schoolId: string, date?: string, status?: string, studentId?: string) {
     const conditions: ReturnType<typeof eq>[] = [
       eq(gatePasses.school_id, schoolId),
       eq(gatePasses.deleted, false),
     ];
     if (date) conditions.push(eq(gatePasses.date, date) as any);
     if (status) conditions.push(eq(gatePasses.status, status as any) as any);
+    if (studentId) conditions.push(eq(gatePasses.student_id, studentId) as any);
 
     return this.db
       .select({

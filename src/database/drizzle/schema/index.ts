@@ -25,6 +25,7 @@ export * from './holidays.schema';
 export * from './parents.schema';
 export * from './attendance.schema';
 export * from './fees.schema';
+export * from './fee-payment-gateway-orders.schema';
 // export * from './exams.schema';
 export * from './academics.schema';
 export * from './leave.schema';

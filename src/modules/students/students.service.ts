@@ -403,8 +403,8 @@ export class StudentsService {
     });
   }
 
-  async findAllGuardians(schoolId: string, search?: string) {
-    return this.repo.findAllGuardians(schoolId, search);
+  async findAllGuardians(schoolId: string, search?: string, studentId?: string) {
+    return this.repo.findAllGuardians(schoolId, search, studentId);
   }
 
   async addGuardian(

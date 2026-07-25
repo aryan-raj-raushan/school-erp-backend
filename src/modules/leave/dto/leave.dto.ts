@@ -89,10 +89,13 @@ export class ReviewLeaveDto {
 }
 
 export class ApplyStudentLeaveDto {
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description:
+      'Only required when a staff member is applying on behalf of a student. Ignored for parent-context requests, which are always scoped to the calling parent\'s own child.',
+  })
+  @IsOptional()
   @IsUUID()
-  @IsNotEmpty()
-  student_id: string;
+  student_id?: string;
 
   @ApiProperty({ example: '2025-06-10' })
   @IsDateString()

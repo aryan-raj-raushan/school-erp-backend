@@ -7,8 +7,8 @@ import { CreateGatePassDto } from './dto/gate-passes.dto';
 export class GatePassesService {
   constructor(private readonly repo: GatePassesRepository) {}
 
-  async findAll(schoolId: string, date?: string, status?: string) {
-    return this.repo.findAll(schoolId, date, status);
+  async findAll(schoolId: string, date?: string, status?: string, studentId?: string) {
+    return this.repo.findAll(schoolId, date, status, studentId);
   }
 
   async create(dto: CreateGatePassDto, schoolId: string, createdBy: string) {

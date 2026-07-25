@@ -5,7 +5,7 @@ import { InvoicesService } from './invoices.service';
 import { InvoicesRepository } from './invoices.repository';
 import { PaymentsService } from './payments.service';
 import { PaymentsRepository } from './payments.repository';
-import { RazorpayService } from './razorpay.service';
+import { RazorpayService } from '../../shared/services/razorpay.service';
 import { SubscriptionAssignedListener } from './events/subscription-assigned.listener';
 import { PaymentApprovedListener } from './events/payment-approved.listener';
 import { InvoicePaidListener } from './events/invoice-paid.listener';
@@ -33,6 +33,6 @@ import { UploadsModule } from '../uploads/uploads.module';
     InvoicePaidListener,
     RfidDeviceAssignedListener,
   ],
-  exports: [InvoicesService, InvoicesRepository],
+  exports: [InvoicesService, InvoicesRepository, RazorpayService],
 })
 export class InvoicesModule {}

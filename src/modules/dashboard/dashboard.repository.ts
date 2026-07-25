@@ -6,7 +6,7 @@ import {
   students,
   studentAcademicInfo,
   schoolUsers,
-  parents,
+  studentParents,
   admissionEnquiries,
   attendances,
   feeBills,
@@ -48,8 +48,8 @@ export class DashboardRepository {
   async countParents(schoolId: string): Promise<number> {
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
-      .from(parents)
-      .where(and(eq(parents.school_id, schoolId), eq(parents.deleted, false)));
+      .from(studentParents)
+      .where(and(eq(studentParents.school_id, schoolId), eq(studentParents.deleted, false)));
     return Number(count);
   }
 

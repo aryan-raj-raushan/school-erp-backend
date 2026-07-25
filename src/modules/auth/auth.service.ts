@@ -215,6 +215,92 @@ export class AuthService {
       return {
         must_change_password: true,
         change_token: this.generateParentChangePasswordToken(matched.id),
+        context: AuthContext.PARENT,
+      } satisfies PasswordChangeRequired;
+    }
+
+    await this.authRepo.updateParentLastLogin(matched.id);
+
+    const tokens = await this.generateTokens({
+      sub: matched.id,
+      phone: matched.phone_number,
+      role: ParentRole.PARENT,
+      school_id: matched.school_id,
+      student_id: matched.student_id,
+      context: AuthContext.PARENT,
+    });
+
+    return {
+      ...tokens,
+      user: {
+        id: matched.id,
+        phone: matched.phone_number,
+        role: ParentRole.PARENT,
+        schoolId: matched.school_id,
+        context: AuthContext.PARENT,
+      },
+    };
+  }
+
+  /**
+   * "My children" list for a logged-in parent — re-derives the caller's own
+   * phone/dial_code from their current student_parents row and re-runs the
+   * candidate lookup (same query login uses), joined to each child's name and
+   * current class/section for display.
+   */
+  async getParentChildren(userId: string, currentStudentId?: string) {
+    const self = await this.authRepo.findParentById(userId);
+    if (!self) throw new NotFoundException('User not found');
+
+    const rows = await this.authRepo.findChildrenByPhone(self.phone_number, self.dial_code);
+
+    return rows.map((row) => ({
+      student_id: row.student_id,
+      school_id: row.school_id,
+      relation: row.relation,
+      student_name: [row.student_first_name, row.student_last_name].filter(Boolean).join(' '),
+      class_label: row.class_name
+        ? `${row.class_name}${row.section_name ? ` - ${row.section_name}` : ''}`
+        : null,
+      student_status: row.student_status,
+      is_login_active: row.is_active,
+      is_current: row.student_id === currentStudentId,
+    }));
+  }
+
+  /**
+   * Switch the parent's active session to a different linked child, modeled on
+   * switchSchool — ownership is proven by the target student_id appearing among
+   * the caller's own phone-matched student_parents rows (same trust model
+   * switchSchool uses for company_user_schools membership), not a password
+   * re-prompt. Reissues a full token pair scoped to the new child/school.
+   */
+  async switchStudent(
+    userId: string,
+    studentId: string,
+  ): Promise<LoginResponse | PasswordChangeRequired> {
+    const self = await this.authRepo.findParentById(userId);
+    if (!self) throw new NotFoundException('User not found');
+
+    const candidates = await this.authRepo.findActiveParentCandidatesByPhone(
+      self.phone_number,
+      self.dial_code,
+    );
+    const matched = candidates.find((c) => c.student_id === studentId);
+    if (!matched) {
+      throw new ForbiddenException('This student is not linked to your account');
+    }
+
+    const school = await this.authRepo.findSchoolById(matched.school_id);
+    if (!school || !school.is_active) {
+      throw new UnauthorizedException('School is deactivated');
+    }
+
+    if (matched.must_change_password) {
+      return {
+        must_change_password: true,
+        change_token: this.generateParentChangePasswordToken(matched.id),
+        context: AuthContext.PARENT,
       } satisfies PasswordChangeRequired;
     }
 
@@ -278,7 +364,15 @@ export class AuthService {
       ? await this.authRepo.findSchoolUserByEmail(dto.identifier)
       : await this.authRepo.findSchoolUserByPhone(dto.identifier, dto.dial_code ?? '+91');
 
-    if (!schoolUser) throw new UnauthorizedException('Invalid credentials');
+    // Not a school/company identity — try parent (phone-based only, same as school lookup)
+    if (!schoolUser) {
+      if (isEmail) throw new UnauthorizedException('Invalid credentials');
+      return this.loginParent({
+        phone_number: dto.identifier,
+        dial_code: dto.dial_code ?? '+91',
+        password: dto.password,
+      });
+    }
     if (!schoolUser.is_active) throw new UnauthorizedException('Account is deactivated');
 
     const school = await this.authRepo.findSchoolById(schoolUser.school_id);
@@ -319,6 +413,7 @@ export class AuthService {
       return {
         must_change_password: true,
         change_token: this.generateChangePasswordToken(user.id),
+        context: AuthContext.SCHOOL,
       } satisfies PasswordChangeRequired;
     }
 
@@ -555,6 +650,23 @@ export class AuthService {
         email: user.email,
         role: user.role as CompanyRole,
         context: AuthContext.COMPANY,
+      };
+    } else if (context === AuthContext.PARENT) {
+      const parent = await this.authRepo.findParentById(userId);
+      if (!parent) throw new NotFoundException('User not found');
+
+      const school = await this.authRepo.findSchoolById(parent.school_id);
+      if (!school || !school.is_active) {
+        throw new UnauthorizedException('School is deactivated');
+      }
+
+      payload = {
+        sub: parent.id,
+        phone: parent.phone_number,
+        role: ParentRole.PARENT,
+        school_id: parent.school_id,
+        student_id: parent.student_id,
+        context: AuthContext.PARENT,
       };
     } else {
       const user = await this.authRepo.findSchoolUserById(userId);

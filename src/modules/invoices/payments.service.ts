@@ -7,7 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PaymentsRepository } from './payments.repository';
 import { InvoicesRepository } from './invoices.repository';
-import { RazorpayService, RazorpayOrder } from './razorpay.service';
+import { RazorpayService, RazorpayOrder } from '../../shared/services/razorpay.service';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
 import { SubmitPaymentDto } from './dto/submit-payment.dto';

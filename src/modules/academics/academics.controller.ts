@@ -19,8 +19,12 @@ import { CreateStudyMaterialDto } from './dto/create-study-material.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { ParentAccessible } from '../../common/decorators/parent-accessible.decorator';
+import { GetCurrentStudentId } from '../../common/decorators/current-student-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
+import { StudentsRepository } from '../students/students.repository';
+import { ForbiddenException } from '@nestjs/common';
 
 @ApiTags('Homework')
 @ApiBearerAuth('access-token')
@@ -235,15 +239,29 @@ export class StudyMaterialsController {
 @ApiBearerAuth('access-token')
 @Controller('parents/homeworks')
 export class ParentHomeworkController {
-  constructor(private readonly academicsService: AcademicsService) {}
+  constructor(
+    private readonly academicsService: AcademicsService,
+    private readonly studentsRepository: StudentsRepository,
+  ) {}
 
   @Get()
-  @Permissions(PERMISSION_REGISTRY.homework.view)
+  @ParentAccessible()
   @ApiOperation({ summary: 'View student homework list (parent view)' })
-  @ApiQuery({ name: 'class_id', required: false })
-  async findAll(@GetSchoolId() schoolId: string, @Query('class_id') classId?: string) {
+  async findAll(
+    @GetSchoolId() schoolId: string,
+    @GetCurrentStudentId() studentId: string,
+  ) {
+    const academicInfo = await this.studentsRepository.findCurrentAcademicInfo(
+      studentId,
+      schoolId,
+    );
+    if (!academicInfo) {
+      throw new ForbiddenException('No current class enrollment found for this student');
+    }
     return ApiResponse.success(
-      await this.academicsService.findAllHomework(schoolId, { class_id: classId }),
+      await this.academicsService.findAllHomework(schoolId, {
+        class_id: academicInfo.class_id,
+      }),
       'Homework fetched',
     );
   }

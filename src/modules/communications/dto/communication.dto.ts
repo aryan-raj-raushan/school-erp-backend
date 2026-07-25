@@ -1,5 +1,6 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, IsEnum, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, IsEnum, IsIn, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { SchoolRole, ParentRole } from '../../../shared/enums';
 
 export class SendNotificationDto {
   @ApiProperty({ example: 'Exam Notice' })
@@ -20,7 +21,7 @@ export class SendNotificationDto {
 
   @ApiPropertyOptional({ description: 'Broadcast to a role group' })
   @IsOptional()
-  @IsString()
+  @IsIn([...Object.values(SchoolRole), ...Object.values(ParentRole)])
   recipient_role?: string;
 }
 

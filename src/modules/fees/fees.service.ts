@@ -1,7 +1,14 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { FeesRepository } from './fees.repository';
+import { FeePaymentGatewayOrdersRepository } from './fee-payment-gateway-orders.repository';
 import { FinanceService } from '../finance/finance.service';
 import { RedisService } from '../redis/redis.service';
+import { RazorpayService } from '../../shared/services/razorpay.service';
 import { generateId } from '../../utils/uuid.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CacheTTL } from '../../shared/constants';
@@ -25,6 +32,7 @@ import { UpdateFeeLateRuleDto } from './dto/fee-late-rule/update-fee-late-rule.d
 import { GenerateDemandReceiptDto } from './dto/demand-receipt/generate-demand-receipt.dto';
 import { FilterMonthlyDuesDto } from './dto/monthly-dues/filter-monthly-dues.dto';
 import { GenerateStudentBillsDto } from './dto/fee-bill/generate-student-bills.dto';
+import { FeePaymentGatewayOrder } from './fee-payment-gateway-orders.repository';
 import {
   FeeTypeWithHead,
   FeePlan,
@@ -43,8 +51,10 @@ import {
 export class FeesService {
   constructor(
     private readonly feesRepo: FeesRepository,
+    private readonly gatewayOrdersRepo: FeePaymentGatewayOrdersRepository,
     private readonly financeService: FinanceService,
     private readonly redisService: RedisService,
+    private readonly razorpayService: RazorpayService,
   ) {}
 
   private cacheKey(schoolId: string, suffix: string) {
@@ -793,5 +803,180 @@ export class FeesService {
       dto.month_from,
       dto.month_to,
     );
+  }
+
+  // ─── RAZORPAY ONLINE PAYMENT ─────────────────────────────────────────────────
+
+  /** Shared by both bill lookups below — ownership + remaining-due checks. */
+  private async assertPayableBillForStudent(
+    billId: string,
+    schoolId: string,
+    studentId: string,
+  ): Promise<{ bill: FeeBill; remaining: number }> {
+    const bill = await this.feesRepo.findBillById(billId, schoolId);
+    if (!bill) throw new NotFoundException(`Fee bill '${billId}' not found`);
+    if (bill.student_id !== studentId) {
+      throw new ForbiddenException('This bill does not belong to your child');
+    }
+    if (bill.status === 'PAID' || bill.status === 'WAIVED') {
+      throw new BadRequestException(`Bill is already ${bill.status}`);
+    }
+    const remaining =
+      parseFloat(bill.total_amount) -
+      parseFloat(bill.paid_amount) -
+      parseFloat(bill.discount_amount);
+    return { bill, remaining };
+  }
+
+  async createRazorpayOrder(
+    schoolId: string,
+    studentId: string,
+    billId: string,
+    createdBy: string,
+    requestedAmount?: number,
+  ): Promise<{ orderId: string; amount: number; currency: string; keyId: string }> {
+    const { remaining } = await this.assertPayableBillForStudent(billId, schoolId, studentId);
+
+    const amount = requestedAmount ?? remaining;
+    if (amount <= 0) throw new BadRequestException('Bill has no outstanding balance');
+    if (amount > remaining + 0.01) {
+      throw new BadRequestException(
+        `Payment amount exceeds remaining due of ${remaining.toFixed(2)}`,
+      );
+    }
+
+    // Razorpay caps `receipt` at 40 chars — a 36-char UUID billId already leaves no
+    // room for a prefix (`bill-${billId}` is 41 chars and gets rejected outright).
+    const order = await this.razorpayService.createOrder(amount, 'INR', billId);
+
+    await this.gatewayOrdersRepo.create({
+      id: generateId(),
+      school_id: schoolId,
+      student_id: studentId,
+      bill_id: billId,
+      amount: String(amount),
+      gateway: 'RAZORPAY',
+      gateway_order_id: order.order_id,
+      status: 'CREATED',
+      created_by: createdBy,
+    });
+
+    return {
+      orderId: order.order_id,
+      amount: order.amount,
+      currency: order.currency,
+      keyId: order.key_id,
+    };
+  }
+
+  /**
+   * Client-side post-checkout callback. Idempotent on `gateway_payment_id` — if the order
+   * row is already PAID (e.g. the webhook beat the client callback), just return it as-is
+   * rather than recording a second `fee_bill_payments` row.
+   */
+  async verifyAndRecordRazorpayPayment(
+    schoolId: string,
+    studentId: string,
+    billId: string,
+    razorpayOrderId: string,
+    razorpayPaymentId: string,
+    razorpaySignature: string,
+  ): Promise<{ gatewayOrder: FeePaymentGatewayOrder; payment: FeeBillPayment | null }> {
+    const gatewayOrder = await this.gatewayOrdersRepo.findByGatewayOrderId(razorpayOrderId);
+    if (!gatewayOrder) throw new NotFoundException('Payment order not found');
+    if (gatewayOrder.school_id !== schoolId || gatewayOrder.student_id !== studentId) {
+      throw new ForbiddenException('This payment order does not belong to your child');
+    }
+    if (gatewayOrder.bill_id !== billId) {
+      throw new BadRequestException('Payment order does not match this bill');
+    }
+
+    if (gatewayOrder.status === 'PAID') {
+      // Already recorded (webhook or a retried client callback) — return existing state.
+      const existingPayments = await this.feesRepo.findPaymentsByBillId(billId);
+      const existing =
+        existingPayments.find((p) => p.transaction_id === gatewayOrder.gateway_payment_id) ??
+        null;
+      return { gatewayOrder, payment: existing };
+    }
+
+    const isValid = this.razorpayService.verifyPaymentSignature(
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+    );
+    if (!isValid) {
+      await this.gatewayOrdersRepo.markFailed(gatewayOrder.id);
+      throw new ForbiddenException('Invalid Razorpay payment signature');
+    }
+
+    // Record the real payment first — if this throws (e.g. a race against another payment
+    // already covering the bill), the gateway order stays CREATED and can be retried/reconciled
+    // by the webhook, rather than being stuck PAID with no matching fee_bill_payments row.
+    const payment = await this.payBill(
+      billId,
+      schoolId,
+      {
+        amount: parseFloat(gatewayOrder.amount),
+        payment_mode: 'ONLINE',
+        transaction_id: razorpayPaymentId,
+        payment_date: new Date().toISOString().split('T')[0],
+        remarks: `Razorpay order ${razorpayOrderId}`,
+      } as CreateFeePaymentDto,
+      gatewayOrder.created_by ?? studentId,
+    );
+
+    const paidOrder = await this.gatewayOrdersRepo.markPaid(
+      gatewayOrder.id,
+      razorpayPaymentId,
+      razorpaySignature,
+    );
+
+    return { gatewayOrder: paidOrder, payment };
+  }
+
+  /**
+   * Server-to-server fallback/reconciliation path — mirrors PaymentsService.handleRazorpayWebhook
+   * in the invoices module. Idempotent against the gateway order's own status.
+   */
+  async handleRazorpayWebhook(rawBody: string, signature: string): Promise<void> {
+    if (!this.razorpayService.verifyWebhookSignature(rawBody, signature)) {
+      throw new ForbiddenException('Invalid Razorpay webhook signature');
+    }
+
+    const payload = JSON.parse(rawBody) as {
+      event: string;
+      payload: { payment: { entity: { id: string; order_id: string } } };
+    };
+
+    const entity = payload.payload?.payment?.entity;
+    if (!entity?.order_id) return;
+
+    const gatewayOrder = await this.gatewayOrdersRepo.findByGatewayOrderId(entity.order_id);
+    if (!gatewayOrder) return;
+
+    if (payload.event === 'payment.captured') {
+      if (gatewayOrder.status === 'PAID') return; // already processed — webhook may retry
+
+      await this.payBill(
+        gatewayOrder.bill_id,
+        gatewayOrder.school_id,
+        {
+          amount: parseFloat(gatewayOrder.amount),
+          payment_mode: 'ONLINE',
+          transaction_id: entity.id,
+          payment_date: new Date().toISOString().split('T')[0],
+          remarks: `Razorpay webhook order ${entity.order_id}`,
+        } as CreateFeePaymentDto,
+        gatewayOrder.created_by ?? gatewayOrder.student_id,
+      );
+      // Webhooks don't carry a checkout signature to re-verify — the HMAC check above already
+      // authenticates the payload came from Razorpay, so record with an empty client signature.
+      await this.gatewayOrdersRepo.markPaid(gatewayOrder.id, entity.id, '');
+    } else if (payload.event === 'payment.failed') {
+      if (gatewayOrder.status !== 'PAID') {
+        await this.gatewayOrdersRepo.markFailed(gatewayOrder.id);
+      }
+    }
   }
 }

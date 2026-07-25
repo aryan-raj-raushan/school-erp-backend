@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Razorpay from 'razorpay';
 import {
@@ -32,14 +32,30 @@ export class RazorpayService {
     return this.client;
   }
 
-  /** amount in rupees — Razorpay's API takes paise. */
+  /**
+   * amount in rupees — Razorpay's API takes paise. `receipt` must be <= 40
+   * chars (Razorpay's own limit) — callers should pass a raw id, not a
+   * prefixed string, since a 36-char UUID already leaves no room for one.
+   */
   async createOrder(amount: number, currency: string, receipt: string): Promise<RazorpayOrder> {
     const client = this.getClient();
-    const order = await client.orders.create({
-      amount: Math.round(amount * 100),
-      currency,
-      receipt,
-    });
+    let order;
+    try {
+      order = await client.orders.create({
+        amount: Math.round(amount * 100),
+        currency,
+        receipt,
+      });
+    } catch (err) {
+      // The `razorpay` SDK often rejects with a plain object (not an Error
+      // instance) shaped like Razorpay's API error body — surface its actual
+      // description instead of letting it fall through as an opaque 500.
+      const description =
+        (err as { error?: { description?: string } })?.error?.description ??
+        (err instanceof Error ? err.message : undefined) ??
+        'Razorpay order creation failed';
+      throw new BadRequestException(description);
+    }
     return {
       order_id: order.id,
       amount: Number(order.amount) / 100,

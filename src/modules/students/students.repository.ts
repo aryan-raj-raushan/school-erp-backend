@@ -325,6 +325,7 @@ export class StudentsRepository {
   async findAllGuardians(
     schoolId: string,
     search?: string,
+    studentId?: string,
   ): Promise<
     {
       id: string;
@@ -364,6 +365,7 @@ export class StudentsRepository {
           eq(studentParents.school_id, schoolId),
           eq(studentParents.deleted, false),
           eq(students.deleted, false),
+          ...(studentId ? [eq(studentParents.student_id, studentId)] : []),
           ...(search
             ? [
                 or(

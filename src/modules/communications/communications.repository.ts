@@ -15,12 +15,16 @@ export class CommunicationsRepository {
     return row;
   }
 
-  async findNotificationsForUser(userId: string, schoolId: string): Promise<Notification[]> {
+  async findNotificationsForUser(
+    userId: string,
+    schoolId: string,
+    callerRole: string,
+  ): Promise<Notification[]> {
     return this.db.select().from(notifications).where(
       and(
         eq(notifications.school_id, schoolId),
         eq(notifications.deleted, false),
-        or(eq(notifications.recipient_id, userId)),
+        or(eq(notifications.recipient_id, userId), eq(notifications.recipient_role, callerRole)),
       ),
     ).orderBy(notifications.created_at);
   }

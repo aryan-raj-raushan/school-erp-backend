@@ -2,12 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { DashboardRepository } from './dashboard.repository';
 import { RedisService } from '../redis/redis.service';
 import { CacheTTL } from '../../shared/constants';
+import { StudentsRepository } from '../students/students.repository';
+import { AttendanceService } from '../attendance/attendance.service';
+import { FeesService } from '../fees/fees.service';
 
 @Injectable()
 export class DashboardService {
   constructor(
     private readonly dashboardRepo: DashboardRepository,
     private readonly redisService: RedisService,
+    private readonly studentsRepo: StudentsRepository,
+    private readonly attendanceService: AttendanceService,
+    private readonly feesService: FeesService,
   ) {}
 
   async getAdminDashboard(schoolId: string) {
@@ -154,19 +160,51 @@ export class DashboardService {
     });
   }
 
-  async getParentDashboard(schoolId: string, parentId: string) {
+  async getParentDashboard(schoolId: string, studentId: string) {
     const today = new Date().toISOString().split('T')[0];
-    const key = `dashboard:parent:${schoolId}:${parentId}:${today}`;
+    const key = `dashboard:parent:${schoolId}:${studentId}:${today}`;
 
     return this.redisService.getOrSet(key, CacheTTL.SHORT, async () => {
-      const [recentHomework, upcomingExams, pendingFees, upcomingEvents] = await Promise.all([
-        this.dashboardRepo.getRecentHomework(schoolId),
-        this.dashboardRepo.getUpcomingExams(schoolId),
-        this.dashboardRepo.getPendingFees(schoolId),
-        this.dashboardRepo.getUpcomingEvents(schoolId, 3),
-      ]);
+      const academicInfo = await this.studentsRepo.findCurrentAcademicInfo(studentId, schoolId);
+      const academicYearId = academicInfo?.academic_year_id;
 
-      return { recentHomework, upcomingExams, pendingFees, upcomingEvents };
+      // Note: `getRecentHomework` / `getUpcomingExams` on DashboardRepository are
+      // school-wide with no class_id filter parameter — left as-is per plan (no clean
+      // existing per-class variant to reuse without duplicating query logic).
+      const [attendanceSummary, bills, recentHomework, upcomingExams, upcomingEvents] =
+        await Promise.all([
+          academicYearId
+            ? this.attendanceService.getStudentSummary(studentId, schoolId, academicYearId)
+            : Promise.resolve(null),
+          academicYearId
+            ? this.feesService.findStudentBills(studentId, schoolId, academicYearId)
+            : Promise.resolve([]),
+          this.dashboardRepo.getRecentHomework(schoolId),
+          this.dashboardRepo.getUpcomingExams(schoolId),
+          this.dashboardRepo.getUpcomingEvents(schoolId, 3),
+        ]);
+
+      const pendingBills = bills.filter((b) => b.status !== 'PAID' && b.status !== 'WAIVED');
+      const pendingFees = {
+        count: pendingBills.length,
+        amount: pendingBills.reduce(
+          (sum, b) =>
+            sum +
+            Number(b.total_amount ?? 0) +
+            Number(b.late_fine_amount ?? 0) -
+            Number(b.discount_amount ?? 0) -
+            Number(b.paid_amount ?? 0),
+          0,
+        ),
+      };
+
+      return {
+        attendance: attendanceSummary,
+        recentHomework,
+        upcomingExams,
+        pendingFees,
+        upcomingEvents,
+      };
     });
   }
 

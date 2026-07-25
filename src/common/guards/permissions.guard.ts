@@ -36,6 +36,16 @@ export class PermissionsGuard implements CanActivate {
     // Company SUPER_ADMIN bypasses all permission checks
     if (user.role === CompanyRole.SUPER_ADMIN) return true;
 
+    // Parents never go through the staff permission system — there is no
+    // per-school-configurable permission matrix for the Parent role (every
+    // parent sees everything about their own child, gated by ownership via
+    // ParentScopeGuard/@ParentAccessible() + @GetCurrentStudentId(), not by
+    // a DB-resolved permission set, which for AuthContext.PARENT is always
+    // empty). A route decorated with both @ParentAccessible() and
+    // @Permissions() relies on this bypass to let parent callers through
+    // while staff callers still need the permission.
+    if (user.context === AuthContext.PARENT) return true;
+
     // Any company user impersonating a school (via switchSchool) gets full
     // access as that school's admin — switchSchool already gated which
     // schools they're allowed to impersonate, so this only ever applies to

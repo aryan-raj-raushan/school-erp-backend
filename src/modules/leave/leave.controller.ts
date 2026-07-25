@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { IsString, IsOptional, IsArray, IsEnum, IsUUID } from 'class-validator';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiProperty } from '@nestjs/swagger';
@@ -24,9 +25,13 @@ import {
 } from './dto/leave.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
-import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { GetCurrentUserId, GetCurrentUser } from '../../common/decorators/current-user.decorator';
+import { ParentAccessible } from '../../common/decorators/parent-accessible.decorator';
+import { GetCurrentStudentId } from '../../common/decorators/current-student-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
+import { AuthContext } from '../../shared/enums';
+import type { RequestUser } from '../../shared/types/jwt-payload.types';
 
 class ProvisionDto {
   @ApiProperty({ type: [String] })
@@ -276,22 +281,31 @@ export class ParentLeaveController {
   constructor(private readonly leaveService: LeaveService) {}
 
   @Post('apply')
+  @ParentAccessible()
   @Permissions(PERMISSION_REGISTRY.leave.view)
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Parent: Apply for student leave' })
+  @ApiOperation({
+    summary:
+      'Apply for student leave — parents apply for their own linked child; staff (with leave.view) apply on behalf of any student by passing student_id',
+  })
   async apply(
     @Body() dto: ApplyStudentLeaveDto,
     @GetSchoolId() schoolId: string,
+    @GetCurrentUser() user: RequestUser,
     @GetCurrentUserId() userId: string,
   ) {
+    const studentId = user.context === AuthContext.PARENT ? user.student_id : dto.student_id;
+    if (!studentId) {
+      throw new BadRequestException('student_id is required');
+    }
     return ApiResponse.created(
-      await this.leaveService.applyStudentLeave(dto, schoolId, userId),
+      await this.leaveService.applyStudentLeave(dto, schoolId, studentId, userId),
       'Leave applied',
     );
   }
 
   @Get('my-requests')
-  @Permissions(PERMISSION_REGISTRY.leave.view)
+  @ParentAccessible()
   @ApiOperation({ summary: 'Parent: All leave requests submitted by me' })
   async myRequests(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
     return ApiResponse.success(
@@ -300,12 +314,12 @@ export class ParentLeaveController {
     );
   }
 
-  @Get('student/:studentId/summary')
-  @Permissions(PERMISSION_REGISTRY.leave.view)
-  @ApiOperation({ summary: 'Parent: Leave summary for a student' })
+  @Get('student/summary')
+  @ParentAccessible()
+  @ApiOperation({ summary: 'Parent: Leave summary for my child' })
   async studentSummary(
-    @Param('studentId', ParseUUIDPipe) studentId: string,
     @GetSchoolId() schoolId: string,
+    @GetCurrentStudentId() studentId: string,
   ) {
     return ApiResponse.success(
       await this.leaveService.getStudentLeaveBalanceSummary(studentId, schoolId),

@@ -20,9 +20,11 @@ import {
 } from './dto/communication.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
-import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { GetCurrentUserId, GetCurrentUser } from '../../common/decorators/current-user.decorator';
+import { ParentAccessible } from '../../common/decorators/parent-accessible.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
+import { RequestUser } from '../../shared/types/jwt-payload.types';
 
 @ApiTags('Notifications')
 @ApiBearerAuth('access-token')
@@ -46,10 +48,11 @@ export class NotificationsController {
   }
 
   @Get()
+  @ParentAccessible()
   @ApiOperation({ summary: 'Get notifications for calling user' })
-  async findMine(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
+  async findMine(@GetSchoolId() schoolId: string, @GetCurrentUser() user: RequestUser) {
     return ApiResponse.success(
-      await this.commsService.getNotificationsForUser(userId, schoolId),
+      await this.commsService.getNotificationsForUser(user.sub, schoolId, user.role),
       'Notifications fetched',
     );
   }
@@ -64,6 +67,7 @@ export class NotificationsController {
   }
 
   @Patch('read-all')
+  @ParentAccessible()
   @ApiOperation({ summary: 'Mark all unread notifications as read' })
   async markAllRead(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
     await this.commsService.markAllRead(userId, schoolId);
@@ -71,6 +75,7 @@ export class NotificationsController {
   }
 
   @Get(':id')
+  @ParentAccessible()
   @ApiOperation({ summary: 'Get single notification (auto-mark read)' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     return ApiResponse.success(
@@ -88,6 +93,7 @@ export class NotificationsController {
   }
 
   @Patch(':id/read')
+  @ParentAccessible()
   @ApiOperation({ summary: 'Mark specific notification as read' })
   async markRead(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
     return ApiResponse.success(

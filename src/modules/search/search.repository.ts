@@ -8,7 +8,7 @@ import {
   classes,
   sections,
   schoolUsers,
-  parents,
+  studentParents,
   admissionEnquiries,
   subjects,
   feeTypes,
@@ -108,21 +108,21 @@ export class SearchRepository {
   async searchParents(t: string, schoolId: string): Promise<SearchResultItem[]> {
     const rows = await this.db
       .select({
-        id: parents.id,
-        first_name: parents.first_name,
-        last_name: parents.last_name,
-        phone_number: parents.phone_number,
-        email: parents.email,
+        id: studentParents.id,
+        first_name: studentParents.first_name,
+        last_name: studentParents.last_name,
+        phone_number: studentParents.phone_number,
+        email: studentParents.email,
       })
-      .from(parents)
+      .from(studentParents)
       .where(
         and(
-          eq(parents.school_id, schoolId),
-          eq(parents.deleted, false),
+          eq(studentParents.school_id, schoolId),
+          eq(studentParents.deleted, false),
           or(
-            ilike(parents.first_name, t),
-            ilike(parents.last_name, t),
-            ilike(parents.phone_number, t),
+            ilike(studentParents.first_name, t),
+            ilike(studentParents.last_name, t),
+            ilike(studentParents.phone_number, t),
           ) as SQL,
         ),
       )

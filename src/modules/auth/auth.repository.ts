@@ -10,6 +10,10 @@ import {
   schools,
   schoolRoleEnum,
   studentParents,
+  students,
+  studentAcademicInfo,
+  classes,
+  sections,
 } from '../../database/drizzle/schema';
 import { CompanyRole } from '../../shared/enums';
 
@@ -279,6 +283,9 @@ export class AuthRepository {
         student_id: studentParents.student_id,
         school_id: studentParents.school_id,
         phone_number: studentParents.phone_number,
+        first_name: studentParents.first_name,
+        last_name: studentParents.last_name,
+        relation: studentParents.relation,
         password_hash: studentParents.password_hash,
         must_change_password: studentParents.must_change_password,
       })
@@ -290,6 +297,47 @@ export class AuthRepository {
           eq(studentParents.deleted, false),
           eq(studentParents.is_active, true),
           isNotNull(studentParents.password_hash),
+        ),
+      );
+  }
+
+  /**
+   * Every child linked to this phone number/dial code, active or not — used to
+   * build the parent's "my children" switcher. Deliberately not scoped to one
+   * school (the same phone can be a guardian at more than one school, same as
+   * loginParent already allows), and deliberately not filtered by password_hash
+   * (a child row missing a password shouldn't silently disappear from the list).
+   */
+  async findChildrenByPhone(phone_number: string, dial_code: string) {
+    return this.db
+      .select({
+        parent_row_id: studentParents.id,
+        student_id: studentParents.student_id,
+        school_id: studentParents.school_id,
+        relation: studentParents.relation,
+        is_active: studentParents.is_active,
+        student_first_name: students.first_name,
+        student_last_name: students.last_name,
+        student_status: students.status,
+        class_name: classes.name,
+        section_name: sections.name,
+      })
+      .from(studentParents)
+      .innerJoin(students, eq(students.id, studentParents.student_id))
+      .leftJoin(
+        studentAcademicInfo,
+        and(
+          eq(studentAcademicInfo.student_id, students.id),
+          eq(studentAcademicInfo.is_current, true),
+        ),
+      )
+      .leftJoin(classes, eq(classes.id, studentAcademicInfo.class_id))
+      .leftJoin(sections, eq(sections.id, studentAcademicInfo.section_id))
+      .where(
+        and(
+          eq(studentParents.phone_number, phone_number),
+          eq(studentParents.dial_code, dial_code),
+          eq(studentParents.deleted, false),
         ),
       );
   }

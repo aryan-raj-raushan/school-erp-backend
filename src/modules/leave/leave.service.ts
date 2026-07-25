@@ -336,6 +336,7 @@ export class LeaveService {
   async applyStudentLeave(
     dto: ApplyStudentLeaveDto,
     schoolId: string,
+    studentId: string,
     appliedBy: string,
   ): Promise<StudentLeaveRequest> {
     const from = new Date(dto.from_date);
@@ -344,7 +345,7 @@ export class LeaveService {
     const request = await this.leaveRepo.createStudentRequest({
       id: generateId(),
       school_id: schoolId,
-      student_id: dto.student_id,
+      student_id: studentId,
       applied_by: appliedBy,
       from_date: dto.from_date,
       to_date: dto.to_date,
