@@ -191,7 +191,7 @@ export class FinanceService {
     if (!account.is_enabled) throw new BadRequestException('Account is disabled');
 
     const amountStr = String(dto.total_amount);
-    const expense = await this.financeRepo.createExpense({
+    const expense = await this.financeRepo.createExpenseAndDebit({
       id: generateId(),
       school_id: schoolId,
       created_by: createdBy,
@@ -202,7 +202,6 @@ export class FinanceService {
       date_of_expense: dto.date_of_expense,
       remarks: dto.remarks,
     });
-    await this.financeRepo.debitAccount(dto.from_account_id, amountStr);
     await this.redisService.delByPattern(`${this.expenseKey(schoolId)}:*`);
     await this.redisService.delByPattern(`${this.accountKey(schoolId)}:*`);
     return expense;
@@ -211,8 +210,7 @@ export class FinanceService {
   async removeExpense(id: string, schoolId: string): Promise<void> {
     const expense = await this.financeRepo.findExpenseById(id, schoolId);
     if (!expense) throw new NotFoundException(`Expense '${id}' not found`);
-    await this.financeRepo.softDeleteExpense(id, schoolId);
-    await this.financeRepo.creditAccount(expense.from_account_id, expense.total_amount);
+    await this.financeRepo.softDeleteExpenseAndCredit(id, schoolId);
     await this.redisService.delByPattern(`${this.expenseKey(schoolId)}:*`);
     await this.redisService.delByPattern(`${this.accountKey(schoolId)}:*`);
   }
@@ -238,7 +236,7 @@ export class FinanceService {
     if (!account.is_enabled) throw new BadRequestException('Account is disabled');
 
     const amountStr = String(dto.amount);
-    const income = await this.financeRepo.createIncome({
+    const income = await this.financeRepo.createIncomeAndCredit({
       id: generateId(),
       school_id: schoolId,
       created_by: createdBy,
@@ -249,7 +247,6 @@ export class FinanceService {
       date_of_income: dto.date_of_income,
       remarks: dto.remarks,
     });
-    await this.financeRepo.creditAccount(dto.to_account_id, amountStr);
     await this.redisService.delByPattern(`${this.incomeKey(schoolId)}:*`);
     await this.redisService.delByPattern(`${this.accountKey(schoolId)}:*`);
     return income;
@@ -258,8 +255,7 @@ export class FinanceService {
   async removeIncome(id: string, schoolId: string): Promise<void> {
     const income = await this.financeRepo.findIncomeById(id, schoolId);
     if (!income) throw new NotFoundException(`Income record '${id}' not found`);
-    await this.financeRepo.softDeleteIncome(id, schoolId);
-    await this.financeRepo.debitAccount(income.to_account_id, income.amount);
+    await this.financeRepo.softDeleteIncomeAndDebit(id, schoolId);
     await this.redisService.delByPattern(`${this.incomeKey(schoolId)}:*`);
     await this.redisService.delByPattern(`${this.accountKey(schoolId)}:*`);
   }
@@ -292,7 +288,7 @@ export class FinanceService {
     if (!toAccount.is_enabled) throw new BadRequestException('Destination account is disabled');
 
     const amountStr = String(dto.amount);
-    const transfer = await this.financeRepo.createTransfer({
+    const transfer = await this.financeRepo.createTransferAndMove({
       id: generateId(),
       school_id: schoolId,
       created_by: createdBy,
@@ -302,10 +298,6 @@ export class FinanceService {
       date_of_transaction: dto.date_of_transaction,
       remarks: dto.remarks,
     });
-    await Promise.all([
-      this.financeRepo.debitAccount(dto.from_account_id, amountStr),
-      this.financeRepo.creditAccount(dto.to_account_id, amountStr),
-    ]);
     await this.redisService.delByPattern(`${this.transferKey(schoolId)}:*`);
     await this.redisService.delByPattern(`${this.accountKey(schoolId)}:*`);
     return transfer;
@@ -314,11 +306,7 @@ export class FinanceService {
   async removeTransfer(id: string, schoolId: string): Promise<void> {
     const transfer = await this.financeRepo.findTransferById(id, schoolId);
     if (!transfer) throw new NotFoundException(`Transfer '${id}' not found`);
-    await this.financeRepo.softDeleteTransfer(id, schoolId);
-    await Promise.all([
-      this.financeRepo.creditAccount(transfer.from_account_id, transfer.amount),
-      this.financeRepo.debitAccount(transfer.to_account_id, transfer.amount),
-    ]);
+    await this.financeRepo.softDeleteTransferAndReverse(id, schoolId);
     await this.redisService.delByPattern(`${this.transferKey(schoolId)}:*`);
     await this.redisService.delByPattern(`${this.accountKey(schoolId)}:*`);
   }

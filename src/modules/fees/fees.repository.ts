@@ -551,9 +551,21 @@ export class FeesRepository {
 
   // ─── FEE BILL PAYMENTS ───────────────────────────────────────────────────────
 
-  async createBillPayment(data: NewFeeBillPayment): Promise<FeeBillPayment> {
-    const [row] = await this.db.insert(feeBillPayments).values(data).returning();
-    return row;
+  /** Records the payment and updates the bill's paid_amount/status atomically. */
+  async createBillPaymentAndUpdateBill(
+    paymentData: NewFeeBillPayment,
+    billId: string,
+    schoolId: string,
+    billUpdate: Partial<NewFeeBill>,
+  ): Promise<FeeBillPayment> {
+    return this.db.transaction(async (tx) => {
+      const [payment] = await tx.insert(feeBillPayments).values(paymentData).returning();
+      await tx
+        .update(feeBills)
+        .set({ ...billUpdate, updated_at: new Date() })
+        .where(and(eq(feeBills.id, billId), eq(feeBills.school_id, schoolId)));
+      return payment;
+    });
   }
 
   async findPaymentsByBillId(billId: string): Promise<FeeBillPayment[]> {
@@ -572,8 +584,20 @@ export class FeesRepository {
     return row;
   }
 
-  async deletePayment(id: string): Promise<void> {
-    await this.db.delete(feeBillPayments).where(eq(feeBillPayments.id, id));
+  /** Reverses the bill's paid_amount/status and removes the payment row atomically. */
+  async updateBillAndDeletePayment(
+    billId: string,
+    schoolId: string,
+    billUpdate: Partial<NewFeeBill>,
+    paymentId: string,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(feeBills)
+        .set({ ...billUpdate, updated_at: new Date() })
+        .where(and(eq(feeBills.id, billId), eq(feeBills.school_id, schoolId)));
+      await tx.delete(feeBillPayments).where(eq(feeBillPayments.id, paymentId));
+    });
   }
 
   async findAcademicYearById(id: string): Promise<{ start_date: string } | undefined> {

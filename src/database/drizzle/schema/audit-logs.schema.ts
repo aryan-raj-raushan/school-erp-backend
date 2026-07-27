@@ -13,6 +13,9 @@ export const auditEntityEnum = pgEnum('audit_entity', [
   'EXAM',
   'EXAM_SCHEDULE',
   'EXAM_SITTING_PLAN',
+  'FEES',
+  'FINANCE',
+  'SALARY',
 ]);
 
 export const auditActionEnum = pgEnum('audit_action', [

@@ -1,7 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
-import { AuditLog, AuditLogSchema } from './schemas/audit-log.schema';
 import { DocumentUpload, DocumentUploadSchema } from './schemas/document-upload.schema';
 import { NotificationLog, NotificationLogSchema } from './schemas/notification-log.schema';
 
@@ -16,7 +15,6 @@ import { NotificationLog, NotificationLogSchema } from './schemas/notification-l
       }),
     }),
     MongooseModule.forFeature([
-      { name: AuditLog.name, schema: AuditLogSchema },
       { name: DocumentUpload.name, schema: DocumentUploadSchema },
       { name: NotificationLog.name, schema: NotificationLogSchema },
     ]),

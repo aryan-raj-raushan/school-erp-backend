@@ -2,6 +2,7 @@ import { pgTable, varchar, numeric, boolean, timestamp, date, text } from 'drizz
 import { schools } from './schools.schema';
 import { financeAccounts } from './finance-accounts.schema';
 import { financeHeads } from './finance-heads.schema';
+import { financeExpenses } from './finance-expenses.schema';
 
 export const SALARY_TRANSACTION_STATUSES = ['PENDING', 'PROCESSED', 'PAID'] as const;
 export type SalaryTransactionStatus = (typeof SALARY_TRANSACTION_STATUSES)[number];
@@ -22,6 +23,12 @@ export const salaryTransactions = pgTable('salary_transactions', {
   from_account_id: varchar('from_account_id', { length: 36 }).references(() => financeAccounts.id),
   expense_head_id: varchar('expense_head_id', { length: 36 }).references(() => financeHeads.id),
   deduction_amount: numeric('deduction_amount', { precision: 15, scale: 2 }).notNull().default('0'),
+  // Links to the finance_expenses row created when this transaction is processed
+  // (see SALARY.TRANSACTION_PROCESSED event flow). Null if the transaction has
+  // no from_account_id/expense_head_id, or hasn't been processed yet.
+  finance_expense_id: varchar('finance_expense_id', { length: 36 }).references(
+    () => financeExpenses.id,
+  ),
   remarks: text('remarks'),
   status: varchar('status', { length: 20 }).notNull().default('PENDING'),
   deleted: boolean('deleted').notNull().default(false),

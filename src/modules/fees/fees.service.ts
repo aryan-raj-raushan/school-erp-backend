@@ -449,29 +449,33 @@ export class FeesService {
       }
     }
 
-    const payment = await this.feesRepo.createBillPayment({
-      id: generateId(),
-      school_id: schoolId,
-      bill_id: billId,
-      amount: String(dto.amount),
-      payment_mode: dto.payment_mode as 'CASH' | 'ONLINE' | 'CHEQUE' | 'DD' | 'NEFT' | 'UPI',
-      to_account_id: dto.to_account_id ?? null,
-      transaction_id: dto.transaction_id ?? null,
-      bank_name: dto.bank_name ?? null,
-      payment_date: dto.payment_date,
-      finance_income_id: financeIncomeId,
-      remarks: dto.remarks ?? null,
-      created_by: userId,
-    });
-
     // Update bill paid_amount and status
     const newPaid = parseFloat(bill.paid_amount) + dto.amount;
     const total = parseFloat(bill.total_amount) - parseFloat(bill.discount_amount);
     const newStatus = newPaid >= total ? 'PAID' : newPaid > 0 ? 'PARTIAL' : 'PENDING';
-    await this.feesRepo.updateBill(billId, schoolId, {
-      paid_amount: String(newPaid),
-      status: newStatus as 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'WAIVED',
-    });
+
+    const payment = await this.feesRepo.createBillPaymentAndUpdateBill(
+      {
+        id: generateId(),
+        school_id: schoolId,
+        bill_id: billId,
+        amount: String(dto.amount),
+        payment_mode: dto.payment_mode as 'CASH' | 'ONLINE' | 'CHEQUE' | 'DD' | 'NEFT' | 'UPI',
+        to_account_id: dto.to_account_id ?? null,
+        transaction_id: dto.transaction_id ?? null,
+        bank_name: dto.bank_name ?? null,
+        payment_date: dto.payment_date,
+        finance_income_id: financeIncomeId,
+        remarks: dto.remarks ?? null,
+        created_by: userId,
+      },
+      billId,
+      schoolId,
+      {
+        paid_amount: String(newPaid),
+        status: newStatus as 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'WAIVED',
+      },
+    );
 
     await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
     await this.redisService.delByPattern(`reports:admin:${schoolId}`);
@@ -610,15 +614,6 @@ export class FeesService {
     const bill = await this.feesRepo.findBillById(payment.bill_id, schoolId);
     if (!bill) throw new NotFoundException('Associated bill not found');
 
-    // Reverse paid amount on bill
-    const newPaid = Math.max(0, parseFloat(bill.paid_amount) - parseFloat(payment.amount));
-    const total = parseFloat(bill.total_amount) - parseFloat(bill.discount_amount);
-    const newStatus = newPaid >= total ? 'PAID' : newPaid > 0 ? 'PARTIAL' : 'PENDING';
-    await this.feesRepo.updateBill(bill.id, schoolId, {
-      paid_amount: String(newPaid),
-      status: newStatus as 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'WAIVED',
-    });
-
     // Reverse linked finance income if present
     if (payment.finance_income_id) {
       try {
@@ -628,7 +623,20 @@ export class FeesService {
       }
     }
 
-    await this.feesRepo.deletePayment(paymentId);
+    // Reverse paid amount on bill and remove the payment row atomically
+    const newPaid = Math.max(0, parseFloat(bill.paid_amount) - parseFloat(payment.amount));
+    const total = parseFloat(bill.total_amount) - parseFloat(bill.discount_amount);
+    const newStatus = newPaid >= total ? 'PAID' : newPaid > 0 ? 'PARTIAL' : 'PENDING';
+    await this.feesRepo.updateBillAndDeletePayment(
+      bill.id,
+      schoolId,
+      {
+        paid_amount: String(newPaid),
+        status: newStatus as 'PENDING' | 'PARTIAL' | 'PAID' | 'OVERDUE' | 'WAIVED',
+      },
+      paymentId,
+    );
+
     await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
     await this.redisService.delByPattern(`reports:admin:${schoolId}`);
   }

@@ -192,14 +192,12 @@ export class SalaryRepository {
     templateId: string,
     items: Omit<NewSalaryStructureItem, 'id' | 'created_at'>[],
   ): Promise<void> {
-    await this.db
-      .delete(salaryStructureItems)
-      .where(eq(salaryStructureItems.template_id, templateId));
-    if (items.length) {
-      await this.db
-        .insert(salaryStructureItems)
-        .values(items.map((i) => ({ ...i, id: generateId() })));
-    }
+    await this.db.transaction(async (tx) => {
+      await tx.delete(salaryStructureItems).where(eq(salaryStructureItems.template_id, templateId));
+      if (items.length) {
+        await tx.insert(salaryStructureItems).values(items.map((i) => ({ ...i, id: generateId() })));
+      }
+    });
   }
 
   // ─── ASSIGNMENTS ─────────────────────────────────────────────────────────────
@@ -321,6 +319,7 @@ export class SalaryRepository {
         deduction_amount: salaryTransactions.deduction_amount,
         from_account_id: salaryTransactions.from_account_id,
         expense_head_id: salaryTransactions.expense_head_id,
+        finance_expense_id: salaryTransactions.finance_expense_id,
         remarks: salaryTransactions.remarks,
         status: salaryTransactions.status,
         deleted: salaryTransactions.deleted,
@@ -394,6 +393,17 @@ export class SalaryRepository {
     await this.db
       .update(salaryTransactions)
       .set({ deleted: true, updated_at: new Date() })
+      .where(and(eq(salaryTransactions.id, id), eq(salaryTransactions.school_id, schoolId)));
+  }
+
+  async linkFinanceExpense(
+    id: string,
+    schoolId: string,
+    financeExpenseId: string,
+  ): Promise<void> {
+    await this.db
+      .update(salaryTransactions)
+      .set({ finance_expense_id: financeExpenseId, updated_at: new Date() })
       .where(and(eq(salaryTransactions.id, id), eq(salaryTransactions.school_id, schoolId)));
   }
 }

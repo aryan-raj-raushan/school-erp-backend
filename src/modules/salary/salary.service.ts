@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SalaryRepository } from './salary.repository';
 import { RedisService } from '../redis/redis.service';
 import { CacheTTL } from '../../shared/constants/cache.constants';
@@ -17,12 +18,15 @@ import {
   SalaryAssignmentWithRelations,
   SalaryTransactionWithRelations,
 } from './types/salary.types';
+import { APP_EVENTS } from '../../shared/events/event-names';
+import { SalaryTransactionProcessedEvent, SalaryTransactionVoidedEvent } from './events/salary.events';
 
 @Injectable()
 export class SalaryService {
   constructor(
     private readonly salaryRepo: SalaryRepository,
     private readonly redisService: RedisService,
+    private readonly events: EventEmitter2,
   ) {}
 
   private headKey(schoolId: string) {
@@ -247,16 +251,46 @@ export class SalaryService {
     if (!txn) throw new NotFoundException(`Salary transaction '${id}' not found`);
     if (txn.status !== 'PENDING')
       throw new BadRequestException(`Transaction is already ${txn.status}`);
-    const updated = await this.salaryRepo.updateTransactionStatus(id, schoolId, 'PROCESSED');
+    await this.salaryRepo.updateTransactionStatus(id, schoolId, 'PROCESSED');
+
+    // Post to Finance as an expense — only when an account/head was chosen at
+    // creation time (e.g. cash paid outside tracked accounts has neither, and
+    // that's a legitimate, permanent state, not something to fix here).
+    // Decoupled via event: neither SalaryModule nor FinanceModule imports the
+    // other's module, matching the RFID_INVENTORY -> Invoices precedent.
+    if (txn.from_account_id && txn.expense_head_id) {
+      await this.events.emitAsync(APP_EVENTS.SALARY.TRANSACTION_PROCESSED, {
+        transactionId: txn.id,
+        schoolId,
+        employeeId: txn.employee_id,
+        fromAccountId: txn.from_account_id,
+        expenseHeadId: txn.expense_head_id,
+        netAmount: String(Number(txn.total_amount) - Number(txn.deduction_amount)),
+        dateOfExpense: txn.payment_release_date,
+        remarks: txn.remarks ?? undefined,
+      } satisfies SalaryTransactionProcessedEvent);
+    }
+
     await this.redisService.delByPattern(`${this.txnKey(schoolId)}:*`);
-    return updated;
+    // Re-fetch: the emitAsync above may have written finance_expense_id back
+    // via the second-hop listener, which the pre-emit row doesn't have.
+    return this.salaryRepo.findTransactionById(id, schoolId);
   }
 
   async deleteTransaction(id: string, schoolId: string): Promise<void> {
     const txn = await this.salaryRepo.findTransactionById(id, schoolId);
     if (!txn) throw new NotFoundException(`Salary transaction '${id}' not found`);
-    if (txn.status !== 'PENDING')
-      throw new BadRequestException('Only PENDING transactions can be deleted');
+    if (txn.status !== 'PENDING' && txn.status !== 'PROCESSED')
+      throw new BadRequestException('Only PENDING or PROCESSED transactions can be deleted');
+
+    if (txn.status === 'PROCESSED' && txn.finance_expense_id) {
+      await this.events.emitAsync(APP_EVENTS.SALARY.TRANSACTION_VOIDED, {
+        transactionId: txn.id,
+        schoolId,
+        financeExpenseId: txn.finance_expense_id,
+      } satisfies SalaryTransactionVoidedEvent);
+    }
+
     await this.salaryRepo.softDeleteTransaction(id, schoolId);
     await this.redisService.delByPattern(`${this.txnKey(schoolId)}:*`);
   }

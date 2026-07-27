@@ -59,6 +59,7 @@ import { MsgpackInterceptor } from './common/interceptors/msgpack.interceptor';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { TenantMiddleware } from './common/middleware/tenant.middleware';
 import { SchoolEventsModule } from '@modules/school-events/school-events.module';
 import { AdmissionModule } from '@modules/admission/admission.module';
@@ -149,6 +150,11 @@ import { ParentPortalModule } from '@modules/parent-portal/parent-portal.module'
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_GUARD, useClass: SchoolRestrictionGuard },
     { provide: APP_INTERCEPTOR, useClass: MsgpackInterceptor },
+    // Must sit here: after ResponseTransformInterceptor wraps the payload into
+    // { success, message, data } (so AuditInterceptor's tap can read
+    // responseData.data), but before MsgpackInterceptor serializes it to a
+    // binary buffer. Registration order in this array IS interceptor order.
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TimeoutInterceptor },

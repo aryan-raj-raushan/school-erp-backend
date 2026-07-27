@@ -102,26 +102,6 @@ export class FinanceRepository {
     return row;
   }
 
-  async creditAccount(id: string, amount: string): Promise<void> {
-    await this.db
-      .update(financeAccounts)
-      .set({
-        current_balance: sql`${financeAccounts.current_balance} + ${amount}::numeric`,
-        updated_at: new Date(),
-      })
-      .where(eq(financeAccounts.id, id));
-  }
-
-  async debitAccount(id: string, amount: string): Promise<void> {
-    await this.db
-      .update(financeAccounts)
-      .set({
-        current_balance: sql`${financeAccounts.current_balance} - ${amount}::numeric`,
-        updated_at: new Date(),
-      })
-      .where(eq(financeAccounts.id, id));
-  }
-
   async softDeleteAccount(id: string, schoolId: string): Promise<void> {
     await this.db
       .update(financeAccounts)
@@ -275,18 +255,42 @@ export class FinanceRepository {
     return row;
   }
 
-  async createExpense(data: NewFinanceExpense): Promise<FinanceExpense> {
-    const [row] = await this.db.insert(financeExpenses).values(data).returning();
-    return row;
+  /** Inserts the expense and debits the account atomically. */
+  async createExpenseAndDebit(data: NewFinanceExpense): Promise<FinanceExpense> {
+    return this.db.transaction(async (tx) => {
+      const [expense] = await tx.insert(financeExpenses).values(data).returning();
+      await tx
+        .update(financeAccounts)
+        .set({
+          current_balance: sql`${financeAccounts.current_balance} - ${data.total_amount}::numeric`,
+          updated_at: new Date(),
+        })
+        .where(eq(financeAccounts.id, data.from_account_id));
+      return expense;
+    });
   }
 
-  async softDeleteExpense(id: string, schoolId: string): Promise<FinanceExpense | undefined> {
-    const [row] = await this.db
-      .update(financeExpenses)
-      .set({ deleted: true, updated_at: new Date() })
-      .where(and(eq(financeExpenses.id, id), eq(financeExpenses.school_id, schoolId)))
-      .returning();
-    return row;
+  /** Soft-deletes the expense and credits the account back atomically. */
+  async softDeleteExpenseAndCredit(
+    id: string,
+    schoolId: string,
+  ): Promise<FinanceExpense | undefined> {
+    return this.db.transaction(async (tx) => {
+      const [expense] = await tx
+        .update(financeExpenses)
+        .set({ deleted: true, updated_at: new Date() })
+        .where(and(eq(financeExpenses.id, id), eq(financeExpenses.school_id, schoolId)))
+        .returning();
+      if (!expense) return expense;
+      await tx
+        .update(financeAccounts)
+        .set({
+          current_balance: sql`${financeAccounts.current_balance} + ${expense.total_amount}::numeric`,
+          updated_at: new Date(),
+        })
+        .where(eq(financeAccounts.id, expense.from_account_id));
+      return expense;
+    });
   }
 
   // ─── INCOME ─────────────────────────────────────────────────────────────────
@@ -356,18 +360,42 @@ export class FinanceRepository {
     return row;
   }
 
-  async createIncome(data: NewFinanceIncomeRecord): Promise<FinanceIncomeRecord> {
-    const [row] = await this.db.insert(financeIncome).values(data).returning();
-    return row;
+  /** Inserts the income and credits the account atomically. */
+  async createIncomeAndCredit(data: NewFinanceIncomeRecord): Promise<FinanceIncomeRecord> {
+    return this.db.transaction(async (tx) => {
+      const [income] = await tx.insert(financeIncome).values(data).returning();
+      await tx
+        .update(financeAccounts)
+        .set({
+          current_balance: sql`${financeAccounts.current_balance} + ${data.amount}::numeric`,
+          updated_at: new Date(),
+        })
+        .where(eq(financeAccounts.id, data.to_account_id));
+      return income;
+    });
   }
 
-  async softDeleteIncome(id: string, schoolId: string): Promise<FinanceIncomeRecord | undefined> {
-    const [row] = await this.db
-      .update(financeIncome)
-      .set({ deleted: true, updated_at: new Date() })
-      .where(and(eq(financeIncome.id, id), eq(financeIncome.school_id, schoolId)))
-      .returning();
-    return row;
+  /** Soft-deletes the income and debits the account back atomically. */
+  async softDeleteIncomeAndDebit(
+    id: string,
+    schoolId: string,
+  ): Promise<FinanceIncomeRecord | undefined> {
+    return this.db.transaction(async (tx) => {
+      const [income] = await tx
+        .update(financeIncome)
+        .set({ deleted: true, updated_at: new Date() })
+        .where(and(eq(financeIncome.id, id), eq(financeIncome.school_id, schoolId)))
+        .returning();
+      if (!income) return income;
+      await tx
+        .update(financeAccounts)
+        .set({
+          current_balance: sql`${financeAccounts.current_balance} - ${income.amount}::numeric`,
+          updated_at: new Date(),
+        })
+        .where(eq(financeAccounts.id, income.to_account_id));
+      return income;
+    });
   }
 
   // ─── TRANSFERS ──────────────────────────────────────────────────────────────
@@ -456,18 +484,56 @@ export class FinanceRepository {
     return row;
   }
 
-  async createTransfer(data: NewFinanceTransfer): Promise<FinanceTransfer> {
-    const [row] = await this.db.insert(financeTransfers).values(data).returning();
-    return row;
+  /** Inserts the transfer and moves the balance between both accounts atomically. */
+  async createTransferAndMove(data: NewFinanceTransfer): Promise<FinanceTransfer> {
+    return this.db.transaction(async (tx) => {
+      const [transfer] = await tx.insert(financeTransfers).values(data).returning();
+      await tx
+        .update(financeAccounts)
+        .set({
+          current_balance: sql`${financeAccounts.current_balance} - ${data.amount}::numeric`,
+          updated_at: new Date(),
+        })
+        .where(eq(financeAccounts.id, data.from_account_id));
+      await tx
+        .update(financeAccounts)
+        .set({
+          current_balance: sql`${financeAccounts.current_balance} + ${data.amount}::numeric`,
+          updated_at: new Date(),
+        })
+        .where(eq(financeAccounts.id, data.to_account_id));
+      return transfer;
+    });
   }
 
-  async softDeleteTransfer(id: string, schoolId: string): Promise<FinanceTransfer | undefined> {
-    const [row] = await this.db
-      .update(financeTransfers)
-      .set({ deleted: true, updated_at: new Date() })
-      .where(and(eq(financeTransfers.id, id), eq(financeTransfers.school_id, schoolId)))
-      .returning();
-    return row;
+  /** Soft-deletes the transfer and reverses the balance move atomically. */
+  async softDeleteTransferAndReverse(
+    id: string,
+    schoolId: string,
+  ): Promise<FinanceTransfer | undefined> {
+    return this.db.transaction(async (tx) => {
+      const [transfer] = await tx
+        .update(financeTransfers)
+        .set({ deleted: true, updated_at: new Date() })
+        .where(and(eq(financeTransfers.id, id), eq(financeTransfers.school_id, schoolId)))
+        .returning();
+      if (!transfer) return transfer;
+      await tx
+        .update(financeAccounts)
+        .set({
+          current_balance: sql`${financeAccounts.current_balance} + ${transfer.amount}::numeric`,
+          updated_at: new Date(),
+        })
+        .where(eq(financeAccounts.id, transfer.from_account_id));
+      await tx
+        .update(financeAccounts)
+        .set({
+          current_balance: sql`${financeAccounts.current_balance} - ${transfer.amount}::numeric`,
+          updated_at: new Date(),
+        })
+        .where(eq(financeAccounts.id, transfer.to_account_id));
+      return transfer;
+    });
   }
 
   // ─── REPORTS ────────────────────────────────────────────────────────────────

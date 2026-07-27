@@ -34,4 +34,11 @@ export const APP_EVENTS = {
   RFID_INVENTORY: {
     DEVICE_ASSIGNED: 'rfid-inventory.device-assigned',
   },
+  SALARY: {
+    TRANSACTION_PROCESSED: 'salary.transaction-processed',
+    TRANSACTION_VOIDED: 'salary.transaction-voided',
+  },
+  FINANCE: {
+    SALARY_EXPENSE_POSTED: 'finance.salary-expense-posted',
+  },
 } as const;
