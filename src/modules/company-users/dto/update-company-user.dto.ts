@@ -1,14 +1,17 @@
-import { IsString, IsOptional, IsEnum, MaxLength, IsBoolean } from 'class-validator';
+import { IsString, Matches, IsOptional, IsEnum, MaxLength, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { REGEX } from '../../../utils/regex.utils';
 import { StringUtils } from '../../../utils/string.utils';
 import { CompanyRole } from '../../../shared/enums';
+import { PERSON_NAME_MESSAGE } from '../../../shared/constants';
 
 export class UpdateCompanyUserDto {
   @ApiPropertyOptional({ example: 'Ramesh' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
+  @Matches(REGEX.PERSON_NAME, { message: PERSON_NAME_MESSAGE })
   @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
   first_name?: string;
 
@@ -16,7 +19,8 @@ export class UpdateCompanyUserDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
+  @Matches(REGEX.PERSON_NAME, { message: PERSON_NAME_MESSAGE })
+  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)) || undefined)
   last_name?: string;
 
   @ApiPropertyOptional({ enum: CompanyRole, example: CompanyRole.SALES })

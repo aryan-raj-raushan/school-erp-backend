@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, ilike, sql } from 'drizzle-orm';
+import { eq, and, ilike, or, sql, SQL } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { companyUsers, companyUserSchools, schools } from '../../database/drizzle/schema';
@@ -25,12 +25,25 @@ const PROFILE_COLUMNS = {
 export class CompanyUsersRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
 
-  async findAll(filters: CompanyUserFilterDto): Promise<CompanyUserProfile[]> {
-    const conditions = [eq(companyUsers.deleted, false)];
-    if (filters.search) conditions.push(ilike(companyUsers.first_name, `%${filters.search}%`));
+  private filterConditions(filters: CompanyUserFilterDto): SQL[] {
+    const conditions: SQL[] = [eq(companyUsers.deleted, false)];
+    if (filters.search) {
+      const term = `%${filters.search}%`;
+      conditions.push(
+        or(
+          sql`(${companyUsers.first_name} || ' ' || coalesce(${companyUsers.last_name}, '')) ilike ${term}`,
+          ilike(companyUsers.email, term),
+        )!,
+      );
+    }
     if (filters.role) conditions.push(eq(companyUsers.role, filters.role));
     if (filters.is_active !== undefined)
       conditions.push(eq(companyUsers.is_active, filters.is_active));
+    return conditions;
+  }
+
+  async findAll(filters: CompanyUserFilterDto): Promise<CompanyUserProfile[]> {
+    const conditions = this.filterConditions(filters);
 
     const limit = filters.limit ?? 20;
     const offset = ((filters.page ?? 1) - 1) * limit;
@@ -44,11 +57,7 @@ export class CompanyUsersRepository {
   }
 
   async count(filters: CompanyUserFilterDto): Promise<number> {
-    const conditions = [eq(companyUsers.deleted, false)];
-    if (filters.search) conditions.push(ilike(companyUsers.first_name, `%${filters.search}%`));
-    if (filters.role) conditions.push(eq(companyUsers.role, filters.role));
-    if (filters.is_active !== undefined)
-      conditions.push(eq(companyUsers.is_active, filters.is_active));
+    const conditions = this.filterConditions(filters);
 
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
@@ -97,11 +106,13 @@ export class CompanyUsersRepository {
       .where(eq(companyUserSchools.user_id, userId));
   }
 
-  async assignSchool(userId: string, schoolId: string, grantedBy: string): Promise<void> {
-    await this.db
+  async assignSchool(userId: string, schoolId: string, grantedBy: string): Promise<boolean> {
+    const inserted = await this.db
       .insert(companyUserSchools)
       .values({ id: generateId(), user_id: userId, school_id: schoolId, granted_by: grantedBy })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: companyUserSchools.id });
+    return inserted.length > 0;
   }
 
   async unassignSchool(userId: string, schoolId: string): Promise<void> {

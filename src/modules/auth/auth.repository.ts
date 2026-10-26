@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, isNotNull } from 'drizzle-orm';
+import { eq, and, asc, isNotNull } from 'drizzle-orm';
 
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
@@ -88,7 +88,9 @@ export class AuthRepository {
           eq(schoolUsers.dial_code, dial_code),
           eq(schoolUsers.deleted, false),
         ),
-      );
+      )
+      .orderBy(asc(schoolUsers.created_at))
+      .limit(1);
     return user ?? null;
   }
 
@@ -96,7 +98,9 @@ export class AuthRepository {
     const [user] = await this.db
       .select()
       .from(schoolUsers)
-      .where(and(eq(schoolUsers.email, email), eq(schoolUsers.deleted, false)));
+      .where(and(eq(schoolUsers.email, email), eq(schoolUsers.deleted, false)))
+      .orderBy(asc(schoolUsers.created_at))
+      .limit(1);
     return user ?? null;
   }
 

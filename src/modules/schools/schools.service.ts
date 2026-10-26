@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SchoolsRepository } from './schools.repository';
@@ -110,6 +111,28 @@ export class SchoolsService {
     }
   }
 
+  private async assertAdminLoginAvailable(
+    phone: string | undefined,
+    dialCode: string,
+    email: string | undefined,
+    excludeUserId?: string,
+  ): Promise<void> {
+    if (phone) {
+      const holder = await this.authRepo.findSchoolUserByPhone(phone, dialCode);
+      if (holder && holder.id !== excludeUserId) {
+        throw new ConflictException(
+          `Phone number '${phone}' is already registered to another user`,
+        );
+      }
+    }
+    if (email) {
+      const holder = await this.authRepo.findSchoolUserByEmail(email);
+      if (holder && holder.id !== excludeUserId) {
+        throw new ConflictException(`Email '${email}' is already registered to another user`);
+      }
+    }
+  }
+
   async create(dto: CreateSchoolDto, createdBy: string): Promise<SchoolWithCredentials> {
     if (dto.admin_phone && !dto.admin_first_name) {
       throw new BadRequestException('admin_first_name is required when admin_phone is provided');
@@ -117,6 +140,11 @@ export class SchoolsService {
     if (dto.admin_email && !dto.admin_phone && !dto.admin_first_name) {
       throw new BadRequestException('admin_first_name is required when admin_email is provided');
     }
+    await this.assertAdminLoginAvailable(
+      dto.admin_phone,
+      dto.admin_dial_code ?? dto.dial_code ?? '+91',
+      dto.admin_email,
+    );
 
     const {
       admin_first_name,
@@ -227,6 +255,12 @@ export class SchoolsService {
     },
   ): Promise<SchoolAdminCredentials | undefined> {
     const existing = await this.authRepo.findSchoolAdminBySchoolId(schoolId);
+    await this.assertAdminLoginAvailable(
+      fields.admin_phone,
+      fields.admin_dial_code ?? existing?.dial_code ?? '+91',
+      fields.admin_email,
+      existing?.id,
+    );
 
     if (existing) {
       const patch: Partial<{

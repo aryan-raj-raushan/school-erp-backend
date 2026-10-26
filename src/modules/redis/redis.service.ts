@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { AuthTTL } from '../../shared/constants';
 
 interface L1Entry<T> {
   data: T;
@@ -156,6 +157,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       seen.add(item.id);
       return true;
     });
+  }
+
+  async revokeUserSessions(userId: string): Promise<void> {
+    await this.delByPattern(`refresh_token:${userId}:*`);
+    await this.del(`session:${userId}`);
+    await this.setex(
+      `revoked_before:${userId}`,
+      AuthTTL.ACCESS_TOKEN_SECONDS,
+      String(Math.floor(Date.now() / 1000)),
+    );
   }
 
   async delByPattern(pattern: string): Promise<void> {

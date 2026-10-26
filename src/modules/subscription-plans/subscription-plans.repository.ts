@@ -1,8 +1,8 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, ilike, sql } from 'drizzle-orm';
+import { eq, and, ilike, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { subscriptionPlans } from '../../database/drizzle/schema';
+import { subscriptionPlans, subscriptions } from '../../database/drizzle/schema';
 import { SubscriptionPlanFilterDto } from './dto/subscription-plan-filter.dto';
 import { SubscriptionPlanEntity, NewSubscriptionPlan } from './types/subscription-plan.types';
 
@@ -50,6 +50,32 @@ export class SubscriptionPlansRepository {
       .from(subscriptionPlans)
       .where(eq(subscriptionPlans.id, id));
     return row;
+  }
+
+  async findByName(name: string): Promise<SubscriptionPlanEntity | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(subscriptionPlans)
+      .where(sql`lower(${subscriptionPlans.name}) = lower(${name})`)
+      .limit(1);
+    return row;
+  }
+
+  async countCurrentSubscriptions(planId: string): Promise<number> {
+    const [{ count }] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.plan_id, planId),
+          inArray(subscriptions.status, ['ACTIVE', 'TRIAL', 'PENDING']),
+        ),
+      );
+    return Number(count);
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.db.delete(subscriptionPlans).where(eq(subscriptionPlans.id, id));
   }
 
   async create(data: NewSubscriptionPlan): Promise<SubscriptionPlanEntity> {

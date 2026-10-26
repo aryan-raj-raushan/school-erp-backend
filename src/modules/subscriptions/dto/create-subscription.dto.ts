@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsNumber,
   IsPositive,
+  Max,
   IsInt,
   Min,
   IsBoolean,
@@ -22,6 +23,7 @@ import {
   RestrictionMode,
   PaymentMethod,
 } from '../../../shared/enums';
+import { MONEY_DECIMAL_PLACES, MONEY_MAX_AMOUNT } from '../../../shared/constants';
 
 export class CreateSubscriptionDto {
   @ApiProperty({ format: 'uuid' })
@@ -59,16 +61,24 @@ export class CreateSubscriptionDto {
   // Required when billing_model = FLAT and plan_id is not given
   @ApiPropertyOptional({ example: 4999 })
   @IsOptional()
-  @IsNumber()
+  @IsNumber(
+    { maxDecimalPlaces: MONEY_DECIMAL_PLACES },
+    { message: '$property must be a number with at most 2 decimal places' },
+  )
   @IsPositive()
+  @Max(MONEY_MAX_AMOUNT)
   @Type(() => Number)
   amount?: number;
 
   // Required when billing_model = PER_STUDENT and plan_id is not given
   @ApiPropertyOptional({ example: 10 })
   @IsOptional()
-  @IsNumber()
+  @IsNumber(
+    { maxDecimalPlaces: MONEY_DECIMAL_PLACES },
+    { message: '$property must be a number with at most 2 decimal places' },
+  )
   @IsPositive()
+  @Max(MONEY_MAX_AMOUNT)
   @Type(() => Number)
   price_per_student?: number;
 

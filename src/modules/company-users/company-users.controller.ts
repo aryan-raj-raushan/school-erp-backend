@@ -82,16 +82,20 @@ export class CompanyUsersController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a company user' })
-  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCompanyUserDto) {
-    const data = await this.companyUsersService.update(id, dto);
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCompanyUserDto,
+    @GetCurrentUserId() currentUserId: string,
+  ) {
+    const data = await this.companyUsersService.update(id, dto, currentUserId);
     return ApiResponse.success(data, 'Company user updated successfully');
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft delete a company user' })
-  async remove(@Param('id', ParseUUIDPipe) id: string) {
-    await this.companyUsersService.remove(id);
+  async remove(@Param('id', ParseUUIDPipe) id: string, @GetCurrentUserId() currentUserId: string) {
+    await this.companyUsersService.remove(id, currentUserId);
     return ApiResponse.noContent('Company user deleted successfully');
   }
 }

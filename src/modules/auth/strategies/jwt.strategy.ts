@@ -25,6 +25,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (payload.iat) {
       const blocked = await this.redisService.exists(`blocked_at:${payload.sub}:${payload.iat}`);
       if (blocked) throw new UnauthorizedException('Token has been revoked');
+
+      const revokedBefore = await this.redisService.get(`revoked_before:${payload.sub}`);
+      if (revokedBefore && payload.iat <= Number(revokedBefore)) {
+        throw new UnauthorizedException('Token has been revoked');
+      }
     }
 
     return payload;

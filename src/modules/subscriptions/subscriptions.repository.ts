@@ -6,6 +6,8 @@ import {
   subscriptions,
   subscriptionPayments,
   companyUserSchools,
+  students,
+  schools,
 } from '../../database/drizzle/schema';
 import {
   Subscription,
@@ -72,6 +74,43 @@ export class SubscriptionsRepository {
       .where(and(eq(subscriptions.school_id, schoolId), eq(subscriptions.status, 'ACTIVE')))
       .limit(1);
     return row;
+  }
+
+  async findCurrentBySchoolId(schoolId: string): Promise<Subscription | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.school_id, schoolId),
+          inArray(subscriptions.status, ['ACTIVE', 'TRIAL', 'PENDING']),
+        ),
+      )
+      .limit(1);
+    return row;
+  }
+
+  async schoolExists(schoolId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: schools.id })
+      .from(schools)
+      .where(eq(schools.id, schoolId))
+      .limit(1);
+    return !!row;
+  }
+
+  async countActiveStudents(schoolId: string): Promise<number> {
+    const [{ count }] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(students)
+      .where(
+        and(
+          eq(students.school_id, schoolId),
+          eq(students.status, 'ACTIVE'),
+          eq(students.deleted, false),
+        ),
+      );
+    return Number(count);
   }
 
   /** True if the school has an EXPIRED (lapsed, not auto-renewed) subscription whose grace period has also passed. */

@@ -3,13 +3,13 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SubscriptionsRepository } from './subscriptions.repository';
 import { SubscriptionPlansRepository } from '../subscription-plans/subscription-plans.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
-import { DateUtils } from '../../utils/date.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
@@ -106,8 +106,35 @@ export class SubscriptionsService {
     return sub ?? null;
   }
 
+  private static assertValidDates(dates: {
+    start_date: Date;
+    end_date?: Date | null;
+    is_trial?: boolean | null;
+    trial_end_date?: Date | null;
+  }): void {
+    if (dates.end_date && dates.end_date <= dates.start_date) {
+      throw new BadRequestException('end_date must be after start_date');
+    }
+    if (dates.is_trial && !dates.trial_end_date) {
+      throw new BadRequestException('trial_end_date is required for a trial subscription');
+    }
+    if (dates.trial_end_date && dates.trial_end_date <= dates.start_date) {
+      throw new BadRequestException('trial_end_date must be after start_date');
+    }
+  }
+
   async create(dto: CreateSubscriptionDto, userId: string, role: string): Promise<Subscription> {
     await this.assertSchoolAccess(dto.school_id, userId, role);
+    if (!(await this.subscriptionsRepo.schoolExists(dto.school_id))) {
+      throw new NotFoundException(`School '${dto.school_id}' not found`);
+    }
+
+    const current = await this.subscriptionsRepo.findCurrentBySchoolId(dto.school_id);
+    if (current) {
+      throw new ConflictException(
+        `This school already has a subscription (${current.plan_name}, ${current.status}) — cancel it before assigning a new one`,
+      );
+    }
 
     let plan_name: string;
     let plan_type: SubscriptionPlan;
@@ -141,13 +168,22 @@ export class SubscriptionsService {
       plan_name = dto.plan_name;
       plan_type = dto.plan_type;
       billing_model = dto.billing_model;
-      amount = dto.amount;
-      price_per_student = dto.price_per_student;
+      amount = billing_model === BillingModel.FLAT ? dto.amount : undefined;
+      price_per_student =
+        billing_model === BillingModel.PER_STUDENT ? dto.price_per_student : undefined;
     }
 
     // Postpaid: the school gets access immediately and is billed in arrears
     // at the end of each cycle — there's no "pending" gate to wait behind.
     const start_date = dto.start_date ? new Date(dto.start_date) : new Date();
+    const end_date = dto.end_date ? new Date(dto.end_date) : undefined;
+    const trial_end_date = dto.trial_end_date ? new Date(dto.trial_end_date) : undefined;
+    SubscriptionsService.assertValidDates({
+      start_date,
+      end_date,
+      is_trial: dto.is_trial,
+      trial_end_date,
+    });
 
     const sub = await this.subscriptionsRepo.create({
       id: generateId(),
@@ -172,8 +208,8 @@ export class SubscriptionsService {
       payment_methods_allowed: dto.payment_methods_allowed ?? [],
       start_date,
       next_billing_date: addBillingCycle(start_date, plan_type),
-      end_date: dto.end_date ? new Date(dto.end_date) : undefined,
-      trial_end_date: dto.trial_end_date ? new Date(dto.trial_end_date) : undefined,
+      end_date,
+      trial_end_date,
     });
 
     // Downstream billing work (e.g. seeding the first invoice) happens off
@@ -197,14 +233,30 @@ export class SubscriptionsService {
     userId: string,
     role: string,
   ): Promise<Subscription> {
-    await this.findById(id, userId, role);
+    const existing = await this.findById(id, userId, role);
+    const start_date = dto.start_date ? new Date(dto.start_date) : undefined;
+    const end_date = dto.end_date ? new Date(dto.end_date) : undefined;
+    const trial_end_date = dto.trial_end_date ? new Date(dto.trial_end_date) : undefined;
+    const effectiveStart = start_date ?? existing.start_date ?? existing.created_at;
+
+    SubscriptionsService.assertValidDates({
+      start_date: effectiveStart,
+      end_date: end_date ?? existing.end_date,
+      is_trial: dto.is_trial ?? existing.is_trial,
+      trial_end_date: trial_end_date ?? existing.trial_end_date,
+    });
+
+    const cycleChanged = start_date !== undefined || dto.plan_type !== undefined;
     const updated = await this.subscriptionsRepo.update(id, {
       ...dto,
       amount: dto.amount != null ? String(dto.amount) : undefined,
       price_per_student: dto.price_per_student != null ? String(dto.price_per_student) : undefined,
-      start_date: dto.start_date ? new Date(dto.start_date) : undefined,
-      end_date: dto.end_date ? new Date(dto.end_date) : undefined,
-      trial_end_date: dto.trial_end_date ? new Date(dto.trial_end_date) : undefined,
+      start_date,
+      end_date,
+      trial_end_date,
+      next_billing_date: cycleChanged
+        ? addBillingCycle(effectiveStart, dto.plan_type ?? existing.plan_type)
+        : undefined,
     });
     await this.invalidateCache(id, updated.school_id);
     return updated;
@@ -217,6 +269,9 @@ export class SubscriptionsService {
     role: string,
   ): Promise<Subscription> {
     const sub = await this.findById(id, userId, role);
+    if (sub.status === 'CANCELLED') {
+      throw new BadRequestException('Subscription is already cancelled');
+    }
     const updated = await this.subscriptionsRepo.update(id, {
       status: 'CANCELLED',
       cancelled_at: new Date(),
@@ -243,6 +298,9 @@ export class SubscriptionsService {
     role: string,
   ): Promise<SubscriptionPayment> {
     const sub = await this.findById(subscriptionId, userId, role);
+    if (sub.status === 'CANCELLED') {
+      throw new BadRequestException('Cannot record a payment on a cancelled subscription');
+    }
 
     const payment = await this.subscriptionsRepo.createPayment({
       id: generateId(),
@@ -255,13 +313,12 @@ export class SubscriptionsService {
       amount: String(dto.amount),
     });
 
-    if (dto.is_manual) {
-      const startDate = new Date();
-      const endDate = this.calcEndDate(startDate, sub.plan_type);
+    if (dto.is_manual && dto.amount >= (await this.cycleAmountDue(sub))) {
+      const now = new Date();
+      const periodBase = sub.end_date && sub.end_date > now ? sub.end_date : now;
       await this.subscriptionsRepo.update(subscriptionId, {
         status: 'ACTIVE',
-        start_date: startDate,
-        end_date: endDate,
+        end_date: addBillingCycle(periodBase, sub.plan_type),
       });
       await this.invalidateCache(subscriptionId, sub.school_id);
     }
@@ -269,15 +326,12 @@ export class SubscriptionsService {
     return payment;
   }
 
-  private calcEndDate(start: Date, planType: string): Date {
-    const monthsMap: Record<string, number> = {
-      [SubscriptionPlan.MONTHLY]: 1,
-      [SubscriptionPlan.QUARTERLY]: 3,
-      [SubscriptionPlan.HALF_YEARLY]: 6,
-      [SubscriptionPlan.ANNUAL]: 12,
-    };
-    const months = monthsMap[planType] ?? 1;
-    return DateUtils.addMonths(start, months);
+  private async cycleAmountDue(sub: Subscription): Promise<number> {
+    if (sub.billing_model === BillingModel.PER_STUDENT) {
+      const studentCount = await this.subscriptionsRepo.countActiveStudents(sub.school_id);
+      return studentCount * Number(sub.price_per_student ?? 0);
+    }
+    return Number(sub.amount ?? 0);
   }
 
   private async invalidateCache(id: string, schoolId: string): Promise<void> {

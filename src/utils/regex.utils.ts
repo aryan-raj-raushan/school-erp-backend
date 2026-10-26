@@ -8,6 +8,7 @@ export const REGEX = {
   PAN: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
   PASSWORD: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/,
   ALPHA_ONLY: /^[a-zA-Z\s]+$/,
+  PERSON_NAME: /^[A-Za-z][A-Za-z .'-]*$/,
   ALPHANUMERIC: /^[a-zA-Z0-9\s]+$/,
   UUID_V4: /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   ADMISSION_NO: /^[A-Z0-9\-\/]{3,20}$/,
@@ -16,5 +17,5 @@ export const REGEX = {
   DATE_YYYY_MM_DD: /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/,
   SCHOOL_CODE: /^[A-Z0-9]{2,10}$/,
   SUBJECT_CODE: /^[A-Z0-9\-]{2,20}$/,
-  TIME_REGEX: /^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/
+  TIME_REGEX: /^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/,
 } as const;

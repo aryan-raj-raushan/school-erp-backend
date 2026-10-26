@@ -63,6 +63,16 @@ git fetch --quiet origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 echo "    ${PREVIOUS_SHA:0:7} -> $(git rev-parse --short HEAD)"
 
+echo "==> Checking .env"
+MISSING_ENV=""
+for key in DATABASE_URL JWT_ACCESS_SECRET JWT_REFRESH_SECRET REDIS_HOST BOOTSTRAP_SECRET; do
+  grep -q "^${key}=." .env || MISSING_ENV="$MISSING_ENV $key"
+done
+if [ -n "$MISSING_ENV" ]; then
+  echo "!! Missing or empty in $APP_DIR/.env:$MISSING_ENV"
+  rollback
+fi
+
 echo "==> Installing dependencies and building"
 build || rollback
 

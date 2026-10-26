@@ -1,6 +1,7 @@
-import { IsOptional, IsUUID, IsString } from 'class-validator';
+import { IsOptional, IsUUID, IsEnum } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
+import { SubscriptionStatus } from '../../../shared/enums';
 
 export class SubscriptionFilterDto extends PaginationDto {
   @ApiPropertyOptional({ format: 'uuid' })
@@ -8,8 +9,8 @@ export class SubscriptionFilterDto extends PaginationDto {
   @IsUUID()
   school_id?: string;
 
-  @ApiPropertyOptional({ example: 'ACTIVE' })
+  @ApiPropertyOptional({ enum: SubscriptionStatus })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(SubscriptionStatus)
+  status?: SubscriptionStatus;
 }

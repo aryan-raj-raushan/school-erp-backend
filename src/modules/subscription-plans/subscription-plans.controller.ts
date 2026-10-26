@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -54,5 +55,13 @@ export class SubscriptionPlansController {
   async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateSubscriptionPlanDto) {
     const data = await this.plansService.update(id, dto);
     return ApiResponse.success(data, 'Subscription plan updated');
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a subscription plan that no current subscription uses' })
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    await this.plansService.remove(id);
+    return ApiResponse.noContent('Subscription plan deleted');
   }
 }

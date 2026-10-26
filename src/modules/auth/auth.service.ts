@@ -104,26 +104,26 @@ export class AuthService {
   }
 
   async registerCompany(dto: RegisterCompanyDto, bootstrapSecret?: string) {
+    if (dto.role && dto.role !== CompanyRole.SUPER_ADMIN) {
+      throw new ForbiddenException(
+        'Only the initial SUPER_ADMIN can be registered here — create other company users from Team management',
+      );
+    }
+
+    const envSecret = this.configService.get<string>('BOOTSTRAP_SECRET');
+    if (!envSecret) {
+      throw new ForbiddenException(
+        'SUPER_ADMIN registration is disabled — set BOOTSTRAP_SECRET env var',
+      );
+    }
+    if (bootstrapSecret !== envSecret) {
+      throw new ForbiddenException('Invalid bootstrap secret');
+    }
+    const exists = await this.authRepo.superAdminExists();
+    if (exists) throw new ForbiddenException('A SUPER_ADMIN already exists. Only one is allowed.');
+
     const emailTaken = await this.authRepo.findCompanyUserByEmailExists(dto.email);
     if (emailTaken) throw new ConflictException('Email already registered');
-
-    const isSuperAdmin = dto.role === CompanyRole.SUPER_ADMIN || !dto.role;
-
-    if (isSuperAdmin) {
-      // Require bootstrap secret from env to create SUPER_ADMIN
-      const envSecret = this.configService.get<string>('BOOTSTRAP_SECRET');
-      if (!envSecret) {
-        throw new ForbiddenException(
-          'SUPER_ADMIN registration is disabled — set BOOTSTRAP_SECRET env var',
-        );
-      }
-      if (bootstrapSecret !== envSecret) {
-        throw new ForbiddenException('Invalid bootstrap secret');
-      }
-      const exists = await this.authRepo.superAdminExists();
-      if (exists)
-        throw new ForbiddenException('A SUPER_ADMIN already exists. Only one is allowed.');
-    }
 
     const password_hash = await hashPassword(dto.password);
 
@@ -133,7 +133,7 @@ export class AuthService {
       last_name: dto.last_name,
       email: dto.email,
       password_hash,
-      role: (dto.role as CompanyRole) ?? CompanyRole.SUPER_ADMIN,
+      role: CompanyRole.SUPER_ADMIN,
     });
   }
 
@@ -644,7 +644,7 @@ export class AuthService {
 
     if (context === AuthContext.COMPANY) {
       const user = await this.authRepo.findCompanyUserById(userId);
-      if (!user) throw new NotFoundException('User not found');
+      if (!user || !user.is_active) throw new UnauthorizedException('Account is deactivated');
       payload = {
         sub: user.id,
         email: user.email,
@@ -653,7 +653,7 @@ export class AuthService {
       };
     } else if (context === AuthContext.PARENT) {
       const parent = await this.authRepo.findParentById(userId);
-      if (!parent) throw new NotFoundException('User not found');
+      if (!parent || !parent.is_active) throw new UnauthorizedException('Account is deactivated');
 
       const school = await this.authRepo.findSchoolById(parent.school_id);
       if (!school || !school.is_active) {
@@ -670,7 +670,7 @@ export class AuthService {
       };
     } else {
       const user = await this.authRepo.findSchoolUserById(userId);
-      if (!user) throw new NotFoundException('User not found');
+      if (!user || !user.is_active) throw new UnauthorizedException('Account is deactivated');
 
       const school = await this.authRepo.findSchoolById(user.school_id);
       if (!school || !school.is_active) {

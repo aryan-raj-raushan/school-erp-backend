@@ -1,9 +1,9 @@
 import {
   IsString,
-  IsNotEmpty,
   IsOptional,
   IsNumber,
   IsPositive,
+  Max,
   IsBoolean,
   MaxLength,
   IsEnum,
@@ -11,11 +11,16 @@ import {
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMethod } from '../../../shared/enums';
+import { MONEY_DECIMAL_PLACES, MONEY_MAX_AMOUNT } from '../../../shared/constants';
 
 export class CreatePaymentDto {
   @ApiProperty({ example: 4999 })
-  @IsNumber()
+  @IsNumber(
+    { maxDecimalPlaces: MONEY_DECIMAL_PLACES },
+    { message: '$property must be a number with at most 2 decimal places' },
+  )
   @IsPositive()
+  @Max(MONEY_MAX_AMOUNT)
   @Type(() => Number)
   amount: number;
 

@@ -52,12 +52,12 @@ export class AuthController {
   @Public()
   @Post('company/register')
   @ApiOperation({
-    summary: 'Register a company user. SUPER_ADMIN requires X-Bootstrap-Secret header.',
+    summary: 'Bootstrap the initial SUPER_ADMIN. Requires X-Bootstrap-Secret header.',
   })
   @ApiHeader({
     name: 'x-bootstrap-secret',
-    description: 'Required when creating SUPER_ADMIN',
-    required: false,
+    description: 'Must match the BOOTSTRAP_SECRET env var',
+    required: true,
   })
   async registerCompany(
     @Body() dto: RegisterCompanyDto,
@@ -169,7 +169,7 @@ export class AuthController {
   @BypassRestriction()
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: "Switch the parent session to a different linked child" })
+  @ApiOperation({ summary: 'Switch the parent session to a different linked child' })
   async switchStudent(
     @Param('studentId', ParseUUIDPipe) studentId: string,
     @GetCurrentUserId() userId: string,

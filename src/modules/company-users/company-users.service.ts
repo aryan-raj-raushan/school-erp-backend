@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { CompanyUsersRepository } from './company-users.repository';
 import { AuthRepository } from '../auth/auth.repository';
@@ -65,18 +66,41 @@ export class CompanyUsersService {
     return this.findById(created.id);
   }
 
-  async update(id: string, dto: UpdateCompanyUserDto): Promise<CompanyUserProfile> {
-    await this.findById(id);
+  async update(
+    id: string,
+    dto: UpdateCompanyUserDto,
+    currentUserId: string,
+  ): Promise<CompanyUserProfile> {
+    const target = await this.findById(id);
     if (dto.role && !ASSIGNABLE_COMPANY_ROLES.includes(dto.role)) {
       throw new BadRequestException(`Cannot assign role '${dto.role}'`);
     }
-    return this.companyUsersRepo.update(id, dto);
+
+    const changesAccess =
+      (dto.role !== undefined && dto.role !== target.role) || dto.is_active === false;
+    if (changesAccess && target.role === CompanyRole.SUPER_ADMIN) {
+      throw new ForbiddenException('A SUPER_ADMIN account cannot be deactivated or demoted');
+    }
+    if (changesAccess && id === currentUserId) {
+      throw new ForbiddenException('You cannot deactivate or change the role of your own account');
+    }
+
+    const updated = await this.companyUsersRepo.update(id, dto);
+    if (changesAccess) await this.redisService.revokeUserSessions(id);
+    return updated;
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findById(id);
+  async remove(id: string, currentUserId: string): Promise<void> {
+    const target = await this.findById(id);
+    if (target.role === CompanyRole.SUPER_ADMIN) {
+      throw new ForbiddenException('A SUPER_ADMIN account cannot be deleted');
+    }
+    if (id === currentUserId) {
+      throw new ForbiddenException('You cannot delete your own account');
+    }
     await this.companyUsersRepo.softDelete(id);
     await this.redisService.del(`company_user:${id}:schools`);
+    await this.redisService.revokeUserSessions(id);
   }
 
   async listSchools(userId: string): Promise<AssignedSchool[]> {
@@ -90,7 +114,10 @@ export class CompanyUsersService {
     grantedBy: string,
   ): Promise<AssignedSchool[]> {
     await this.findById(userId);
-    await this.companyUsersRepo.assignSchool(userId, schoolId, grantedBy);
+    const school = await this.authRepo.findSchoolById(schoolId);
+    if (!school) throw new NotFoundException(`School '${schoolId}' not found`);
+    const assigned = await this.companyUsersRepo.assignSchool(userId, schoolId, grantedBy);
+    if (!assigned) throw new ConflictException('This school is already assigned to this user');
     await this.redisService.del(`company_user:${userId}:schools`);
     return this.listSchools(userId);
   }

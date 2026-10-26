@@ -4,12 +4,14 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { REGEX } from '../../../utils/regex.utils';
 import { StringUtils } from '../../../utils/string.utils';
 import { CompanyRole } from '../../../shared/enums';
+import { PERSON_NAME_MESSAGE } from '../../../shared/constants';
 
 export class RegisterCompanyDto {
   @ApiProperty({ example: 'John' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
+  @Matches(REGEX.PERSON_NAME, { message: PERSON_NAME_MESSAGE })
   @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
   first_name: string;
 
@@ -17,7 +19,8 @@ export class RegisterCompanyDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
+  @Matches(REGEX.PERSON_NAME, { message: PERSON_NAME_MESSAGE })
+  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)) || undefined)
   last_name?: string;
 
   @ApiProperty({ example: 'admin@company.com' })
@@ -31,8 +34,7 @@ export class RegisterCompanyDto {
   @IsString()
   @IsNotEmpty()
   @Matches(REGEX.PASSWORD, {
-    message:
-      'Password must be 8+ chars with uppercase, lowercase, number and special character',
+    message: 'Password must be 8+ chars with uppercase, lowercase, number and special character',
   })
   password: string;
 
