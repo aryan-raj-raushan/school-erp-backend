@@ -98,7 +98,7 @@ export class UploadsService {
     }
   }
 
-  async getFile(
+  async streamFile(
     s3Key: string,
     callerSchoolId?: string,
     callerRole?: string,

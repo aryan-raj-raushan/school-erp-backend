@@ -9,25 +9,6 @@ const drizzleLogger = new Logger('Drizzle');
 
 export type DrizzleDB = NodePgDatabase<typeof schema>;
 
-// Ping Neon every 4 minutes so it never cold-starts during active sessions.
-// Neon free tier suspends after ~5 min of inactivity → 2-4s cold start on next query.
-function startNeonKeepAlive(pool: Pool): void {
-  const log = new Logger('NeonKeepAlive');
-  setInterval(
-    async () => {
-      try {
-        const client = await pool.connect();
-        await client.query('SELECT 1');
-        client.release();
-        log.debug('keep-alive ping OK');
-      } catch (e) {
-        log.warn(`keep-alive ping failed: ${e}`);
-      }
-    },
-    4 * 60 * 1000,
-  ); // 4 minutes
-}
-
 export const drizzleProvider = {
   provide: DRIZZLE_ORM,
   inject: [ConfigService],
@@ -37,10 +18,10 @@ export const drizzleProvider = {
     const connectionString = process.env.DATABASE_URL;
     const pool = new Pool({
       connectionString,
-      ssl: { rejectUnauthorized: false },
-      min: 2, // keep 2 warm connections — avoids TLS handshake on every request
+      ssl: dbConfig.ssl ? { rejectUnauthorized: false } : false,
+      min: 2,
       max: dbConfig.poolMax ?? 10,
-      idleTimeoutMillis: 300000, // 5 min — outlasts Neon's 5-min suspend window
+      idleTimeoutMillis: 300000,
       connectionTimeoutMillis: 15000,
     });
 
@@ -48,17 +29,14 @@ export const drizzleProvider = {
       console.error('Unexpected PostgreSQL pool error', err);
     });
 
-    // Warm up Neon immediately on bootstrap — prevents cold start on first user request
     try {
       const client = await pool.connect();
       await client.query('SELECT 1');
       client.release();
-      drizzleLogger.log('Neon warm-up OK');
+      drizzleLogger.log('PostgreSQL connection OK');
     } catch (e) {
-      drizzleLogger.warn(`Neon warm-up failed: ${e}`);
+      drizzleLogger.warn(`PostgreSQL connection check failed: ${e}`);
     }
-
-    startNeonKeepAlive(pool);
 
     return drizzle(pool, {
       schema,

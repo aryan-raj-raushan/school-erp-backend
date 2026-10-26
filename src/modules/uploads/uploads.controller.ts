@@ -125,7 +125,7 @@ export class UploadsController {
     @GetCurrentUser() user: JwtPayload,
     @Res() res: Response,
   ) {
-    const file = await this.uploadsService.getFile(key, schoolId, user.role as string);
+    const file = await this.uploadsService.streamFile(key, schoolId, user.role as string);
     res.set({
       'Content-Type': file.contentType,
       'Content-Disposition': 'inline',

@@ -24,8 +24,11 @@
     "load": "npm run load:smoke",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
-    "start:migrate": "drizzle-kit push && node dist/main",
-    "prepare": "husky"
+    "start:migrate": "node --env-file-if-exists=.env migrations/migrate.js && node dist/main",
+    "prepare": "husky",
+    "db:migrate": "node --env-file-if-exists=.env migrations/migrate.js",
+    "db:tunnel": "ssh -i ~/Downloads/school-erp-key.pem -N -L 5433:127.0.0.1:5432 ubuntu@13.233.101.124",
+    "deploy": "bash deploy.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
