@@ -65,6 +65,14 @@ export class SchoolsRepository {
     return row;
   }
 
+  async findCodesWithPrefix(prefix: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ code: schools.code })
+      .from(schools)
+      .where(ilike(schools.code, `${prefix}%`));
+    return rows.map((r) => r.code).filter((c): c is string => !!c);
+  }
+
   async create(data: NewSchool): Promise<School> {
     const [row] = await this.db.insert(schools).values(data).returning();
     return row;

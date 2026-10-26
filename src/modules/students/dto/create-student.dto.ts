@@ -6,12 +6,12 @@ import {
   IsBoolean,
   IsNumberString,
   MaxLength,
-  MinLength,
   IsArray,
   ValidateNested,
+  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   BloodGroup,
   Category,
@@ -24,15 +24,43 @@ import {
   StudentStatus,
 } from '@shared/enums/student.enum';
 
+const BlankAsUndefined = () =>
+  Transform(({ value }) => (typeof value === 'string' ? value.trim() || undefined : value));
+
+const BlankAsNull = () =>
+  Transform(({ value }) => (typeof value === 'string' ? value.trim() || null : value));
+
 // ─── Sub-DTOs ─────────────────────────────────────────────────────────────────
 
 export class StudentAcademicInfoDto {
   @ApiProperty() @IsString() academic_year_id: string;
   @ApiProperty() @IsString() class_id: string;
   @ApiPropertyOptional() @IsOptional() @IsString() section_id?: string;
-  @ApiProperty() @IsString() admission_number: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() registration_number?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() roll_number?: string;
+  @BlankAsUndefined()
+  @ApiPropertyOptional({
+    description: 'Auto-generated from the school admission format when omitted',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  admission_number?: string;
+
+  @BlankAsNull()
+  @ApiPropertyOptional({ example: 'REG/2026/104' })
+  @IsOptional()
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9/-]{0,29}$/, {
+    message: 'Registration number may only contain letters, digits, "/" and "-" (max 30)',
+  })
+  registration_number?: string | null;
+
+  @BlankAsUndefined()
+  @ApiPropertyOptional({
+    description: 'Auto-assigned as the next roll number in the section when omitted',
+  })
+  @IsOptional()
+  @Matches(/^\d{1,4}$/, { message: 'Roll number must be a number up to 4 digits' })
+  roll_number?: string;
+
   @ApiPropertyOptional() @IsOptional() @IsDateString() joining_date?: string;
 }
 
@@ -84,14 +112,12 @@ export class StudentParentDto {
   @IsBoolean()
   enable_login?: boolean;
   @ApiPropertyOptional({
-    example: 'Parent@123',
-    description:
-      'Required to enable login the first time; omit on later saves to keep the existing password',
+    default: false,
+    description: 'Issue a new temporary password for a parent whose login is already enabled',
   })
   @IsOptional()
-  @IsString()
-  @MinLength(6)
-  password?: string;
+  @IsBoolean()
+  reset_password?: boolean;
 }
 
 export class StudentDocumentDto {

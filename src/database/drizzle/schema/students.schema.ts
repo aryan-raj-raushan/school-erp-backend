@@ -305,5 +305,6 @@ export const schoolStudentCounters = pgTable('school_student_counters', {
     .primaryKey()
     .references(() => schools.id, { onDelete: 'cascade' }),
   last_number: integer('last_number').default(0).notNull(),
+  admission_last_number: integer('admission_last_number').default(0).notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });

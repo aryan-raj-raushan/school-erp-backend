@@ -72,6 +72,24 @@ export class StudentsController {
     );
   }
 
+  @Get('next-numbers')
+  @Permissions(PERMISSION_REGISTRY.students.create)
+  @ApiOperation({ summary: 'Preview the admission number and next roll number for a new student' })
+  @ApiQuery({ name: 'academic_year_id', required: false })
+  @ApiQuery({ name: 'class_id', required: false })
+  @ApiQuery({ name: 'section_id', required: false })
+  async nextNumbers(
+    @GetSchoolId() schoolId: string,
+    @Query('academic_year_id') academicYearId?: string,
+    @Query('class_id') classId?: string,
+    @Query('section_id') sectionId?: string,
+  ) {
+    return ApiResponse.success(
+      await this.studentsService.previewNumbers(schoolId, academicYearId, classId, sectionId),
+      'Next numbers fetched',
+    );
+  }
+
   // ─── Get Single ───────────────────────────────────────────────────────────
 
   @Get(':id')
@@ -199,10 +217,7 @@ export class StudentsController {
 
   @Get('guardians/all')
   @ApiOperation({ summary: 'List all student guardians/parents across the school' })
-  async findAllGuardians(
-    @GetSchoolId() schoolId: string,
-    @Query('search') search?: string,
-  ) {
+  async findAllGuardians(@GetSchoolId() schoolId: string, @Query('search') search?: string) {
     const data = await this.studentsService.findAllGuardians(schoolId, search);
     return ApiResponse.success(data, 'Guardians fetched successfully');
   }

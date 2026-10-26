@@ -1,14 +1,28 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { StudentsRepository } from './students.repository';
 import { RedisService } from '../redis/redis.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { generateId } from '../../utils/uuid.utils';
-import { hashPassword } from '../../utils/hash.utils';
-import { CreateStudentDto, StudentDocumentDto, StudentParentDto } from './dto/create-student.dto';
+import { generateTempPassword, hashPassword } from '../../utils/hash.utils';
+import {
+  CreateStudentDto,
+  StudentAcademicInfoDto,
+  StudentDocumentDto,
+  StudentParentDto,
+} from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
 import {
   StudentFull,
+  StudentFullWithCredentials,
+  ParentCredential,
   StudentFilters,
   StudentListItem,
+  StudentAcademicInfo,
   NewStudent,
   NewStudentParent,
   NewStudentDocument,
@@ -20,28 +34,41 @@ export class StudentsService {
   constructor(
     private readonly repo: StudentsRepository,
     private readonly redisService: RedisService,
+    private readonly uploadsService: UploadsService,
   ) {}
+
+  private assertOwnDocumentLinks(
+    documents: StudentDocumentDto[] | undefined,
+    schoolId: string,
+    existingLinks: string[] = [],
+  ) {
+    const foreign = documents?.find(
+      (d) =>
+        !existingLinks.includes(d.document_link) &&
+        !UploadsService.keyFromUrl(d.document_link)?.startsWith(`${schoolId}/`),
+    );
+    if (foreign) {
+      throw new BadRequestException(
+        `Document "${foreign.original_filename ?? foreign.document_name}" must be uploaded through the app`,
+      );
+    }
+  }
 
   private cacheKey(schoolId: string) {
     return REDIS_STUDENT_KEY.STUDENT(schoolId);
   }
 
-  /**
-   * Resolves each incoming parent row's login fields (enable_login/password) into
-   * password_hash/is_active, ready to hand to StudentsRepository.syncParents.
-   * A row that enables login without a new password must already have one — otherwise
-   * a partial update with no password_hash key would silently leave login unusable.
-   */
   private async buildParentRows(
     parents: StudentParentDto[] | undefined,
     schoolId: string,
     studentId: string,
-  ): Promise<(NewStudentParent & { id: string })[]> {
-    if (!parents?.length) return [];
+  ): Promise<{ rows: (NewStudentParent & { id: string })[]; credentials: ParentCredential[] }> {
+    if (!parents?.length) return { rows: [], credentials: [] };
 
-    return Promise.all(
+    const credentials: ParentCredential[] = [];
+    const rows = await Promise.all(
       parents.map(async (p) => {
-        const { id, enable_login, password, ...rest } = p;
+        const { id, enable_login, reset_password, ...rest } = p;
         const base: NewStudentParent & { id: string } = {
           id: id ?? generateId(),
           school_id: schoolId,
@@ -51,48 +78,200 @@ export class StudentsService {
           qualification: rest.qualification as NewStudentParent['qualification'],
         };
 
-        if (enable_login) {
-          // A brand-new parent row (no id yet) for a phone that's already an
-          // active parent elsewhere inherits that existing login instead of
-          // minting a fresh one — otherwise linking the same parent to a
-          // second child would force them through "set new password" again,
-          // even though their real password already works.
-          if (!id) {
-            const existingCreds = await this.repo.findActiveCredentialsByPhone(
-              rest.phone_number,
-              rest.dial_code ?? '+91',
-            );
-            if (existingCreds) {
-              return {
-                ...base,
-                password_hash: existingCreds.password_hash,
-                must_change_password: existingCreds.must_change_password,
-                is_active: true,
-              };
-            }
-          }
+        if (!enable_login) return { ...base, is_active: false };
 
-          if (password) {
+        if (!reset_password) {
+          const existing = id ? await this.repo.findGuardianById(id, schoolId) : null;
+          if (existing?.has_login) return { ...base, is_active: true };
+
+          const sharedCreds = await this.repo.findActiveCredentialsByPhone(
+            rest.phone_number,
+            rest.dial_code ?? '+91',
+          );
+          if (sharedCreds) {
             return {
               ...base,
-              password_hash: await hashPassword(password),
-              must_change_password: true,
+              password_hash: sharedCreds.password_hash,
+              must_change_password: sharedCreds.must_change_password,
               is_active: true,
             };
           }
-          const existing = id ? await this.repo.findGuardianById(id, schoolId) : null;
-          if (!existing?.has_login) {
-            throw new BadRequestException(
-              `Password is required to enable login for parent "${p.first_name}"`,
-            );
-          }
-          return { ...base, is_active: true };
         }
 
-        return { ...base, is_active: false };
+        const temporaryPassword = generateTempPassword();
+        credentials.push({
+          parent_id: base.id,
+          name: [rest.first_name, rest.last_name].filter(Boolean).join(' '),
+          dial_code: rest.dial_code ?? '+91',
+          phone_number: rest.phone_number,
+          temporary_password: temporaryPassword,
+        });
+        return {
+          ...base,
+          password_hash: await hashPassword(temporaryPassword),
+          must_change_password: true,
+          is_active: true,
+        };
       }),
     );
+    return { rows, credentials };
   }
+
+  private async saveParents(
+    studentId: string,
+    schoolId: string,
+    parents: StudentParentDto[] | undefined,
+  ) {
+    const { rows, credentials } = await this.buildParentRows(parents, schoolId, studentId);
+    const saved = await this.repo.syncParents(studentId, schoolId, rows);
+    await Promise.all(
+      rows
+        .filter((r) => credentials.some((c) => c.parent_id === r.id))
+        .map((r) =>
+          this.repo.shareParentPassword(r.phone_number, r.dial_code ?? '+91', r.password_hash!),
+        ),
+    );
+    return { saved, credentials };
+  }
+
+  private async generateAdmissionNumber(schoolId: string, reserve: boolean): Promise<string> {
+    const format = await this.repo.findAdmissionFormat(schoolId);
+    if (!format) throw new NotFoundException('School not found');
+
+    const startNumber = format.start_number ?? 1;
+    const sequence = reserve
+      ? await this.repo.nextAdmissionSequence(schoolId, startNumber)
+      : Math.max((format.last_number ?? 0) + 1, startNumber);
+
+    const prefix = format.prefix || format.school_code || 'ADM';
+    const year = new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+    }).format(new Date());
+    const number = String(sequence).padStart(format.digits ?? 5, '0');
+    return (format.include_year ?? true) ? `${prefix}-${year}-${number}` : `${prefix}-${number}`;
+  }
+
+  private async nextRollNumber(
+    schoolId: string,
+    academicYearId: string,
+    classId: string,
+    sectionId?: string | null,
+  ): Promise<string> {
+    const max = await this.repo.maxRollNumber(schoolId, academicYearId, classId, sectionId);
+    return String(max + 1);
+  }
+
+  private async resolveAcademicNumbers(
+    schoolId: string,
+    info: StudentAcademicInfoDto,
+    current?: StudentAcademicInfo,
+    studentId?: string,
+  ): Promise<{
+    admission_number: string;
+    registration_number: string | null;
+    roll_number: string;
+  }> {
+    const scope = {
+      academicYearId: info.academic_year_id,
+      classId: info.class_id,
+      sectionId: info.section_id ?? null,
+    };
+
+    if (
+      info.admission_number &&
+      info.admission_number !== current?.admission_number &&
+      (await this.repo.findAcademicNumberClash(
+        schoolId,
+        'admission_number',
+        info.admission_number,
+        studentId,
+      ))
+    ) {
+      throw new ConflictException(`Admission number '${info.admission_number}' is already in use`);
+    }
+
+    if (
+      info.registration_number &&
+      (await this.repo.findAcademicNumberClash(
+        schoolId,
+        'registration_number',
+        info.registration_number,
+        studentId,
+      ))
+    ) {
+      throw new ConflictException(
+        `Registration number '${info.registration_number}' is already in use`,
+      );
+    }
+
+    const sameSection =
+      current?.academic_year_id === info.academic_year_id &&
+      current?.class_id === info.class_id &&
+      (current?.section_id ?? null) === scope.sectionId;
+
+    if (
+      info.roll_number &&
+      (await this.repo.findAcademicNumberClash(
+        schoolId,
+        'roll_number',
+        info.roll_number,
+        studentId,
+        scope,
+      ))
+    ) {
+      throw new ConflictException(
+        `Roll number ${info.roll_number} is already taken in this class/section`,
+      );
+    }
+
+    const admissionNumber =
+      info.admission_number ??
+      current?.admission_number ??
+      (await this.generateAdmissionNumber(schoolId, true));
+
+    const rollNumber =
+      info.roll_number ??
+      (sameSection && current?.roll_number
+        ? current.roll_number
+        : await this.nextRollNumber(
+            schoolId,
+            info.academic_year_id,
+            info.class_id,
+            scope.sectionId,
+          ));
+
+    return {
+      admission_number: admissionNumber,
+      registration_number:
+        info.registration_number === undefined
+          ? (current?.registration_number ?? null)
+          : info.registration_number,
+      roll_number: rollNumber,
+    };
+  }
+
+  async previewNumbers(
+    schoolId: string,
+    academicYearId?: string,
+    classId?: string,
+    sectionId?: string,
+  ): Promise<{ admission_number: string; roll_number: string | null; last_issued: number }> {
+    const [admissionNumber, format] = await Promise.all([
+      this.generateAdmissionNumber(schoolId, false),
+      this.repo.findAdmissionFormat(schoolId),
+    ]);
+    const rollNumber =
+      academicYearId && classId
+        ? await this.nextRollNumber(schoolId, academicYearId, classId, sectionId ?? null)
+        : null;
+    return {
+      admission_number: admissionNumber,
+      roll_number: rollNumber,
+      last_issued: format?.last_number ?? 0,
+    };
+  }
+
 
   // ─── List ───────────────────────────────────────────────────────────────────
 
@@ -139,7 +318,15 @@ export class StudentsService {
 
   // ─── Create ─────────────────────────────────────────────────────────────────
 
-  async create(dto: CreateStudentDto, schoolId: string, createdBy: string): Promise<StudentFull> {
+  async create(
+    dto: CreateStudentDto,
+    schoolId: string,
+    createdBy: string,
+  ): Promise<StudentFullWithCredentials> {
+    this.assertOwnDocumentLinks(dto.documents, schoolId);
+    const academicNumbers = dto.academic_info
+      ? await this.resolveAcademicNumbers(schoolId, dto.academic_info)
+      : undefined;
     const systemNumber = await this.repo.nextSystemNumber(schoolId);
     const studentId = generateId();
 
@@ -170,7 +357,7 @@ export class StudentsService {
       created_by: createdBy,
     });
 
-    const [academicInfo, previousAcademics, address, hostelInfo, parents, documents] =
+    const [academicInfo, previousAcademics, address, hostelInfo, parentResult, documents] =
       await Promise.all([
         dto.academic_info
           ? this.repo.upsertAcademicInfo({
@@ -180,9 +367,7 @@ export class StudentsService {
               academic_year_id: dto.academic_info.academic_year_id,
               class_id: dto.academic_info.class_id,
               section_id: dto.academic_info.section_id,
-              admission_number: dto.academic_info.admission_number,
-              registration_number: dto.academic_info.registration_number,
-              roll_number: dto.academic_info.roll_number,
+              ...academicNumbers!,
               joining_date: dto.academic_info.joining_date,
               is_current: true,
             })
@@ -215,11 +400,7 @@ export class StudentsService {
             })
           : Promise.resolve(undefined),
 
-        dto.parents?.length
-          ? this.buildParentRows(dto.parents, schoolId, studentId).then((rows) =>
-              this.repo.syncParents(studentId, schoolId, rows),
-            )
-          : Promise.resolve([]),
+        this.saveParents(studentId, schoolId, dto.parents),
 
         dto.documents?.length
           ? this.repo.addDocuments(
@@ -246,17 +427,30 @@ export class StudentsService {
       previousAcademics: previousAcademics ?? null,
       address: address ?? null,
       hostelInfo: hostelInfo ?? null,
-      parents,
+      parents: parentResult.saved,
       documents,
+      parent_credentials: parentResult.credentials,
     };
   }
 
   // ─── Update ─────────────────────────────────────────────────────────────────
 
-  async update(id: string, schoolId: string, dto: UpdateStudentDto): Promise<StudentFull> {
+  async update(
+    id: string,
+    schoolId: string,
+    dto: UpdateStudentDto,
+  ): Promise<StudentFullWithCredentials> {
     // Ensure student exists
     const existing = await this.repo.findById(id, schoolId);
     if (!existing) throw new NotFoundException(`Student '${id}' not found`);
+    if (dto.documents) {
+      const currentDocs = await this.repo.findDocuments(id, schoolId);
+      this.assertOwnDocumentLinks(
+        dto.documents,
+        schoolId,
+        currentDocs.map((d) => d.document_link),
+      );
+    }
 
     await this.repo.update(id, schoolId, {
       first_name: dto.first_name,
@@ -281,6 +475,13 @@ export class StudentsService {
     });
 
     if (dto.academic_info) {
+      const current = await this.repo.findCurrentAcademicInfo(id, schoolId);
+      const academicNumbers = await this.resolveAcademicNumbers(
+        schoolId,
+        dto.academic_info,
+        current,
+        id,
+      );
       await this.repo.upsertAcademicInfo({
         id: generateId(),
         school_id: schoolId,
@@ -288,9 +489,7 @@ export class StudentsService {
         academic_year_id: dto.academic_info.academic_year_id,
         class_id: dto.academic_info.class_id,
         section_id: dto.academic_info.section_id,
-        admission_number: dto.academic_info.admission_number,
-        registration_number: dto.academic_info.registration_number,
-        roll_number: dto.academic_info.roll_number,
+        ...academicNumbers,
         joining_date: dto.academic_info.joining_date,
         is_current: true,
       });
@@ -323,13 +522,14 @@ export class StudentsService {
       });
     }
 
-    if (dto.parents !== undefined) {
-      const rows = await this.buildParentRows(dto.parents, schoolId, id);
-      await this.repo.syncParents(id, schoolId, rows);
-    }
+    const parentCredentials =
+      dto.parents !== undefined
+        ? (await this.saveParents(id, schoolId, dto.parents)).credentials
+        : [];
 
     if (dto.documents !== undefined) {
-      await this.repo.replaceDocuments(
+      const keptLinks = new Set(dto.documents.map((d) => d.document_link));
+      const { previousLinks } = await this.repo.replaceDocuments(
         id,
         schoolId,
         dto.documents.map((d) => ({
@@ -341,6 +541,10 @@ export class StudentsService {
           file_type: d.file_type as NewStudentDocument['file_type'],
         })),
       );
+      await this.uploadsService.deleteByUrls(
+        previousLinks.filter((link) => !keptLinks.has(link)),
+        schoolId,
+      );
     }
 
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:${id}*`);
@@ -348,7 +552,7 @@ export class StudentsService {
     await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
     await this.redisService.delByPattern(`reports:admin:${schoolId}`);
 
-    return this.getFullStudent(id, schoolId);
+    return { ...(await this.getFullStudent(id, schoolId)), parent_credentials: parentCredentials };
   }
 
   // ─── Delete ─────────────────────────────────────────────────────────────────
@@ -386,6 +590,7 @@ export class StudentsService {
   ) {
     const existing = await this.repo.findById(studentId, schoolId);
     if (!existing) throw new NotFoundException(`Student '${studentId}' not found`);
+    this.assertOwnDocumentLinks(documents, schoolId);
 
     const docs = await this.repo.addDocuments(
       documents.map((d) => ({
@@ -406,7 +611,9 @@ export class StudentsService {
   }
 
   async deleteDocument(docId: string, studentId: string, schoolId: string): Promise<void> {
-    await this.repo.deleteDocument(docId, studentId, schoolId);
+    const link = await this.repo.deleteDocument(docId, studentId, schoolId);
+    if (!link) throw new NotFoundException('Document not found');
+    await this.uploadsService.deleteByUrls([link], schoolId);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:${studentId}*`);
   }
 

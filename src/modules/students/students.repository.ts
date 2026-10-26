@@ -1,5 +1,18 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, or, ilike, inArray, isNotNull, asc, desc, sql, SQL } from 'drizzle-orm';
+import {
+  eq,
+  ne,
+  and,
+  or,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  asc,
+  desc,
+  sql,
+  SQL,
+} from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -16,6 +29,7 @@ import { classes } from '../../database/drizzle/schema/classes.schema';
 import { sections } from '../../database/drizzle/schema/sections.schema';
 import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
 import { schools } from '../../database/drizzle/schema/schools.schema';
+import { schoolSettings } from '../../database/drizzle/schema/school-settings.schema';
 import {
   Student,
   NewStudent,
@@ -55,6 +69,100 @@ export class StudentsRepository {
       })
       .returning({ last_number: schoolStudentCounters.last_number });
     return row.last_number;
+  }
+
+  async findAdmissionFormat(schoolId: string) {
+    const [row] = await this.db
+      .select({
+        school_code: schools.code,
+        prefix: schoolSettings.admission_prefix,
+        include_year: schoolSettings.admission_include_year,
+        digits: schoolSettings.admission_number_digits,
+        start_number: schoolSettings.admission_start_number,
+        last_number: schoolStudentCounters.admission_last_number,
+      })
+      .from(schools)
+      .leftJoin(schoolSettings, eq(schoolSettings.school_id, schools.id))
+      .leftJoin(schoolStudentCounters, eq(schoolStudentCounters.school_id, schools.id))
+      .where(eq(schools.id, schoolId));
+    return row;
+  }
+
+  async nextAdmissionSequence(schoolId: string, startNumber: number): Promise<number> {
+    const [row] = await this.db
+      .insert(schoolStudentCounters)
+      .values({ school_id: schoolId, last_number: 0, admission_last_number: startNumber })
+      .onConflictDoUpdate({
+        target: schoolStudentCounters.school_id,
+        set: {
+          admission_last_number: sql`GREATEST(${schoolStudentCounters.admission_last_number} + 1, ${startNumber})`,
+          updated_at: new Date(),
+        },
+      })
+      .returning({ value: schoolStudentCounters.admission_last_number });
+    return row.value;
+  }
+
+  async maxRollNumber(
+    schoolId: string,
+    academicYearId: string,
+    classId: string,
+    sectionId?: string | null,
+  ): Promise<number> {
+    const [row] = await this.db
+      .select({
+        max: sql<number | null>`MAX(CAST(${studentAcademicInfo.roll_number} AS INTEGER))`,
+      })
+      .from(studentAcademicInfo)
+      .innerJoin(students, eq(students.id, studentAcademicInfo.student_id))
+      .where(
+        and(
+          eq(studentAcademicInfo.school_id, schoolId),
+          eq(studentAcademicInfo.academic_year_id, academicYearId),
+          eq(studentAcademicInfo.class_id, classId),
+          sectionId
+            ? eq(studentAcademicInfo.section_id, sectionId)
+            : isNull(studentAcademicInfo.section_id),
+          eq(studentAcademicInfo.is_current, true),
+          eq(studentAcademicInfo.deleted, false),
+          eq(students.deleted, false),
+          sql`${studentAcademicInfo.roll_number} ~ '^[0-9]{1,9}$'`,
+        ),
+      );
+    return Number(row?.max ?? 0);
+  }
+
+  async findAcademicNumberClash(
+    schoolId: string,
+    field: 'admission_number' | 'registration_number' | 'roll_number',
+    value: string,
+    excludeStudentId?: string,
+    scope?: { academicYearId: string; classId: string; sectionId?: string | null },
+  ): Promise<boolean> {
+    const conditions: SQL<unknown>[] = [
+      eq(studentAcademicInfo.school_id, schoolId),
+      eq(studentAcademicInfo[field], value),
+      eq(studentAcademicInfo.is_current, true),
+      eq(studentAcademicInfo.deleted, false),
+      eq(students.deleted, false),
+    ];
+    if (excludeStudentId) conditions.push(ne(studentAcademicInfo.student_id, excludeStudentId));
+    if (scope) {
+      conditions.push(eq(studentAcademicInfo.academic_year_id, scope.academicYearId));
+      conditions.push(eq(studentAcademicInfo.class_id, scope.classId));
+      conditions.push(
+        scope.sectionId
+          ? eq(studentAcademicInfo.section_id, scope.sectionId)
+          : isNull(studentAcademicInfo.section_id),
+      );
+    }
+    const [row] = await this.db
+      .select({ id: studentAcademicInfo.id })
+      .from(studentAcademicInfo)
+      .innerJoin(students, eq(students.id, studentAcademicInfo.student_id))
+      .where(and(...conditions))
+      .limit(1);
+    return !!row;
   }
 
   // ─── Students ───────────────────────────────────────────────────────────────
@@ -443,7 +551,9 @@ export class StudentsRepository {
       )
       .orderBy(asc(studentParents.must_change_password), desc(studentParents.updated_at))
       .limit(1);
-    return row?.password_hash ? { password_hash: row.password_hash, must_change_password: row.must_change_password } : null;
+    return row?.password_hash
+      ? { password_hash: row.password_hash, must_change_password: row.must_change_password }
+      : null;
   }
 
   async findGuardianById(id: string, schoolId: string): Promise<StudentParentSafe | null> {
@@ -479,6 +589,20 @@ export class StudentsRepository {
    * inserts rows with no matching existing id, and updates rows that do — preserving
    * password_hash for any row that isn't given a new one (see StudentsService.buildParentRows).
    */
+  async shareParentPassword(phoneNumber: string, dialCode: string, passwordHash: string) {
+    await this.db
+      .update(studentParents)
+      .set({ password_hash: passwordHash, must_change_password: true, updated_at: new Date() })
+      .where(
+        and(
+          eq(studentParents.phone_number, phoneNumber),
+          eq(studentParents.dial_code, dialCode),
+          eq(studentParents.is_active, true),
+          eq(studentParents.deleted, false),
+        ),
+      );
+  }
+
   async syncParents(
     studentId: string,
     schoolId: string,
@@ -551,8 +675,8 @@ export class StudentsRepository {
     return this.db.insert(studentDocuments).values(data).returning();
   }
 
-  async deleteDocument(id: string, studentId: string, schoolId: string): Promise<void> {
-    await this.db
+  async deleteDocument(id: string, studentId: string, schoolId: string): Promise<string | null> {
+    const [row] = await this.db
       .update(studentDocuments)
       .set({ deleted: true, updated_at: new Date() })
       .where(
@@ -560,24 +684,34 @@ export class StudentsRepository {
           eq(studentDocuments.id, id),
           eq(studentDocuments.student_id, studentId),
           eq(studentDocuments.school_id, schoolId),
+          eq(studentDocuments.deleted, false),
         ),
-      );
+      )
+      .returning({ document_link: studentDocuments.document_link });
+    return row?.document_link ?? null;
   }
 
   async replaceDocuments(
     studentId: string,
     schoolId: string,
     data: NewStudentDocument[],
-  ): Promise<StudentDocument[]> {
-    await this.db
+  ): Promise<{ documents: StudentDocument[]; previousLinks: string[] }> {
+    const previous = await this.db
       .update(studentDocuments)
       .set({ deleted: true, updated_at: new Date() })
       .where(
-        and(eq(studentDocuments.student_id, studentId), eq(studentDocuments.school_id, schoolId)),
-      );
+        and(
+          eq(studentDocuments.student_id, studentId),
+          eq(studentDocuments.school_id, schoolId),
+          eq(studentDocuments.deleted, false),
+        ),
+      )
+      .returning({ document_link: studentDocuments.document_link });
+    const previousLinks = previous.map((r) => r.document_link);
 
-    if (!data.length) return [];
-    return this.db.insert(studentDocuments).values(data).returning();
+    if (!data.length) return { documents: [], previousLinks };
+    const documents = await this.db.insert(studentDocuments).values(data).returning();
+    return { documents, previousLinks };
   }
 
   // ─── ID Card data ───────────────────────────────────────────────────────────

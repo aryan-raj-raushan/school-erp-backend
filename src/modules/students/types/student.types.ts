@@ -43,6 +43,16 @@ export interface StudentFull {
   documents: StudentDocument[];
 }
 
+export interface ParentCredential {
+  parent_id: string;
+  name: string;
+  dial_code: string;
+  phone_number: string;
+  temporary_password: string;
+}
+
+export type StudentFullWithCredentials = StudentFull & { parent_credentials: ParentCredential[] };
+
 export interface StudentListItem {
   id: string;
   system_number: number;

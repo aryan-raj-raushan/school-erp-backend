@@ -1,7 +1,10 @@
 import {
   Controller,
+  Get,
   Post,
   Delete,
+  Query,
+  Res,
   Body,
   UploadedFile,
   UseInterceptors,
@@ -12,6 +15,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Response } from 'express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags, ApiBody } from '@nestjs/swagger';
 import { UploadsService } from './uploads.service';
 import { DeleteUploadDto } from './dto/delete-upload.dto';
@@ -23,6 +27,21 @@ import { CompanyRole } from '../../shared/enums';
 import { JwtPayload } from '../../shared/types/jwt-payload.types';
 
 const TEN_MB = 10 * 1024 * 1024;
+
+const fileSizePipe = () =>
+  new ParseFilePipe({
+    fileIsRequired: true,
+    validators: [
+      new MaxFileSizeValidator({
+        maxSize: TEN_MB,
+        message: 'File is too large. Maximum allowed size is 10 MB.',
+      }),
+    ],
+    exceptionFactory: (error) =>
+      new BadRequestException(
+        error === 'File is required' ? 'Please choose a file to upload.' : error,
+      ),
+  });
 
 @ApiTags('Uploads')
 @ApiBearerAuth()
@@ -47,9 +66,7 @@ export class UploadsController {
     },
   })
   async uploadImage(
-    @UploadedFile(
-      new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: TEN_MB })] }),
-    )
+    @UploadedFile(fileSizePipe())
     file: Express.Multer.File,
     @Body() body: { reference_id?: string; reference_type?: string; document_type?: string },
     @GetSchoolId() schoolId: string,
@@ -83,9 +100,7 @@ export class UploadsController {
     },
   })
   async uploadDocument(
-    @UploadedFile(
-      new ParseFilePipe({ validators: [new MaxFileSizeValidator({ maxSize: TEN_MB })] }),
-    )
+    @UploadedFile(fileSizePipe())
     file: Express.Multer.File,
     @Body() body: { reference_id?: string; reference_type?: string; document_type?: string },
     @GetSchoolId() schoolId: string,
@@ -100,6 +115,24 @@ export class UploadsController {
       document_type: body.document_type,
     });
     return ApiResponse.success(data, 'Document uploaded');
+  }
+
+  @Get('file')
+  @ApiOperation({ summary: 'Stream an uploaded file without exposing the storage URL' })
+  async viewFile(
+    @Query('key') key: string,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUser() user: JwtPayload,
+    @Res() res: Response,
+  ) {
+    const file = await this.uploadsService.getFile(key, schoolId, user.role as string);
+    res.set({
+      'Content-Type': file.contentType,
+      'Content-Disposition': 'inline',
+      'Cache-Control': 'private, max-age=300',
+      ...(file.contentLength ? { 'Content-Length': file.contentLength } : {}),
+    });
+    file.body.pipe(res);
   }
 
   @Delete()

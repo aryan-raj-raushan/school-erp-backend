@@ -38,10 +38,7 @@ export class SchoolsController {
 
   @Patch('profile')
   @ApiOperation({ summary: 'Update the current school profile (school-context auth)' })
-  async updateMyProfile(
-    @GetSchoolId() schoolId: string,
-    @Body() dto: UpdateSchoolDto,
-  ) {
+  async updateMyProfile(@GetSchoolId() schoolId: string, @Body() dto: UpdateSchoolDto) {
     const data = await this.schoolsService.updateMyProfile(schoolId, dto);
     return ApiResponse.success(data, 'School profile updated successfully');
   }
@@ -55,10 +52,7 @@ export class SchoolsController {
     CompanyRole.OPERATOR,
   )
   @ApiOperation({ summary: 'List all schools with pagination & filters' })
-  async findAll(
-    @Query() filters: SchoolFilterDto,
-    @GetCurrentUser() user: JwtPayload,
-  ) {
+  async findAll(@Query() filters: SchoolFilterDto, @GetCurrentUser() user: JwtPayload) {
     const data = await this.schoolsService.findAll(filters, user.sub, user.role as string);
     return ApiResponse.success(data.items, 'Schools fetched successfully', data.meta);
   }
@@ -72,10 +66,7 @@ export class SchoolsController {
     CompanyRole.OPERATOR,
   )
   @ApiOperation({ summary: 'Get school by ID' })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetCurrentUser() user: JwtPayload,
-  ) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @GetCurrentUser() user: JwtPayload) {
     const data = await this.schoolsService.findById(id, user.sub, user.role as string);
     return ApiResponse.success(data);
   }
@@ -83,22 +74,28 @@ export class SchoolsController {
   @Get(':id/admin')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @ApiOperation({ summary: "Get a school's admin account details, if provisioned" })
-  async findAdmin(
+  async findAdmin(@Param('id', ParseUUIDPipe) id: string, @GetCurrentUser() user: JwtPayload) {
+    const data = await this.schoolsService.getAdmin(id, user.sub, user.role as string);
+    return ApiResponse.success(data);
+  }
+
+  @Post(':id/admin/reset-password')
+  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Issue a new temporary password for a school's admin" })
+  async resetAdminPassword(
     @Param('id', ParseUUIDPipe) id: string,
     @GetCurrentUser() user: JwtPayload,
   ) {
-    const data = await this.schoolsService.getAdmin(id, user.sub, user.role as string);
-    return ApiResponse.success(data);
+    const data = await this.schoolsService.resetAdminPassword(id, user.sub, user.role as string);
+    return ApiResponse.success(data, 'Temporary password generated');
   }
 
   @Post()
   @Roles(CompanyRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new school (SUPER_ADMIN only)' })
-  async create(
-    @Body() dto: CreateSchoolDto,
-    @GetCurrentUser() user: JwtPayload,
-  ) {
+  async create(@Body() dto: CreateSchoolDto, @GetCurrentUser() user: JwtPayload) {
     const data = await this.schoolsService.create(dto, user.sub);
     return ApiResponse.created(data, 'School created successfully');
   }
@@ -119,10 +116,7 @@ export class SchoolsController {
   @Roles(CompanyRole.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft delete a school (SUPER_ADMIN only)' })
-  async remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @GetCurrentUser() user: JwtPayload,
-  ) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @GetCurrentUser() user: JwtPayload) {
     await this.schoolsService.remove(id, user.sub, user.role as string);
     return ApiResponse.noContent('School deleted successfully');
   }

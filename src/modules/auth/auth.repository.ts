@@ -100,35 +100,6 @@ export class AuthRepository {
     return user ?? null;
   }
 
-  async createSchoolUserWithoutPassword(data: {
-    id: string;
-    school_id: string;
-    first_name: string;
-    last_name?: string;
-    dial_code: string;
-    phone_number: string;
-    email?: string;
-    created_by: string;
-  }) {
-    const [user] = await this.db
-      .insert(schoolUsers)
-      .values({
-        ...data,
-        role: 'SCHOOL_ADMIN',
-        password_hash: null,
-      })
-      .returning({
-        id: schoolUsers.id,
-        school_id: schoolUsers.school_id,
-        first_name: schoolUsers.first_name,
-        last_name: schoolUsers.last_name,
-        phone_number: schoolUsers.phone_number,
-        email: schoolUsers.email,
-        role: schoolUsers.role,
-      });
-    return user;
-  }
-
   async findSchoolUserByPhoneGlobal(phone_number: string, dial_code: string): Promise<boolean> {
     const [row] = await this.db
       .select({ id: schoolUsers.id })

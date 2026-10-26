@@ -18,6 +18,7 @@ import { EventsModule } from './modules/events/events.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SchoolsModule } from './modules/schools/schools.module';
+import { BackupModule } from './modules/backup/backup.module';
 import { AcademicYearsModule } from './modules/academic-years/academic-years.module';
 import { ClassesModule } from './modules/classes/classes.module';
 import { SectionsModule } from './modules/sections/sections.module';
@@ -94,6 +95,7 @@ import { ParentPortalModule } from '@modules/parent-portal/parent-portal.module'
     HealthModule,
     AuthModule,
     SchoolsModule,
+    BackupModule,
     AcademicYearsModule,
     ClassesModule,
     SectionsModule,

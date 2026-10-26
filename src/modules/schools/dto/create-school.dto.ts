@@ -21,14 +21,6 @@ export class CreateSchoolDto {
   @Transform(({ value }) => StringUtils.sanitize(StringUtils.trim(value)))
   name: string;
 
-  @ApiPropertyOptional({ example: 'DPS' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(10)
-  @Matches(REGEX.SCHOOL_CODE, { message: 'Code must be 2-10 uppercase alphanumeric chars' })
-  @Transform(({ value }) => StringUtils.trim(value)?.toUpperCase())
-  code?: string;
-
   @ApiPropertyOptional({ example: '+91' })
   @IsOptional()
   @Matches(REGEX.DIAL_CODE, { message: 'Invalid dial code' })
@@ -91,7 +83,6 @@ export class CreateSchoolDto {
   @IsBoolean()
   is_active?: boolean;
 
-  // Auto-creates a SCHOOL_ADMIN without password when provided
   @ApiPropertyOptional({ example: 'Ramesh' })
   @IsOptional()
   @IsString()
@@ -121,14 +112,4 @@ export class CreateSchoolDto {
   @Matches(REGEX.EMAIL, { message: 'Invalid email address' })
   @Transform(({ value }) => StringUtils.trim(value)?.toLowerCase())
   admin_email?: string;
-
-  // When provided, the School Admin can log in with it immediately; first
-  // successful login forces a password change (see must_change_password).
-  @ApiPropertyOptional({ example: 'Admin@1234', minLength: 8 })
-  @IsOptional()
-  @IsString()
-  @Matches(REGEX.PASSWORD, {
-    message: 'Password must be 8+ chars with uppercase, lowercase, number and special character',
-  })
-  admin_password?: string;
 }

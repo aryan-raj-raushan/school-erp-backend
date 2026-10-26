@@ -1,7 +1,6 @@
 import {
   Injectable,
   NotFoundException,
-  ConflictException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
@@ -10,13 +9,12 @@ import { SchoolsRepository } from './schools.repository';
 import { AuthRepository } from '../auth/auth.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
-import { hashPassword } from '../../utils/hash.utils';
-import { StringUtils } from '../../utils/string.utils';
+import { generateTempPassword, hashPassword } from '../../utils/hash.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateSchoolDto } from './dto/create-school.dto';
 import { UpdateSchoolDto } from './dto/update-school.dto';
 import { SchoolFilterDto } from './dto/school-filter.dto';
-import { School } from './types/school.types';
+import { School, SchoolAdminCredentials, SchoolWithCredentials } from './types/school.types';
 import { CompanyRole } from '../../shared/enums';
 import { CacheTTL } from '../../shared/constants';
 import { APP_EVENTS } from '../../shared/events/event-names';
@@ -81,23 +79,43 @@ export class SchoolsService {
     });
   }
 
-  async create(dto: CreateSchoolDto, createdBy: string): Promise<School> {
-    if (StringUtils.isNotEmpty(dto.code)) {
-      const existing = await this.schoolsRepo.findByCode(dto.code!);
-      if (existing) throw new ConflictException(`School with code '${dto.code}' already exists`);
-    }
+  private static withoutAdminFields(dto: UpdateSchoolDto) {
+    const schoolData = { ...dto };
+    delete schoolData.admin_first_name;
+    delete schoolData.admin_last_name;
+    delete schoolData.admin_phone;
+    delete schoolData.admin_email;
+    delete schoolData.admin_dial_code;
+    return schoolData;
+  }
 
-    // Validate admin identifier before creating school
+  private async generateCode(name: string): Promise<string> {
+    const words = name
+      .toUpperCase()
+      .replace(/[^A-Z0-9 ]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+    let base = words
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 6);
+    if (base.length < 2) base = words.join('').slice(0, 4);
+    if (base.length < 2) base = 'SCH';
+
+    const taken = new Set(await this.schoolsRepo.findCodesWithPrefix(base));
+    if (!taken.has(base)) return base;
+    for (let n = 2; ; n++) {
+      const candidate = `${base}${n}`;
+      if (!taken.has(candidate)) return candidate;
+    }
+  }
+
+  async create(dto: CreateSchoolDto, createdBy: string): Promise<SchoolWithCredentials> {
     if (dto.admin_phone && !dto.admin_first_name) {
       throw new BadRequestException('admin_first_name is required when admin_phone is provided');
     }
     if (dto.admin_email && !dto.admin_phone && !dto.admin_first_name) {
       throw new BadRequestException('admin_first_name is required when admin_email is provided');
-    }
-    if (dto.admin_password && !dto.admin_phone && !dto.admin_email) {
-      throw new BadRequestException(
-        'admin_phone or admin_email is required when admin_password is provided',
-      );
     }
 
     const {
@@ -106,18 +124,18 @@ export class SchoolsService {
       admin_phone,
       admin_email,
       admin_dial_code,
-      admin_password,
       ...schoolData
     } = dto;
 
     const school = await this.schoolsRepo.create({
       id: generateId(),
       created_by: createdBy,
+      code: await this.generateCode(dto.name),
       ...schoolData,
     });
 
-    // Role seeding + admin-account provisioning happen off the SCHOOL.CREATED event
-    // (see SchoolCreatedListener) — emitAsync so both finish before this responds.
+    const adminPassword = admin_phone || admin_email ? generateTempPassword() : undefined;
+
     await this.events.emitAsync(APP_EVENTS.SCHOOL.CREATED, {
       schoolId: school.id,
       createdBy,
@@ -126,23 +144,51 @@ export class SchoolsService {
       adminDialCode: admin_dial_code ?? dto.dial_code,
       adminPhone: admin_phone,
       adminEmail: admin_email,
-      adminPassword: admin_password,
+      adminPassword,
     });
 
     await this.redisService.delByPattern(`schools:list:*`);
-    return school;
+    if (!adminPassword) return school;
+    return {
+      ...school,
+      admin_credentials: {
+        login_id: admin_phone ?? admin_email!,
+        temporary_password: adminPassword,
+      },
+    };
   }
 
-  async update(id: string, dto: UpdateSchoolDto, userId: string, role: string): Promise<School> {
+  async resetAdminPassword(
+    id: string,
+    userId: string,
+    role: string,
+  ): Promise<SchoolAdminCredentials> {
+    await this.assertSchoolAccess(id, userId, role);
+    const admin = await this.authRepo.findSchoolAdminBySchoolId(id);
+    if (!admin) throw new NotFoundException('This school has no admin account yet');
+
+    const temporaryPassword = generateTempPassword();
+    await this.authRepo.adminResetSchoolUserPassword(
+      admin.id,
+      await hashPassword(temporaryPassword),
+    );
+    return {
+      login_id:
+        admin.phone_number && admin.phone_number !== '0000000000'
+          ? admin.phone_number
+          : admin.email!,
+      temporary_password: temporaryPassword,
+    };
+  }
+
+  async update(
+    id: string,
+    dto: UpdateSchoolDto,
+    userId: string,
+    role: string,
+  ): Promise<SchoolWithCredentials> {
     await this.assertSchoolAccess(id, userId, role);
     await this.findById(id, userId, role);
-
-    if (StringUtils.isNotEmpty(dto.code)) {
-      const existing = await this.schoolsRepo.findByCode(dto.code!);
-      if (existing && existing.id !== id) {
-        throw new ConflictException(`School code '${dto.code}' already in use`);
-      }
-    }
 
     const {
       admin_first_name,
@@ -150,7 +196,6 @@ export class SchoolsService {
       admin_phone,
       admin_email,
       admin_dial_code,
-      admin_password,
       ...schoolData
     } = dto;
 
@@ -158,18 +203,16 @@ export class SchoolsService {
     await this.redisService.del(`schools:${id}`);
     await this.redisService.delByPattern(`schools:list:*`);
 
-    if (admin_first_name || admin_last_name || admin_phone || admin_email || admin_password) {
-      await this.syncSchoolAdmin(id, userId, {
-        admin_first_name,
-        admin_last_name,
-        admin_phone,
-        admin_email,
-        admin_dial_code,
-        admin_password,
-      });
-    }
+    if (!admin_first_name && !admin_last_name && !admin_phone && !admin_email) return updated;
 
-    return updated;
+    const credentials = await this.syncSchoolAdmin(id, userId, {
+      admin_first_name,
+      admin_last_name,
+      admin_phone,
+      admin_email,
+      admin_dial_code,
+    });
+    return credentials ? { ...updated, admin_credentials: credentials } : updated;
   }
 
   private async syncSchoolAdmin(
@@ -181,9 +224,8 @@ export class SchoolsService {
       admin_phone?: string;
       admin_email?: string;
       admin_dial_code?: string;
-      admin_password?: string;
     },
-  ): Promise<void> {
+  ): Promise<SchoolAdminCredentials | undefined> {
     const existing = await this.authRepo.findSchoolAdminBySchoolId(schoolId);
 
     if (existing) {
@@ -204,50 +246,32 @@ export class SchoolsService {
       if (Object.keys(patch).length > 0) {
         await this.authRepo.updateSchoolUserProfile(existing.id, patch);
       }
-      if (fields.admin_password) {
-        const password_hash = await hashPassword(fields.admin_password);
-        await this.authRepo.adminResetSchoolUserPassword(existing.id, password_hash);
-      }
-      return;
+      return undefined;
     }
 
-    // No admin yet — create one, mirroring school-creation provisioning.
-    if (!fields.admin_phone && !fields.admin_email) return;
+    if (!fields.admin_phone && !fields.admin_email) return undefined;
     if (!fields.admin_first_name) {
       throw new BadRequestException('admin_first_name is required to create a school admin');
     }
 
-    const dialCode = fields.admin_dial_code ?? '+91';
-    const phone = fields.admin_phone ?? '0000000000';
-
-    if (fields.admin_password) {
-      const password_hash = await hashPassword(fields.admin_password);
-      await this.authRepo.createSchoolUser({
-        id: generateId(),
-        school_id: schoolId,
-        first_name: fields.admin_first_name,
-        last_name: fields.admin_last_name,
-        dial_code: dialCode,
-        phone_number: phone,
-        email: fields.admin_email,
-        password_hash,
-        role: 'SCHOOL_ADMIN',
-        created_by: createdBy,
-        must_change_password: true,
-      });
-      return;
-    }
-
-    await this.authRepo.createSchoolUserWithoutPassword({
+    const temporaryPassword = generateTempPassword();
+    await this.authRepo.createSchoolUser({
       id: generateId(),
       school_id: schoolId,
       first_name: fields.admin_first_name,
       last_name: fields.admin_last_name,
-      dial_code: dialCode,
-      phone_number: phone,
+      dial_code: fields.admin_dial_code ?? '+91',
+      phone_number: fields.admin_phone ?? '0000000000',
       email: fields.admin_email,
+      password_hash: await hashPassword(temporaryPassword),
+      role: 'SCHOOL_ADMIN',
       created_by: createdBy,
+      must_change_password: true,
     });
+    return {
+      login_id: fields.admin_phone ?? fields.admin_email!,
+      temporary_password: temporaryPassword,
+    };
   }
 
   async getAdmin(id: string, userId: string, role: string) {
@@ -268,12 +292,7 @@ export class SchoolsService {
     const school = await this.schoolsRepo.findById(schoolId);
     if (!school) throw new NotFoundException('School not found');
 
-    if (dto.code && dto.code !== school.code) {
-      const existing = await this.schoolsRepo.findByCode(dto.code);
-      if (existing) throw new ConflictException(`School code '${dto.code}' already in use`);
-    }
-
-    const updated = await this.schoolsRepo.update(schoolId, dto);
+    const updated = await this.schoolsRepo.update(schoolId, SchoolsService.withoutAdminFields(dto));
     await this.redisService.del(`schools:${schoolId}`);
     await this.redisService.delByPattern(`schools:list:*`);
     return updated;

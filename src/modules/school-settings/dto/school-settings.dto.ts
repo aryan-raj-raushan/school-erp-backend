@@ -57,6 +57,30 @@ export class UpdateSchoolSettingsDto {
   @IsOptional()
   @IsEnum(ConflictResolutionDto)
   conflict_resolution_mode?: ConflictResolutionDto;
+
+  @ApiPropertyOptional({ example: 'CPS', description: 'Defaults to the school code when empty' })
+  @IsOptional()
+  @Matches(/^[A-Z0-9]{1,15}$/, { message: 'Prefix must be 1-15 uppercase letters or digits' })
+  admission_prefix?: string;
+
+  @ApiPropertyOptional({ default: true })
+  @IsOptional()
+  @IsBoolean()
+  admission_include_year?: boolean;
+
+  @ApiPropertyOptional({ default: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(3)
+  @Max(8)
+  admission_number_digits?: number;
+
+  @ApiPropertyOptional({ default: 1, example: 2901 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(99999999)
+  admission_start_number?: number;
 }
 
 export enum TimingTypeDto {

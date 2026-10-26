@@ -47,7 +47,13 @@ export const schoolSettings = pgTable('school_settings', {
   three_lates_equal_half_day: boolean('three_lates_equal_half_day').default(true).notNull(),
   two_half_days_equal_leave: boolean('two_half_days_equal_leave').default(false).notNull(),
   auto_notify_parent_on_absent: boolean('auto_notify_parent_on_absent').default(false).notNull(),
-  conflict_resolution_mode: conflictResolutionEnum('conflict_resolution_mode').default('FLAG_FOR_REVIEW').notNull(),
+  conflict_resolution_mode: conflictResolutionEnum('conflict_resolution_mode')
+    .default('FLAG_FOR_REVIEW')
+    .notNull(),
+  admission_prefix: varchar('admission_prefix', { length: 15 }),
+  admission_include_year: boolean('admission_include_year').default(true).notNull(),
+  admission_number_digits: integer('admission_number_digits').default(5).notNull(),
+  admission_start_number: integer('admission_start_number').default(1).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),
 });
@@ -90,11 +96,15 @@ export const classTimingOverrides = pgTable(
     class_id: varchar('class_id', { length: 36 })
       .notNull()
       .references(() => classes.id, { onDelete: 'cascade' }),
-    timing_id: varchar('timing_id', { length: 36 })
-      .references(() => schoolTimings.id, { onDelete: 'set null' }),
+    timing_id: varchar('timing_id', { length: 36 }).references(() => schoolTimings.id, {
+      onDelete: 'set null',
+    }),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({
-    uniqueClassSchool: unique('class_timing_overrides_class_school_unique').on(t.class_id, t.school_id),
+    uniqueClassSchool: unique('class_timing_overrides_class_school_unique').on(
+      t.class_id,
+      t.school_id,
+    ),
   }),
 );
