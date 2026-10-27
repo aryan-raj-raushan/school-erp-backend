@@ -19,7 +19,6 @@ import { LoginCompanyDto } from './dto/login-company.dto';
 import { LoginSchoolDto } from './dto/login-school.dto';
 import { LoginParentDto } from './dto/login-parent.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
-import { SetupPasswordDto } from './dto/setup-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
 import { Public } from '../../common/decorators/public.decorator';
@@ -99,22 +98,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Unified login — company (email) or school (email/phone). Returns needs_password_setup:true + setup_token when school admin has no password set.',
+      'Unified login — company (email) or school (email/phone). Returns must_change_password:true + change_token when a temporary password must be replaced.',
   })
   async loginUnified(@Body() dto: LoginUnifiedDto) {
     const result = await this.authService.loginUnified(dto);
     return ApiResponse.success(result, 'Login successful');
-  }
-
-  @Public()
-  @Post('school/setup-password')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'School admin first-time password setup using setup_token from login response',
-  })
-  async setupPassword(@Body() dto: SetupPasswordDto) {
-    const result = await this.authService.setupPassword(dto);
-    return ApiResponse.success(result, 'Password set successfully');
   }
 
   @Public()

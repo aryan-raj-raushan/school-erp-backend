@@ -18,15 +18,10 @@ export interface LoginResponse {
   user: AuthUser;
 }
 
-export interface PasswordSetupRequired {
-  needs_password_setup: true;
-  setup_token: string;
-}
-
 export interface PasswordChangeRequired {
   must_change_password: true;
   change_token: string;
   context: 'SCHOOL' | 'PARENT';
 }
 
-export type LoginOrSetupResponse = LoginResponse | PasswordSetupRequired | PasswordChangeRequired;
+export type LoginOrChangeResponse = LoginResponse | PasswordChangeRequired;

@@ -13,3 +13,17 @@ export function addBillingCycle(date: Date, planType: string): Date {
   const months = CYCLE_MONTHS[planType] ?? 1;
   return DateUtils.addMonths(date, months);
 }
+
+/**
+ * First cycle boundary strictly after `after`, counted from the subscription's own
+ * start date so month-end anchors don't drift (31-Jan -> 28-Feb -> 31-Mar).
+ */
+export function nextCycleBoundary(anchor: Date, after: Date, planType: string): Date {
+  const months = CYCLE_MONTHS[planType] ?? 1;
+  const elapsedMonths =
+    (after.getUTCFullYear() - anchor.getUTCFullYear()) * 12 +
+    (after.getUTCMonth() - anchor.getUTCMonth());
+  let cycles = Math.max(1, Math.floor(elapsedMonths / months));
+  while (DateUtils.addMonths(anchor, cycles * months) <= after) cycles++;
+  return DateUtils.addMonths(anchor, cycles * months);
+}

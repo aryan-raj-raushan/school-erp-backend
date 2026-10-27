@@ -1,4 +1,4 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { AuditLogsService } from '../../modules/audit-logs/audit-logs.service';
@@ -6,7 +6,16 @@ import { AuthContext } from '../../shared/enums';
 
 const MUTATING_METHODS = ['POST', 'PATCH', 'PUT', 'DELETE'];
 
-type AuditableEntity = 'FEES' | 'FINANCE' | 'SALARY';
+type AuditableEntity =
+  | 'FEES'
+  | 'FINANCE'
+  | 'SALARY'
+  | 'SCHOOL'
+  | 'SUBSCRIPTION'
+  | 'SUBSCRIPTION_PLAN'
+  | 'COMPANY_USER'
+  | 'INVOICE'
+  | 'PAYMENT';
 
 // URL segment -> audit_entity enum value. Deliberately scoped to entities not
 // already logged directly by their own module (e.g. 'exam' calls
@@ -17,8 +26,21 @@ const ENTITY_MAP: Record<string, AuditableEntity> = {
   salary: 'SALARY',
 };
 
+const PLATFORM_ENTITY_MAP: Record<string, AuditableEntity> = {
+  schools: 'SCHOOL',
+  subscriptions: 'SUBSCRIPTION',
+  'subscription-plans': 'SUBSCRIPTION_PLAN',
+  'company-users': 'COMPANY_USER',
+  invoices: 'INVOICE',
+  payments: 'PAYMENT',
+};
+
+const SECRET_KEY_PATTERN = /password|credential|token|secret/i;
+
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(AuditInterceptor.name);
+
   constructor(private readonly auditLogs: AuditLogsService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -28,16 +50,21 @@ export class AuditInterceptor implements NestInterceptor {
       return next.handle();
     }
 
-    const entity = this.extractEntity(request.url);
-    if (!entity) return next.handle();
-
     const user = request.user;
-    // audit_logs.school_id is a real FK to schools.id — only log for school-
-    // context users, rather than risk a constraint violation for company/
-    // platform-level requests that have no valid school id.
-    if (!user || user.context !== AuthContext.SCHOOL || !user.school_id) {
+    if (!user) return next.handle();
+
+    const isPlatformRequest = user.context === AuthContext.COMPANY;
+    // audit_logs.school_id is a real FK to schools.id — school-context rows always
+    // carry the caller's school; platform rows carry the affected school when known.
+    if (!isPlatformRequest && (user.context !== AuthContext.SCHOOL || !user.school_id)) {
       return next.handle();
     }
+
+    const entity = this.extractEntity(
+      request.url,
+      isPlatformRequest ? PLATFORM_ENTITY_MAP : ENTITY_MAP,
+    );
+    if (!entity) return next.handle();
 
     return next.handle().pipe(
       tap({
@@ -49,26 +76,48 @@ export class AuditInterceptor implements NestInterceptor {
           // operations with no single affected id).
           if (!entityId) return;
 
+          const schoolId = isPlatformRequest
+            ? ((data?.school_id as string | undefined) ??
+              (entity === 'SCHOOL' ? String(entityId) : null))
+            : user.school_id;
+
           void this.auditLogs
             .log({
-              school_id: user.school_id,
+              school_id: schoolId,
               entity,
               entity_id: String(entityId),
               action,
               changed_by: user.sub,
-              new_value: action !== 'DELETE' ? data : undefined,
+              ip_address: request.ip,
+              new_value: action !== 'DELETE' ? this.withoutSecrets(data) : undefined,
             })
-            .catch(() => {});
+            .catch((error: Error) =>
+              this.logger.warn(
+                `Audit log write failed for ${entity} ${entityId}: ${error.message}`,
+              ),
+            );
         },
       }),
     );
   }
 
-  private extractEntity(url: string): AuditableEntity | undefined {
-    const parts = url.split('/').filter(Boolean);
+  private withoutSecrets(
+    data: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!data) return undefined;
+    return Object.fromEntries(
+      Object.entries(data).filter(([key]) => !SECRET_KEY_PATTERN.test(key)),
+    );
+  }
+
+  private extractEntity(
+    url: string,
+    map: Record<string, AuditableEntity>,
+  ): AuditableEntity | undefined {
+    const parts = url.split('?')[0].split('/').filter(Boolean);
     const apiIdx = parts.indexOf('v1');
     const segment = apiIdx >= 0 ? parts[apiIdx + 1] : parts[0];
-    return segment ? ENTITY_MAP[segment] : undefined;
+    return segment ? map[segment] : undefined;
   }
 
   private httpMethodToAction(method: string): 'CREATE' | 'UPDATE' | 'DELETE' {

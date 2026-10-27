@@ -111,6 +111,19 @@ export class SchoolsService {
     }
   }
 
+  private async assertNameAvailable(
+    name: string,
+    current?: { id: string; name: string },
+  ): Promise<void> {
+    if (current && current.name.toLowerCase() === name.toLowerCase()) return;
+    const existing = await this.schoolsRepo.findByName(name);
+    if (existing) {
+      throw new ConflictException(
+        `A school named '${name}' already exists (code ${existing.code})`,
+      );
+    }
+  }
+
   private async assertAdminLoginAvailable(
     phone: string | undefined,
     dialCode: string,
@@ -140,6 +153,7 @@ export class SchoolsService {
     if (dto.admin_email && !dto.admin_phone && !dto.admin_first_name) {
       throw new BadRequestException('admin_first_name is required when admin_email is provided');
     }
+    await this.assertNameAvailable(dto.name);
     await this.assertAdminLoginAvailable(
       dto.admin_phone,
       dto.admin_dial_code ?? dto.dial_code ?? '+91',
@@ -216,7 +230,7 @@ export class SchoolsService {
     role: string,
   ): Promise<SchoolWithCredentials> {
     await this.assertSchoolAccess(id, userId, role);
-    await this.findById(id, userId, role);
+    const current = await this.findById(id, userId, role);
 
     const {
       admin_first_name,
@@ -227,7 +241,9 @@ export class SchoolsService {
       ...schoolData
     } = dto;
 
+    if (schoolData.name) await this.assertNameAvailable(schoolData.name, current);
     const updated = await this.schoolsRepo.update(id, schoolData);
+    if (schoolData.is_active === false) await this.redisService.revokeSchoolSessions(id);
     await this.redisService.del(`schools:${id}`);
     await this.redisService.delByPattern(`schools:list:*`);
 
@@ -325,6 +341,7 @@ export class SchoolsService {
   async updateMyProfile(schoolId: string, dto: UpdateSchoolDto): Promise<School> {
     const school = await this.schoolsRepo.findById(schoolId);
     if (!school) throw new NotFoundException('School not found');
+    if (dto.name) await this.assertNameAvailable(dto.name, school);
 
     const updated = await this.schoolsRepo.update(schoolId, SchoolsService.withoutAdminFields(dto));
     await this.redisService.del(`schools:${schoolId}`);
@@ -336,7 +353,9 @@ export class SchoolsService {
     await this.assertSchoolAccess(id, userId, role);
     await this.findById(id, userId, role);
     await this.schoolsRepo.softDelete(id);
-    await this.redisService.del(`schools:${id}`);
+    await this.redisService.revokeSchoolSessions(id);
+    await this.redisService.del(`schools:${id}`, `subscription_status:${id}`);
     await this.redisService.delByPattern(`schools:list:*`);
+    await this.redisService.delByPattern(`*subscriptions:list:*`);
   }
 }

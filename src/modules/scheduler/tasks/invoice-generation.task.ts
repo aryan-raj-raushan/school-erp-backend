@@ -4,6 +4,7 @@ import { lte, eq, and } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../../database/drizzle/drizzle.provider';
 import { subscriptions } from '../../../database/drizzle/schema/subscriptions.schema';
+import { schools } from '../../../database/drizzle/schema';
 import { RedisService } from '../../redis/redis.service';
 import { InvoicesService } from '../../invoices/invoices.service';
 import { InvoicesRepository } from '../../invoices/invoices.repository';
@@ -39,10 +40,13 @@ export class InvoiceGenerationTask {
       const due = await this.db
         .select({ id: subscriptions.id })
         .from(subscriptions)
+        .innerJoin(schools, eq(schools.id, subscriptions.school_id))
         .where(
           and(
             eq(subscriptions.status, SubscriptionStatus.ACTIVE),
             lte(subscriptions.next_billing_date, new Date()),
+            eq(schools.is_active, true),
+            eq(schools.deleted, false),
           ),
         );
 

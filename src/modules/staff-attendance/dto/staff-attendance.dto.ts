@@ -9,6 +9,7 @@ import {
   IsUUID,
   IsBoolean,
   MaxLength,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -61,4 +62,27 @@ export class StaffAttendanceFilterDto {
   @IsOptional()
   @IsString()
   date?: string;
+}
+
+export class StaffAttendanceRangeDto {
+  @ApiProperty({ example: '2026-10-01' })
+  @IsDateString()
+  start_date: string;
+
+  @ApiProperty({ example: '2026-10-31' })
+  @IsDateString()
+  end_date: string;
+
+  @ApiPropertyOptional({ example: 'TEACHER' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  role?: string;
+}
+
+export class StaffAttendanceExportDto extends StaffAttendanceRangeDto {
+  @ApiPropertyOptional({ enum: ['xlsx', 'csv'], default: 'xlsx' })
+  @IsOptional()
+  @IsIn(['xlsx', 'csv'])
+  format?: 'xlsx' | 'csv' = 'xlsx';
 }

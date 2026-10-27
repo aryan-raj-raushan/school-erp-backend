@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { AuditLogsRepository, type CreateAuditLogData, type AuditLogFilters } from './audit-logs.repository';
+import { AuditLogsRepository, type CreateAuditLogData } from './audit-logs.repository';
+import { AuditLogFilterDto } from './dto/audit-log-filter.dto';
 
 @Injectable()
 export class AuditLogsService {
@@ -9,7 +10,7 @@ export class AuditLogsService {
     return this.repo.create(data);
   }
 
-  async findAll(schoolId: string, filters: AuditLogFilters) {
+  async findAll(schoolId: string | null, filters: AuditLogFilterDto) {
     return this.repo.findAll(schoolId, filters);
   }
 }

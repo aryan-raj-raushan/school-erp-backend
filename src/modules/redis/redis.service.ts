@@ -169,6 +169,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  async revokeSchoolSessions(schoolId: string): Promise<void> {
+    await this.setex(
+      `school_revoked_before:${schoolId}`,
+      AuthTTL.ACCESS_TOKEN_SECONDS,
+      String(Math.floor(Date.now() / 1000)),
+    );
+  }
+
   async delByPattern(pattern: string): Promise<void> {
     this.l1Invalidate(pattern);
 

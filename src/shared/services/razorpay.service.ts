@@ -70,7 +70,11 @@ export class RazorpayService {
     if (!webhookSecret) {
       throw new InternalServerErrorException('RAZORPAY_WEBHOOK_SECRET is not configured');
     }
-    return validateWebhookSignature(rawBody, signature, webhookSecret);
+    try {
+      return validateWebhookSignature(rawBody, signature, webhookSecret);
+    } catch {
+      return false;
+    }
   }
 
   /** Checkout-side signature (order_id|payment_id) — a fallback verification path to the webhook. */

@@ -16,6 +16,12 @@ export const auditEntityEnum = pgEnum('audit_entity', [
   'FEES',
   'FINANCE',
   'SALARY',
+  'SCHOOL',
+  'SUBSCRIPTION',
+  'SUBSCRIPTION_PLAN',
+  'COMPANY_USER',
+  'INVOICE',
+  'PAYMENT',
 ]);
 
 export const auditActionEnum = pgEnum('audit_action', [

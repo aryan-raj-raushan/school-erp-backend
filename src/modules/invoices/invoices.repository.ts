@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, inArray, sql, lt } from 'drizzle-orm';
+import { eq, and, inArray, sql, lt, ne, desc, isNotNull } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -131,6 +131,22 @@ export class InvoicesRepository {
   async createOneTimeCharge(data: NewOneTimeCharge): Promise<OneTimeCharge> {
     const [row] = await this.db.insert(subscriptionOneTimeCharges).values(data).returning();
     return row;
+  }
+
+  async findLatestBillingPeriodEnd(subscriptionId: string): Promise<Date | null> {
+    const [row] = await this.db
+      .select({ end: invoices.billing_period_end })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.subscription_id, subscriptionId),
+          ne(invoices.status, 'VOID'),
+          isNotNull(invoices.billing_period_end),
+        ),
+      )
+      .orderBy(desc(invoices.billing_period_end))
+      .limit(1);
+    return row?.end ?? null;
   }
 
   async countActiveStudents(schoolId: string): Promise<number> {

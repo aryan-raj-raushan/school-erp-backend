@@ -12,7 +12,7 @@ import { UploadsService } from '../uploads/uploads.service';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
 import { DateUtils } from '../../utils/date.utils';
-import { addBillingCycle } from '../subscriptions/utils/billing-cycle.utils';
+import { nextCycleBoundary } from '../subscriptions/utils/billing-cycle.utils';
 import { generateInvoicePdf } from './utils/invoice-pdf.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -178,8 +178,9 @@ export class InvoicesService {
     const sub = await this.subscriptionsRepo.findById(subscriptionId);
     if (!sub) throw new NotFoundException(`Subscription '${subscriptionId}' not found`);
 
-    const periodStart = sub.start_date ?? sub.created_at;
-    const periodEnd = sub.next_billing_date ?? new Date();
+    const anchor = sub.start_date ?? sub.created_at;
+    const periodStart = (await this.invoicesRepo.findLatestBillingPeriodEnd(sub.id)) ?? anchor;
+    const periodEnd = nextCycleBoundary(anchor, periodStart, sub.plan_type);
 
     const lines: DraftLineItem[] = [];
     let studentCountSnapshot: number | undefined;
@@ -244,7 +245,7 @@ export class InvoicesService {
     // Advance the cycle anchor regardless of who triggered generation, so the
     // cron doesn't immediately re-bill the same period on its next run.
     await this.subscriptionsRepo.update(sub.id, {
-      next_billing_date: addBillingCycle(periodEnd, sub.plan_type),
+      next_billing_date: nextCycleBoundary(anchor, periodEnd, sub.plan_type),
     });
 
     return invoice;
@@ -257,6 +258,10 @@ export class InvoicesService {
     const permitted = await this.getPermittedSchoolIds(createdBy, role);
     if (permitted !== null && !permitted.includes(sub.school_id)) {
       throw new ForbiddenException('Access denied to this school');
+    }
+
+    if (dto.due_date && dto.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10)) {
+      throw new BadRequestException('due_date cannot be in the past');
     }
 
     return this.generateForSubscription(dto.subscription_id, {

@@ -47,7 +47,7 @@ export class RolesController {
   @ApiOperation({ summary: 'List all roles for the school' })
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterRoleDto) {
     const data = await this.rolesService.findAll(schoolId, filters);
-    return ApiResponse.success(data.items, ' fetched successfully', data.meta);
+    return ApiResponse.success(data.items, 'Roles fetched successfully', data.meta);
   }
 
   @Get(':id')

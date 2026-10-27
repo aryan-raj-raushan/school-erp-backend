@@ -20,14 +20,12 @@ import { LoginCompanyDto } from './dto/login-company.dto';
 import { LoginSchoolDto } from './dto/login-school.dto';
 import { LoginParentDto } from './dto/login-parent.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
-import { SetupPasswordDto } from './dto/setup-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
 import {
   LoginResponse,
   TokenPair,
-  LoginOrSetupResponse,
-  PasswordSetupRequired,
+  LoginOrChangeResponse,
   PasswordChangeRequired,
 } from './types/auth.types';
 import { REGEX } from '../../utils/regex.utils';
@@ -139,11 +137,10 @@ export class AuthService {
 
   async loginCompany(dto: LoginCompanyDto): Promise<LoginResponse> {
     const user = await this.authRepo.findCompanyUserByEmail(dto.email);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user || !(await comparePassword(dto.password, user.password_hash))) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
     if (!user.is_active) throw new UnauthorizedException('Account is deactivated');
-
-    const passwordMatch = await comparePassword(dto.password, user.password_hash);
-    if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
 
     await this.authRepo.updateCompanyUserLastLogin(user.id);
 
@@ -171,23 +168,7 @@ export class AuthService {
 
   async loginSchool(dto: LoginSchoolDto): Promise<LoginResponse | PasswordChangeRequired> {
     const user = await this.authRepo.findSchoolUserByPhone(dto.phone_number, dto.dial_code);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
-    if (!user.is_active) throw new UnauthorizedException('Account is deactivated');
-
-    const school = await this.authRepo.findSchoolById(user.school_id);
-    if (!school || !school.is_active) {
-      throw new UnauthorizedException('School is deactivated');
-    }
-
-    if (!user.password_hash)
-      throw new UnauthorizedException(
-        'Account setup incomplete — use /auth/login to set your password',
-      );
-
-    const passwordMatch = await comparePassword(dto.password, user.password_hash);
-    if (!passwordMatch) throw new UnauthorizedException('Invalid credentials');
-
-    return this.issueSchoolTokensOrChangeRequired(user);
+    return this.verifySchoolUserLogin(user, dto.password);
   }
 
   async loginParent(dto: LoginParentDto): Promise<LoginResponse | PasswordChangeRequired> {
@@ -327,16 +308,16 @@ export class AuthService {
     };
   }
 
-  async loginUnified(dto: LoginUnifiedDto): Promise<LoginOrSetupResponse> {
+  async loginUnified(dto: LoginUnifiedDto): Promise<LoginOrChangeResponse> {
     const isEmail = REGEX.EMAIL.test(dto.identifier);
 
     // Check company users first (always email-based)
     if (isEmail) {
       const companyUser = await this.authRepo.findCompanyUserByEmail(dto.identifier);
       if (companyUser) {
-        if (!companyUser.is_active) throw new UnauthorizedException('Account is deactivated');
         const match = await comparePassword(dto.password, companyUser.password_hash);
         if (!match) throw new UnauthorizedException('Invalid credentials');
+        if (!companyUser.is_active) throw new UnauthorizedException('Account is deactivated');
         await this.authRepo.updateCompanyUserLastLogin(companyUser.id);
         if (companyUser.role !== CompanyRole.SUPER_ADMIN) {
           await this.cacheCompanyUserSchools(companyUser.id);
@@ -373,26 +354,25 @@ export class AuthService {
         password: dto.password,
       });
     }
-    if (!schoolUser.is_active) throw new UnauthorizedException('Account is deactivated');
 
-    const school = await this.authRepo.findSchoolById(schoolUser.school_id);
+    return this.verifySchoolUserLogin(schoolUser, dto.password);
+  }
+
+  private async verifySchoolUserLogin(
+    user: Awaited<ReturnType<AuthRepository['findSchoolUserByPhone']>>,
+    password: string,
+  ): Promise<LoginResponse | PasswordChangeRequired> {
+    if (!user?.password_hash || !(await comparePassword(password, user.password_hash))) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (!user.is_active) throw new UnauthorizedException('Account is deactivated');
+
+    const school = await this.authRepo.findSchoolById(user.school_id);
     if (!school || !school.is_active) {
       throw new UnauthorizedException('School is deactivated');
     }
 
-    // No password set → school admin must complete signup
-    if (!schoolUser.password_hash) {
-      const setupToken = this.generateSetupToken(schoolUser.id);
-      return {
-        needs_password_setup: true,
-        setup_token: setupToken,
-      } satisfies PasswordSetupRequired;
-    }
-
-    const match = await comparePassword(dto.password, schoolUser.password_hash);
-    if (!match) throw new UnauthorizedException('Invalid credentials');
-
-    return this.issueSchoolTokensOrChangeRequired(schoolUser);
+    return this.issueSchoolTokensOrChangeRequired(user);
   }
 
   /**
@@ -440,59 +420,6 @@ export class AuthService {
     };
   }
 
-  async setupPassword(dto: SetupPasswordDto): Promise<LoginResponse> {
-    if (dto.password !== dto.confirm_password) {
-      throw new BadRequestException('Passwords do not match');
-    }
-
-    let payload: { sub: string; purpose: string };
-    try {
-      payload = this.jwtService.verify(dto.setup_token, {
-        secret: this.configService.get<string>('jwt.accessSecret'),
-      });
-    } catch {
-      throw new UnauthorizedException('Invalid or expired setup token');
-    }
-
-    if (payload.purpose !== 'password_setup') {
-      throw new UnauthorizedException('Invalid setup token');
-    }
-
-    const user = await this.authRepo.findSchoolUserById(payload.sub);
-    if (!user) throw new NotFoundException('User not found');
-    if (user.password_hash)
-      throw new BadRequestException('Password already set — use login instead');
-
-    const school = await this.authRepo.findSchoolById(user.school_id);
-    if (!school || !school.is_active) {
-      throw new UnauthorizedException('School is deactivated');
-    }
-
-    const password_hash = await hashPassword(dto.password);
-    await this.authRepo.setSchoolUserPassword(user.id, password_hash);
-    await this.authRepo.updateSchoolUserLastLogin(user.id);
-
-    const tokens = await this.generateTokens({
-      sub: user.id,
-      phone: user.phone_number,
-      role: user.role as SchoolRole,
-      school_id: user.school_id,
-      custom_role_id: user.custom_role_id ?? null,
-      context: AuthContext.SCHOOL,
-    });
-
-    return {
-      ...tokens,
-      user: {
-        id: user.id,
-        phone: user.phone_number,
-        role: user.role,
-        schoolId: user.school_id,
-        context: AuthContext.SCHOOL,
-      },
-    };
-  }
-
   async changePassword(dto: ChangePasswordDto): Promise<LoginResponse> {
     if (dto.password !== dto.confirm_password) {
       throw new BadRequestException('Passwords do not match');
@@ -515,6 +442,9 @@ export class AuthService {
     if (!user) throw new NotFoundException('User not found');
     if (!user.must_change_password)
       throw new BadRequestException('Password change is not required for this account');
+    if (user.password_hash && (await comparePassword(dto.password, user.password_hash))) {
+      throw new BadRequestException('New password must be different from the temporary password');
+    }
 
     const school = await this.authRepo.findSchoolById(user.school_id);
     if (!school || !school.is_active) {
@@ -544,16 +474,6 @@ export class AuthService {
         context: AuthContext.SCHOOL,
       },
     };
-  }
-
-  private generateSetupToken(userId: string): string {
-    return this.jwtService.sign(
-      { sub: userId, purpose: 'password_setup' },
-      {
-        secret: this.configService.get<string>('jwt.accessSecret'),
-        expiresIn: '24h',
-      },
-    );
   }
 
   private generateChangePasswordToken(userId: string): string {
@@ -603,6 +523,9 @@ export class AuthService {
     if (!parent) throw new NotFoundException('User not found');
     if (!parent.must_change_password)
       throw new BadRequestException('Password change is not required for this account');
+    if (parent.password_hash && (await comparePassword(dto.password, parent.password_hash))) {
+      throw new BadRequestException('New password must be different from the temporary password');
+    }
 
     const school = await this.authRepo.findSchoolById(parent.school_id);
     if (!school || !school.is_active) {

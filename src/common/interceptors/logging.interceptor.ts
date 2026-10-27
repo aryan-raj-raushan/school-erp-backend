@@ -4,9 +4,11 @@ import {
   ExecutionContext,
   CallHandler,
   Logger,
+  HttpException,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
+import { databaseErrorStatus } from '../filters/database-error-status';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -29,7 +31,13 @@ export class LoggingInterceptor implements NestInterceptor {
         },
         error: (error: Error) => {
           const duration = Date.now() - start;
-          this.logger.error(`${method} ${url} ERROR ${duration}ms — ${error.message}`);
+          const status =
+            error instanceof HttpException
+              ? error.getStatus()
+              : (databaseErrorStatus(error)?.statusCode ?? 500);
+          const line = `${method} ${url} ${status} ${duration}ms — ${error.message}`;
+          if (status >= 500) this.logger.error(line);
+          else this.logger.warn(line);
         },
       }),
     );

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gte, lte, asc, SQL } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -13,6 +13,7 @@ export type StaffAttendanceWithMeta = StaffAttendanceRow & {
   staff_first_name: string;
   staff_last_name: string | null;
   employee_code: string | null;
+  staff_role: string | null;
 };
 
 @Injectable()
@@ -38,6 +39,27 @@ export class StaffAttendanceRepository {
   }
 
   async findByDate(schoolId: string, date: string): Promise<StaffAttendanceWithMeta[]> {
+    return this.findWhere(
+      and(eq(staffAttendances.school_id, schoolId), eq(staffAttendances.date, date)),
+    );
+  }
+
+  async findByRange(
+    schoolId: string,
+    startDate: string,
+    endDate: string,
+    role?: string,
+  ): Promise<StaffAttendanceWithMeta[]> {
+    const conditions: SQL[] = [
+      eq(staffAttendances.school_id, schoolId),
+      gte(staffAttendances.date, startDate),
+      lte(staffAttendances.date, endDate),
+    ];
+    if (role) conditions.push(eq(schoolUsers.role, role as typeof schoolUsers.$inferSelect.role));
+    return this.findWhere(and(...conditions));
+  }
+
+  private async findWhere(where: SQL | undefined): Promise<StaffAttendanceWithMeta[]> {
     const rows = await this.db
       .select({
         id: staffAttendances.id,
@@ -53,10 +75,12 @@ export class StaffAttendanceRepository {
         staff_first_name: schoolUsers.first_name,
         staff_last_name: schoolUsers.last_name,
         employee_code: schoolUsers.employee_code,
+        staff_role: schoolUsers.role,
       })
       .from(staffAttendances)
       .leftJoin(schoolUsers, eq(schoolUsers.id, staffAttendances.staff_id))
-      .where(and(eq(staffAttendances.school_id, schoolId), eq(staffAttendances.date, date)));
+      .where(where)
+      .orderBy(asc(staffAttendances.date), asc(schoolUsers.first_name));
     return rows as StaffAttendanceWithMeta[];
   }
 

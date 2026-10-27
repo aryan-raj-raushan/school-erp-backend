@@ -2,7 +2,13 @@ import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, ilike, sql, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { schools, companyUserSchools } from '../../database/drizzle/schema';
+import {
+  schools,
+  companyUserSchools,
+  schoolUsers,
+  studentParents,
+  subscriptions,
+} from '../../database/drizzle/schema';
 import { School, NewSchool } from './types/school.types';
 import { SchoolFilterDto } from './dto/school-filter.dto';
 
@@ -87,11 +93,45 @@ export class SchoolsRepository {
     return row;
   }
 
+  async findByName(name: string): Promise<School | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(schools)
+      .where(and(sql`lower(${schools.name}) = lower(${name})`, eq(schools.deleted, false)))
+      .limit(1);
+    return row;
+  }
+
   async softDelete(id: string): Promise<void> {
-    await this.db
-      .update(schools)
-      .set({ deleted: true, is_active: false, updated_at: new Date() })
-      .where(eq(schools.id, id));
+    const now = new Date();
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(schools)
+        .set({ deleted: true, is_active: false, updated_at: now })
+        .where(eq(schools.id, id));
+      await tx
+        .update(schoolUsers)
+        .set({ deleted: true, is_active: false, updated_at: now })
+        .where(eq(schoolUsers.school_id, id));
+      await tx
+        .update(studentParents)
+        .set({ is_active: false, updated_at: now })
+        .where(eq(studentParents.school_id, id));
+      await tx
+        .update(subscriptions)
+        .set({
+          status: 'CANCELLED',
+          cancelled_at: now,
+          cancellation_reason: 'School deleted',
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(subscriptions.school_id, id),
+            inArray(subscriptions.status, ['ACTIVE', 'TRIAL', 'PENDING']),
+          ),
+        );
+    });
   }
 
   async findSchoolIdsByCompanyUserId(userId: string): Promise<string[]> {

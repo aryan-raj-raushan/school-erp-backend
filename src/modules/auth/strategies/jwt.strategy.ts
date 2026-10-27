@@ -20,7 +20,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   // BUG-002: check access-token blacklist on every authenticated request
   async validate(payload: JwtPayload): Promise<JwtPayload> {
-    if (!payload.sub) throw new UnauthorizedException('Invalid token payload');
+    if (!payload.sub || 'purpose' in payload || !payload.context) {
+      throw new UnauthorizedException('Invalid token payload');
+    }
 
     if (payload.iat) {
       const blocked = await this.redisService.exists(`blocked_at:${payload.sub}:${payload.iat}`);
@@ -29,6 +31,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       const revokedBefore = await this.redisService.get(`revoked_before:${payload.sub}`);
       if (revokedBefore && payload.iat <= Number(revokedBefore)) {
         throw new UnauthorizedException('Token has been revoked');
+      }
+
+      if (payload.school_id) {
+        const schoolRevokedBefore = await this.redisService.get(
+          `school_revoked_before:${payload.school_id}`,
+        );
+        if (schoolRevokedBefore && payload.iat <= Number(schoolRevokedBefore)) {
+          throw new UnauthorizedException('School is deactivated');
+        }
       }
     }
 

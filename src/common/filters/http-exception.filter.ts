@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { encode } from '@msgpack/msgpack';
+import { databaseErrorStatus } from './database-error-status';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -47,17 +48,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         message = exceptionResponse as string;
       }
     } else if (exception instanceof Error) {
-      const pgError = exception as Error & { code?: string; detail?: string };
+      const dbError = databaseErrorStatus(exception);
 
-      if (pgError.code === '23505') {
-        statusCode = HttpStatus.CONFLICT;
-        message = 'Record already exists';
-      } else if (pgError.code === '23503') {
-        statusCode = HttpStatus.UNPROCESSABLE_ENTITY;
-        message = 'Referenced record does not exist';
-      } else if (pgError.code === '23502') {
-        statusCode = HttpStatus.BAD_REQUEST;
-        message = 'Required field is missing';
+      if (dbError) {
+        statusCode = dbError.statusCode;
+        message = dbError.message;
       } else {
         this.logger.error(
           `Unhandled exception: ${exception.message}`,

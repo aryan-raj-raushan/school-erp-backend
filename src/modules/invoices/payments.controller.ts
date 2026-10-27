@@ -133,6 +133,7 @@ export class PaymentsQueueController {
     @Req() req: Request & { rawBody?: Buffer },
   ) {
     if (!req.rawBody) throw new BadRequestException('Missing request body');
+    if (!signature) throw new BadRequestException('Missing X-Razorpay-Signature header');
     await this.paymentsService.handleRazorpayWebhook(req.rawBody.toString('utf8'), signature);
     return { success: true };
   }
