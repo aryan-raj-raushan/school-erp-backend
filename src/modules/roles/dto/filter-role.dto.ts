@@ -1,6 +1,7 @@
 import { IsOptional, IsBoolean } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ToBoolean } from '../../../common/decorators/to-boolean.decorator';
 
 export class FilterRoleDto {
   @ApiPropertyOptional()
@@ -15,7 +16,7 @@ export class FilterRoleDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
+  @ToBoolean()
   is_active?: boolean;
 }

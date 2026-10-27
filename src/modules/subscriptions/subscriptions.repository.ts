@@ -71,7 +71,12 @@ export class SubscriptionsRepository {
     const [row] = await this.db
       .select()
       .from(subscriptions)
-      .where(and(eq(subscriptions.school_id, schoolId), eq(subscriptions.status, 'ACTIVE')))
+      .where(
+        and(
+          eq(subscriptions.school_id, schoolId),
+          inArray(subscriptions.status, ['ACTIVE', 'TRIAL']),
+        ),
+      )
       .limit(1);
     return row;
   }

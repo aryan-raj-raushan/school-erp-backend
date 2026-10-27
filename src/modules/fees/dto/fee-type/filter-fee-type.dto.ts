@@ -1,6 +1,6 @@
 import { IsOptional, IsEnum, IsBoolean, IsNumberString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
+import { ToBoolean } from '../../../../common/decorators/to-boolean.decorator';
 
 export class FilterFeeTypeDto {
   @ApiPropertyOptional({ enum: ['Class', 'Transport', 'Other'] })
@@ -10,8 +10,8 @@ export class FilterFeeTypeDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Transform(({ value }) => value === 'true')
   @IsBoolean()
+  @ToBoolean()
   is_active?: boolean;
 
   @ApiPropertyOptional({ default: 1 })

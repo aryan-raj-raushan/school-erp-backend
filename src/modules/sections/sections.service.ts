@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { SectionsRepository } from './sections.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
@@ -36,7 +36,24 @@ export class SectionsService {
     });
   }
 
+  private async assertValidSection(
+    schoolId: string,
+    classId: string,
+    name: string | undefined,
+    excludeId?: string,
+  ): Promise<void> {
+    if (!(await this.sectionsRepo.classExists(schoolId, classId))) {
+      throw new NotFoundException(`Class '${classId}' not found`);
+    }
+    if (!name) return;
+    const existing = await this.sectionsRepo.findByNameInClass(schoolId, classId, name);
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException(`Section '${existing.name}' already exists in this class`);
+    }
+  }
+
   async create(dto: CreateSectionDto, schoolId: string): Promise<Section> {
+    await this.assertValidSection(schoolId, dto.class_id, dto.name);
     const section = await this.sectionsRepo.create({
       id: generateId(),
       school_id: schoolId,
@@ -47,7 +64,10 @@ export class SectionsService {
   }
 
   async update(id: string, schoolId: string, dto: UpdateSectionDto): Promise<Section> {
-    await this.findById(id, schoolId);
+    const existing = await this.findById(id, schoolId);
+    if (dto.name !== undefined || dto.class_id !== undefined) {
+      await this.assertValidSection(schoolId, dto.class_id ?? existing.class_id, dto.name, id);
+    }
     const updated = await this.sectionsRepo.update(id, schoolId, dto);
     await this.redisService.delByPattern(`sections:${schoolId}:*`);
     return updated;

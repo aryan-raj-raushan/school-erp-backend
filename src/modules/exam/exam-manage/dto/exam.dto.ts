@@ -16,6 +16,7 @@ import {
 import { PartialType, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ExamPaginationDto } from '@shared/dto/exam-pagination.dto';
 import { ExamTerm, ExamStatus } from '@shared/enums/exam.enum';
+import { ToBoolean } from '../../../../common/decorators/to-boolean.decorator';
 
 export class CreateExamDto {
   @ApiProperty({ example: 'uuid-of-academic-year' })
@@ -100,6 +101,7 @@ export class FilterExamDto extends ExamPaginationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
+  @ToBoolean()
   is_published?: boolean;
 }
 

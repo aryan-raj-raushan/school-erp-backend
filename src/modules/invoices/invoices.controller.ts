@@ -13,6 +13,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateOneTimeChargeDto } from './dto/create-one-time-charge.dto';
+import { OneTimeChargeFilterDto } from './dto/one-time-charge-filter.dto';
 import { AddLineItemDto } from './dto/add-line-item.dto';
 import { InvoiceFilterDto } from './dto/invoice-filter.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -109,6 +110,18 @@ export class InvoicesController {
 @Controller('one-time-charges')
 export class OneTimeChargesController {
   constructor(private readonly invoicesService: InvoicesService) {}
+
+  @Get()
+  @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SALES, CompanyRole.OPERATOR)
+  @ApiOperation({ summary: 'List one-time charges (scoped to assigned schools for Sales)' })
+  async list(@Query() filters: OneTimeChargeFilterDto, @GetCurrentUser() user: JwtPayload) {
+    const data = await this.invoicesService.listOneTimeCharges(
+      filters,
+      user.sub,
+      user.role as string,
+    );
+    return ApiResponse.success(data.items, 'One-time charges fetched', data.meta);
+  }
 
   @Post()
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SALES, CompanyRole.OPERATOR)

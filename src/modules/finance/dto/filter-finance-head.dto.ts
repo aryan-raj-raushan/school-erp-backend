@@ -2,6 +2,7 @@ import { IsInt, IsOptional, IsBoolean, IsIn, IsString, Min, Max } from 'class-va
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { FINANCE_HEAD_TYPES } from '../../../database/drizzle/schema/finance-heads.schema';
+import { ToBoolean } from '../../../common/decorators/to-boolean.decorator';
 
 export class FilterFinanceHeadDto {
   @ApiPropertyOptional({ default: 1 })
@@ -22,6 +23,7 @@ export class FilterFinanceHeadDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
+  @ToBoolean()
   is_enabled?: boolean;
 
   @ApiPropertyOptional({ enum: FINANCE_HEAD_TYPES })

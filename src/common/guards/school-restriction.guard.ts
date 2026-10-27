@@ -6,7 +6,7 @@ import {
   Inject,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { schools, subscriptions } from '../../database/drizzle/schema';
@@ -101,7 +101,12 @@ export class SchoolRestrictionGuard implements CanActivate {
       const [sub] = await this.db
         .select({ restricted_resources: subscriptions.restricted_resources })
         .from(subscriptions)
-        .where(and(eq(subscriptions.school_id, schoolId), eq(subscriptions.status, 'ACTIVE')))
+        .where(
+          and(
+            eq(subscriptions.school_id, schoolId),
+            inArray(subscriptions.status, ['ACTIVE', 'TRIAL']),
+          ),
+        )
         .limit(1);
 
       return {

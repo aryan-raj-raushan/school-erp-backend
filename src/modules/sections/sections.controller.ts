@@ -17,6 +17,8 @@ import { CreateSectionDto } from './dto/create-section.dto';
 import { UpdateSectionDto } from './dto/update-section.dto';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { PERMISSION_REGISTRY } from '../../shared/constants';
 @ApiTags('Sections')
 @ApiBearerAuth('access-token')
 @Controller('sections')
@@ -39,6 +41,7 @@ export class SectionsController {
   }
 
   @Post()
+  @Permissions(PERMISSION_REGISTRY.classes.create)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new section' })
   async create(@Body() dto: CreateSectionDto, @GetSchoolId() schoolId: string) {
@@ -47,6 +50,7 @@ export class SectionsController {
   }
 
   @Patch(':id')
+  @Permissions(PERMISSION_REGISTRY.classes.update)
   @ApiOperation({ summary: 'Update a section' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -58,6 +62,7 @@ export class SectionsController {
   }
 
   @Delete(':id')
+  @Permissions(PERMISSION_REGISTRY.classes.delete)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Soft delete a section' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {

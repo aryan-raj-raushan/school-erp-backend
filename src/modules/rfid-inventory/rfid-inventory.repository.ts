@@ -2,7 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, ilike, sql } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { rfidDevices } from '../../database/drizzle/schema';
+import { rfidDevices, schools } from '../../database/drizzle/schema';
 import { RfidDeviceFilterDto } from './dto/rfid-device-filter.dto';
 import { RfidDevice, NewRfidDevice } from './types/rfid-device.types';
 
@@ -50,8 +50,22 @@ export class RfidInventoryRepository {
     const [row] = await this.db
       .select()
       .from(rfidDevices)
-      .where(eq(rfidDevices.device_identifier, deviceIdentifier));
+      .where(sql`upper(${rfidDevices.device_identifier}) = upper(${deviceIdentifier})`);
     return row;
+  }
+
+  async isActiveSchool(schoolId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: schools.id })
+      .from(schools)
+      .where(
+        and(eq(schools.id, schoolId), eq(schools.is_active, true), eq(schools.deleted, false)),
+      );
+    return !!row;
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.db.delete(rfidDevices).where(eq(rfidDevices.id, id));
   }
 
   async create(data: NewRfidDevice): Promise<RfidDevice> {

@@ -1,7 +1,14 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+  Inject,
+} from '@nestjs/common';
 import { AcademicYearsRepository } from './academic-years.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
+import { DateUtils } from '../../utils/date.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 import { UpdateAcademicYearDto } from './dto/update-academic-year.dto';
@@ -12,6 +19,8 @@ import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
 import { leavePolicies, leaveBalances } from '../../database/drizzle/schema/leave.schema';
 import { eq, and } from 'drizzle-orm';
+
+const MAX_YEAR_SPAN_DAYS = 731;
 
 @Injectable()
 export class AcademicYearsService {
@@ -62,11 +71,56 @@ export class AcademicYearsService {
     });
   }
 
+  private async assertValidYear(
+    schoolId: string,
+    year: { name: string; start_date: string; end_date: string },
+    excludeId?: string,
+  ): Promise<void> {
+    for (const [field, value] of [
+      ['start_date', year.start_date],
+      ['end_date', year.end_date],
+    ]) {
+      if (!DateUtils.isCalendarDate(value)) {
+        throw new BadRequestException(`${field} '${value}' is not a valid date`);
+      }
+    }
+    if (year.end_date <= year.start_date) {
+      throw new BadRequestException('end_date must be after start_date');
+    }
+    const spanDays = DateUtils.diffInDays(new Date(year.start_date), new Date(year.end_date));
+    if (spanDays > MAX_YEAR_SPAN_DAYS) {
+      throw new BadRequestException('An academic year cannot span more than 2 years');
+    }
+
+    const others = (await this.academicYearsRepo.findAll(schoolId, 1, 1000)).filter(
+      (y) => y.id !== excludeId,
+    );
+    const sameName = others.find((y) => y.name.toLowerCase() === year.name.toLowerCase());
+    if (sameName) throw new ConflictException(`Academic year '${sameName.name}' already exists`);
+    const overlapping = others.find(
+      (y) => y.start_date <= year.end_date && y.end_date >= year.start_date,
+    );
+    if (overlapping) {
+      throw new ConflictException(
+        `Dates overlap academic year '${overlapping.name}' (${overlapping.start_date} to ${overlapping.end_date})`,
+      );
+    }
+  }
+
+  private static assertNotFrozen(year: AcademicYear): void {
+    if (year.is_frozen) {
+      throw new BadRequestException(
+        `Academic year '${year.name}' is frozen — unfreeze it before making changes`,
+      );
+    }
+  }
+
   async create(
     dto: CreateAcademicYearDto,
     schoolId: string,
     createdBy: string,
   ): Promise<AcademicYear> {
+    await this.assertValidYear(schoolId, dto);
     if (dto.is_enabled) {
       await this.academicYearsRepo.disableAll(schoolId);
     }
@@ -75,19 +129,28 @@ export class AcademicYearsService {
       school_id: schoolId,
       created_by: createdBy,
       ...dto,
-      is_current: dto.is_current ?? false,
+      is_current: false,
       is_enabled: dto.is_enabled ?? true,
     });
+    const created = dto.is_current
+      ? await this.academicYearsRepo.setCurrent(academicYear.id, schoolId)
+      : academicYear;
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
-    return academicYear;
+    return created;
   }
 
   async update(id: string, schoolId: string, dto: UpdateAcademicYearDto): Promise<AcademicYear> {
-    await this.findById(id, schoolId);
+    const existing = await this.findById(id, schoolId);
+    AcademicYearsService.assertNotFrozen(existing);
+    if (dto.name !== undefined || dto.start_date !== undefined || dto.end_date !== undefined) {
+      await this.assertValidYear(schoolId, { ...existing, ...dto }, id);
+    }
     if (dto.is_enabled) {
       await this.academicYearsRepo.disableAll(schoolId);
     }
-    const updated = await this.academicYearsRepo.update(id, schoolId, dto);
+    const { is_current, ...fields } = dto;
+    let updated = await this.academicYearsRepo.update(id, schoolId, fields);
+    if (is_current) updated = await this.academicYearsRepo.setCurrent(id, schoolId);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return updated;
   }
@@ -100,7 +163,9 @@ export class AcademicYearsService {
   }
 
   async freeze(id: string, schoolId: string, frozenBy: string): Promise<AcademicYear> {
-    await this.findById(id, schoolId);
+    const year = await this.findById(id, schoolId);
+    if (year.is_frozen)
+      throw new BadRequestException(`Academic year '${year.name}' is already frozen`);
     const [updated] = await this.db
       .update(academicYears)
       .set({ is_frozen: true, frozen_by: frozenBy, frozen_at: new Date() })
@@ -111,7 +176,9 @@ export class AcademicYearsService {
   }
 
   async unfreeze(id: string, schoolId: string): Promise<AcademicYear> {
-    await this.findById(id, schoolId);
+    const year = await this.findById(id, schoolId);
+    if (!year.is_frozen)
+      throw new BadRequestException(`Academic year '${year.name}' is not frozen`);
     const [updated] = await this.db
       .update(academicYears)
       .set({ is_frozen: false, frozen_by: null, frozen_at: null })
@@ -134,38 +201,48 @@ export class AcademicYearsService {
     const policies = await this.db
       .select()
       .from(leavePolicies)
-      .where(and(eq(leavePolicies.school_id, schoolId), eq(leavePolicies.academic_year_id, fromId)));
+      .where(
+        and(eq(leavePolicies.school_id, schoolId), eq(leavePolicies.academic_year_id, fromId)),
+      );
 
     for (const p of policies) {
-      await this.db.insert(leavePolicies).values({
-        ...p,
-        id: generateId(),
-        academic_year_id: toId,
-        created_at: new Date(),
-        updated_at: null,
-      }).onConflictDoNothing();
+      await this.db
+        .insert(leavePolicies)
+        .values({
+          ...p,
+          id: generateId(),
+          academic_year_id: toId,
+          created_at: new Date(),
+          updated_at: null,
+        })
+        .onConflictDoNothing();
     }
 
     // Carry forward leave balances: allocate same amount in new year
     const balances = await this.db
       .select()
       .from(leaveBalances)
-      .where(and(eq(leaveBalances.school_id, schoolId), eq(leaveBalances.academic_year_id, fromId)));
+      .where(
+        and(eq(leaveBalances.school_id, schoolId), eq(leaveBalances.academic_year_id, fromId)),
+      );
 
     for (const b of balances) {
       const carry = Math.max(0, b.allocated - b.used);
-      await this.db.insert(leaveBalances).values({
-        id: generateId(),
-        school_id: schoolId,
-        staff_id: b.staff_id,
-        leave_type_id: b.leave_type_id,
-        allocated: b.allocated,
-        used: 0,
-        carried_forward: carry,
-        academic_year_id: toId,
-        can_go_negative: b.can_go_negative,
-        created_at: new Date(),
-      }).onConflictDoNothing();
+      await this.db
+        .insert(leaveBalances)
+        .values({
+          id: generateId(),
+          school_id: schoolId,
+          staff_id: b.staff_id,
+          leave_type_id: b.leave_type_id,
+          allocated: b.allocated,
+          used: 0,
+          carried_forward: carry,
+          academic_year_id: toId,
+          can_go_negative: b.can_go_negative,
+          created_at: new Date(),
+        })
+        .onConflictDoNothing();
     }
 
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);

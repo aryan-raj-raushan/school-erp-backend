@@ -27,3 +27,14 @@ export function nextCycleBoundary(anchor: Date, after: Date, planType: string): 
   while (DateUtils.addMonths(anchor, cycles * months) <= after) cycles++;
   return DateUtils.addMonths(anchor, cycles * months);
 }
+
+/** Paid billing starts when a trial ends; otherwise at the subscription start. */
+export function billingAnchor(sub: {
+  is_trial: boolean | null;
+  trial_end_date: Date | null;
+  start_date: Date | null;
+  created_at: Date;
+}): Date {
+  if (sub.is_trial && sub.trial_end_date) return sub.trial_end_date;
+  return sub.start_date ?? sub.created_at;
+}

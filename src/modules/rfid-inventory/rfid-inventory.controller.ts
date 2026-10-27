@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -83,5 +84,13 @@ export class RfidInventoryController {
   async returnDevice(@Param('id', ParseUUIDPipe) id: string) {
     const data = await this.rfidInventoryService.returnDevice(id);
     return ApiResponse.success(data, 'RFID device returned to stock');
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete an IN_STOCK or RETURNED device (e.g. added by mistake)' })
+  async remove(@Param('id', ParseUUIDPipe) id: string) {
+    await this.rfidInventoryService.remove(id);
+    return ApiResponse.noContent('RFID device deleted');
   }
 }

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { IsString, IsEnum, IsInt, IsBoolean, IsOptional, MaxLength, Min } from 'class-validator';
 import { LeaveValidity, LeavePayType } from '../leave.enum';
+import { ToBoolean } from '../../../common/decorators/to-boolean.decorator';
 
 // ─── Create Leave Type ────────────────────────────────────────────────────────
 export class CreateLeaveTypeDto {
@@ -46,6 +47,7 @@ export class FilterLeaveTypeDto {
   @ApiPropertyOptional({ example: true, description: 'Filter by enabled status' })
   @IsOptional()
   @IsBoolean()
+  @ToBoolean()
   is_enabled?: boolean;
 
   @ApiPropertyOptional({ example: 1 })

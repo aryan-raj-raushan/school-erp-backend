@@ -56,6 +56,7 @@ import { ParentScopeGuard } from './common/guards/parent-scope.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { SchoolRestrictionGuard } from './common/guards/school-restriction.guard';
+import { FrozenAcademicYearGuard } from './common/guards/frozen-academic-year.guard';
 import { MsgpackInterceptor } from './common/interceptors/msgpack.interceptor';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -151,6 +152,7 @@ import { ParentPortalModule } from '@modules/parent-portal/parent-portal.module'
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_GUARD, useClass: SchoolRestrictionGuard },
+    { provide: APP_GUARD, useClass: FrozenAcademicYearGuard },
     { provide: APP_INTERCEPTOR, useClass: MsgpackInterceptor },
     // Must sit here: after ResponseTransformInterceptor wraps the payload into
     // { success, message, data } (so AuditInterceptor's tap can read

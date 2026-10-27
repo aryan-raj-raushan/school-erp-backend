@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, ilike, sql } from 'drizzle-orm';
+import { eq, and, ilike, sql, or, SQL } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { subjects } from '../../database/drizzle/schema/subjects.schema';
@@ -45,6 +45,22 @@ export class SubjectsRepository {
         and(eq(subjects.id, id), eq(subjects.school_id, schoolId), eq(subjects.deleted, false)),
       );
     return row;
+  }
+
+  async findConflicting(
+    schoolId: string,
+    name: string | undefined,
+    code: string | undefined,
+  ): Promise<Subject[]> {
+    if (!name && !code) return [];
+    const match = [
+      name ? sql`lower(${subjects.name}) = lower(${name})` : undefined,
+      code ? sql`lower(${subjects.code}) = lower(${code})` : undefined,
+    ].filter((c): c is SQL => !!c);
+    return this.db
+      .select()
+      .from(subjects)
+      .where(and(eq(subjects.school_id, schoolId), eq(subjects.deleted, false), or(...match)));
   }
 
   async create(data: NewSubject): Promise<Subject> {

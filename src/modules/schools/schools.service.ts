@@ -14,6 +14,7 @@ import { generateTempPassword, hashPassword } from '../../utils/hash.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateSchoolDto } from './dto/create-school.dto';
 import { UpdateSchoolDto } from './dto/update-school.dto';
+import { UpdateSchoolProfileDto } from './dto/update-school-profile.dto';
 import { SchoolFilterDto } from './dto/school-filter.dto';
 import { School, SchoolAdminCredentials, SchoolWithCredentials } from './types/school.types';
 import { CompanyRole } from '../../shared/enums';
@@ -78,16 +79,6 @@ export class SchoolsService {
       if (!school) throw new NotFoundException(`School with id '${id}' not found`);
       return school;
     });
-  }
-
-  private static withoutAdminFields(dto: UpdateSchoolDto) {
-    const schoolData = { ...dto };
-    delete schoolData.admin_first_name;
-    delete schoolData.admin_last_name;
-    delete schoolData.admin_phone;
-    delete schoolData.admin_email;
-    delete schoolData.admin_dial_code;
-    return schoolData;
   }
 
   private async generateCode(name: string): Promise<string> {
@@ -338,12 +329,12 @@ export class SchoolsService {
     });
   }
 
-  async updateMyProfile(schoolId: string, dto: UpdateSchoolDto): Promise<School> {
+  async updateMyProfile(schoolId: string, dto: UpdateSchoolProfileDto): Promise<School> {
     const school = await this.schoolsRepo.findById(schoolId);
     if (!school) throw new NotFoundException('School not found');
     if (dto.name) await this.assertNameAvailable(dto.name, school);
 
-    const updated = await this.schoolsRepo.update(schoolId, SchoolsService.withoutAdminFields(dto));
+    const updated = await this.schoolsRepo.update(schoolId, dto);
     await this.redisService.del(`schools:${schoolId}`);
     await this.redisService.delByPattern(`schools:list:*`);
     return updated;

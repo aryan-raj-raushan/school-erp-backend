@@ -12,11 +12,12 @@ import { UploadsService } from '../uploads/uploads.service';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
 import { DateUtils } from '../../utils/date.utils';
-import { nextCycleBoundary } from '../subscriptions/utils/billing-cycle.utils';
+import { billingAnchor, nextCycleBoundary } from '../subscriptions/utils/billing-cycle.utils';
 import { generateInvoicePdf } from './utils/invoice-pdf.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateOneTimeChargeDto } from './dto/create-one-time-charge.dto';
+import { OneTimeChargeFilterDto } from './dto/one-time-charge-filter.dto';
 import { AddLineItemDto } from './dto/add-line-item.dto';
 import { InvoiceFilterDto } from './dto/invoice-filter.dto';
 import { Invoice, InvoiceWithLineItems, OneTimeCharge, DraftLineItem } from './types/invoice.types';
@@ -108,6 +109,22 @@ export class InvoicesService {
     return invoice;
   }
 
+  async listOneTimeCharges(
+    filters: OneTimeChargeFilterDto,
+    userId: string,
+    role: string,
+  ): Promise<PaginationResponse<OneTimeCharge>> {
+    const permitted = await this.getPermittedSchoolIds(userId, role);
+    if (filters.school_id && permitted !== null && !permitted.includes(filters.school_id)) {
+      throw new ForbiddenException('Access denied to this school');
+    }
+    const [items, total] = await this.invoicesRepo.findOneTimeCharges(
+      filters,
+      permitted ?? undefined,
+    );
+    return PaginationResponse.of(items, total, filters);
+  }
+
   async createOneTimeCharge(
     dto: CreateOneTimeChargeDto,
     createdBy: string,
@@ -178,7 +195,7 @@ export class InvoicesService {
     const sub = await this.subscriptionsRepo.findById(subscriptionId);
     if (!sub) throw new NotFoundException(`Subscription '${subscriptionId}' not found`);
 
-    const anchor = sub.start_date ?? sub.created_at;
+    const anchor = billingAnchor(sub);
     const periodStart = (await this.invoicesRepo.findLatestBillingPeriodEnd(sub.id)) ?? anchor;
     const periodEnd = nextCycleBoundary(anchor, periodStart, sub.plan_type);
 
@@ -260,6 +277,11 @@ export class InvoicesService {
       throw new ForbiddenException('Access denied to this school');
     }
 
+    if (sub.status === 'TRIAL') {
+      throw new BadRequestException(
+        `Subscription is in trial until ${sub.trial_end_date?.toISOString().slice(0, 10)} — nothing to bill yet`,
+      );
+    }
     if (dto.due_date && dto.due_date.slice(0, 10) < new Date().toISOString().slice(0, 10)) {
       throw new BadRequestException('due_date cannot be in the past');
     }

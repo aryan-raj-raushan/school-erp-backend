@@ -38,9 +38,26 @@ export class RfidInventoryService {
     return device;
   }
 
+  private static assertValidDates(purchaseDate?: string | null, warrantyExpiry?: string | null) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (purchaseDate && purchaseDate.slice(0, 10) > today) {
+      throw new BadRequestException('purchase_date cannot be in the future');
+    }
+    if (purchaseDate && warrantyExpiry && warrantyExpiry.slice(0, 10) < purchaseDate.slice(0, 10)) {
+      throw new BadRequestException('warranty_expiry cannot be before purchase_date');
+    }
+  }
+
+  private async assertIdentifierAvailable(identifier: string, excludeId?: string) {
+    const existing = await this.rfidInventoryRepo.findByIdentifier(identifier);
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException(`Device '${existing.device_identifier}' already exists`);
+    }
+  }
+
   async create(dto: CreateRfidDeviceDto, createdBy: string): Promise<RfidDevice> {
-    const existing = await this.rfidInventoryRepo.findByIdentifier(dto.device_identifier);
-    if (existing) throw new ConflictException(`Device '${dto.device_identifier}' already exists`);
+    await this.assertIdentifierAvailable(dto.device_identifier);
+    RfidInventoryService.assertValidDates(dto.purchase_date, dto.warranty_expiry);
 
     return this.rfidInventoryRepo.create({
       id: generateId(),
@@ -54,8 +71,26 @@ export class RfidInventoryService {
   }
 
   async update(id: string, dto: UpdateRfidDeviceDto): Promise<RfidDevice> {
-    await this.findById(id);
+    const device = await this.findById(id);
+    if (dto.device_identifier) await this.assertIdentifierAvailable(dto.device_identifier, id);
+    RfidInventoryService.assertValidDates(
+      dto.purchase_date ?? device.purchase_date,
+      dto.warranty_expiry ?? device.warranty_expiry,
+    );
     return this.rfidInventoryRepo.update(id, dto);
+  }
+
+  async remove(id: string): Promise<void> {
+    const device = await this.findById(id);
+    if (
+      device.status !== RfidDeviceStatus.IN_STOCK &&
+      device.status !== RfidDeviceStatus.RETURNED
+    ) {
+      throw new BadRequestException(
+        `Only IN_STOCK or RETURNED devices can be deleted (currently '${device.status}') — return it first`,
+      );
+    }
+    await this.rfidInventoryRepo.delete(id);
   }
 
   async assign(id: string, dto: AssignRfidDeviceDto, createdBy: string): Promise<RfidDevice> {
@@ -65,6 +100,9 @@ export class RfidInventoryService {
       device.status !== RfidDeviceStatus.RETURNED
     ) {
       throw new BadRequestException(`Device is '${device.status}' and cannot be assigned`);
+    }
+    if (!(await this.rfidInventoryRepo.isActiveSchool(dto.school_id))) {
+      throw new BadRequestException('Devices can only be assigned to an active school');
     }
     if (dto.billable && dto.charge_amount == null) {
       throw new BadRequestException('charge_amount is required when billable = true');
@@ -104,7 +142,15 @@ export class RfidInventoryService {
   }
 
   async returnDevice(id: string): Promise<RfidDevice> {
-    await this.findById(id);
+    const device = await this.findById(id);
+    if (
+      device.status !== RfidDeviceStatus.ASSIGNED &&
+      device.status !== RfidDeviceStatus.INSTALLED
+    ) {
+      throw new BadRequestException(
+        `Only ASSIGNED or INSTALLED devices can be returned (currently '${device.status}')`,
+      );
+    }
     return this.rfidInventoryRepo.update(id, {
       status: RfidDeviceStatus.RETURNED,
       assigned_school_id: null,

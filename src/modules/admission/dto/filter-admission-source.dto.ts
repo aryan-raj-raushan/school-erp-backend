@@ -1,12 +1,12 @@
 import { IsOptional, IsBoolean } from 'class-validator';
-import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
+import { ToBoolean } from '../../../common/decorators/to-boolean.decorator';
 
 export class FilterAdmissionSourceDto extends PaginationDto {
   @ApiPropertyOptional({ description: 'Filter by enabled status' })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
+  @ToBoolean()
   is_enabled?: boolean;
 }

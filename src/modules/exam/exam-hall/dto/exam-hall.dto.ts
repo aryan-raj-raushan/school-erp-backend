@@ -1,8 +1,16 @@
 import {
-  IsString, IsOptional, IsInt, IsBoolean, IsUUID, Min, Max, MaxLength,
+  IsString,
+  IsOptional,
+  IsInt,
+  IsBoolean,
+  IsUUID,
+  Min,
+  Max,
+  MaxLength,
 } from 'class-validator';
 import { PartialType, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ExamPaginationDto } from '@shared/dto/exam-pagination.dto';
+import { ToBoolean } from '../../../../common/decorators/to-boolean.decorator';
 
 export class CreateHallDetailDto {
   @ApiProperty({ example: 'Room 101' })
@@ -46,5 +54,7 @@ export class FilterHallDetailDto extends ExamPaginationDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsBoolean()
+  @ToBoolean()
   is_enabled?: boolean;
 }

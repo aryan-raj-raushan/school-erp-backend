@@ -3,6 +3,7 @@ import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../shared/dto/pagination.dto';
 import { BoardType } from '../../../shared/enums';
+import { ToBoolean } from '../../../common/decorators/to-boolean.decorator';
 
 export class SchoolFilterDto extends PaginationDto {
   @ApiPropertyOptional()
@@ -18,7 +19,7 @@ export class SchoolFilterDto extends PaginationDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
+  @ToBoolean()
   is_active?: boolean;
 }

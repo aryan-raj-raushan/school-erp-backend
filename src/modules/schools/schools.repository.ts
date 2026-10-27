@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, ilike, sql, inArray } from 'drizzle-orm';
+import { eq, and, ilike, sql, inArray, asc } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -34,6 +34,7 @@ export class SchoolsRepository {
       .select()
       .from(schools)
       .where(and(...conditions))
+      .orderBy(asc(schools.name), asc(schools.id))
       .limit(limit)
       .offset(offset);
   }

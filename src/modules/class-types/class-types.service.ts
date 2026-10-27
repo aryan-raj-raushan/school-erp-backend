@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { ClassTypesRepository } from './class-types.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
@@ -43,7 +43,15 @@ export class ClassTypesService {
     });
   }
 
+  private async assertNameAvailable(schoolId: string, name: string, excludeId?: string) {
+    const existing = await this.classTypesRepo.findByName(schoolId, name);
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictException(`Class type '${existing.name}' already exists`);
+    }
+  }
+
   async create(dto: CreateClassTypeDto, schoolId: string, createdBy: string): Promise<ClassType> {
+    await this.assertNameAvailable(schoolId, dto.name);
     const ct = await this.classTypesRepo.create({
       id: generateId(),
       school_id: schoolId,
@@ -56,15 +64,26 @@ export class ClassTypesService {
   }
 
   async update(id: string, schoolId: string, dto: UpdateClassTypeDto): Promise<ClassType> {
-    await this.findById(id, schoolId);
+    const existing = await this.findById(id, schoolId);
+    if (dto.name) await this.assertNameAvailable(schoolId, dto.name, id);
     const updated = await this.classTypesRepo.update(id, schoolId, dto);
     if (!updated) throw new NotFoundException(`Class type with id '${id}' not found`);
+    if (dto.name && dto.name !== existing.name) {
+      await this.classTypesRepo.renameInClasses(schoolId, existing.name, dto.name);
+      await this.redisService.delByPattern(`classes:${schoolId}:*`);
+    }
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
     return updated;
   }
 
   async remove(id: string, schoolId: string): Promise<void> {
-    await this.findById(id, schoolId);
+    const existing = await this.findById(id, schoolId);
+    const inUse = await this.classTypesRepo.countClassesUsing(schoolId, existing.name);
+    if (inUse > 0) {
+      throw new ConflictException(
+        `Class type '${existing.name}' is used by ${inUse} class(es) — change those classes first`,
+      );
+    }
     await this.classTypesRepo.softDelete(id, schoolId);
     await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
   }

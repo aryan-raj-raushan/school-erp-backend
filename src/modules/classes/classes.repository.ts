@@ -8,8 +8,10 @@ import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
 import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
 import { subjectClasses } from '../../database/drizzle/schema/subject-classes.schema';
 import { classTimingOverrides } from '../../database/drizzle/schema/school-settings.schema';
+import { classTypes } from '../../database/drizzle/schema/class-types.schema';
 import { Class, NewClass, ClassSectionView } from './types/class.types';
 import { ClassFilterDto } from './dto/class-filter.dto';
+import { generateId } from '../../utils/uuid.utils';
 
 @Injectable()
 export class ClassesRepository {
@@ -46,7 +48,9 @@ export class ClassesRepository {
       school_id: sections.school_id,
       academic_year_id: classes.academic_year_id,
       class_teacher_id: sections.class_teacher_id,
-      class_teacher_name: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
+      class_teacher_name: sql<
+        string | null
+      >`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
       room_number: sections.room_number,
       student_capacity: sections.max_strength,
       is_active: sections.is_active,
@@ -88,19 +92,68 @@ export class ClassesRepository {
     const [row] = await this.db
       .select()
       .from(classes)
-      .where(
-        and(
-          eq(classes.id, id),
-          eq(classes.school_id, schoolId),
-          eq(classes.deleted, false),
-        ),
-      );
+      .where(and(eq(classes.id, id), eq(classes.school_id, schoolId), eq(classes.deleted, false)));
     return row;
   }
 
-  async create(data: NewClass): Promise<Class> {
-    const [row] = await this.db.insert(classes).values(data).returning();
+  async findClassesInYear(
+    schoolId: string,
+    academicYearId: string,
+  ): Promise<Pick<Class, 'id' | 'name' | 'class_sequence'>[]> {
+    return this.db
+      .select({ id: classes.id, name: classes.name, class_sequence: classes.class_sequence })
+      .from(classes)
+      .where(
+        and(
+          eq(classes.school_id, schoolId),
+          eq(classes.academic_year_id, academicYearId),
+          eq(classes.deleted, false),
+        ),
+      );
+  }
+
+  async findAcademicYear(schoolId: string, academicYearId: string) {
+    const [row] = await this.db
+      .select({
+        id: academicYears.id,
+        name: academicYears.name,
+        is_frozen: academicYears.is_frozen,
+      })
+      .from(academicYears)
+      .where(and(eq(academicYears.id, academicYearId), eq(academicYears.school_id, schoolId)));
     return row;
+  }
+
+  async classTypeExists(schoolId: string, name: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: classTypes.id })
+      .from(classTypes)
+      .where(
+        and(
+          eq(classTypes.school_id, schoolId),
+          eq(classTypes.deleted, false),
+          sql`lower(${classTypes.name}) = lower(${name})`,
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
+  async createWithSections(data: NewClass, sectionNames: string[]): Promise<Class> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.insert(classes).values(data).returning();
+      if (sectionNames.length > 0) {
+        await tx.insert(sections).values(
+          sectionNames.map((name) => ({
+            id: generateId(),
+            school_id: data.school_id,
+            class_id: row.id,
+            name,
+          })),
+        );
+      }
+      return row;
+    });
   }
 
   async update(id: string, schoolId: string, data: Partial<NewClass>): Promise<Class> {
@@ -128,10 +181,19 @@ export class ClassesRepository {
 
       // Pure mapping tables — remove rows referencing the deleted class rather than
       // leaving them orphaned (they have no soft-delete flag of their own).
-      await tx.delete(subjectClasses).where(eq(subjectClasses.class_id, id));
+      await tx
+        .delete(subjectClasses)
+        .where(
+          and(
+            eq(subjectClasses.class_id, id),
+            sql`exists (select 1 from ${classes} where ${classes.id} = ${id} and ${classes.school_id} = ${schoolId})`,
+          ),
+        );
       await tx
         .delete(classTimingOverrides)
-        .where(and(eq(classTimingOverrides.class_id, id), eq(classTimingOverrides.school_id, schoolId)));
+        .where(
+          and(eq(classTimingOverrides.class_id, id), eq(classTimingOverrides.school_id, schoolId)),
+        );
     });
   }
 }

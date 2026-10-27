@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Inject } from '@nestjs/common';
-import { lt, eq, and, inArray } from 'drizzle-orm';
+import { lt, lte, eq, and, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../../database/drizzle/drizzle.provider';
 import { subscriptions } from '../../../database/drizzle/schema/subscriptions.schema';
@@ -39,6 +39,23 @@ export class SubscriptionExpiryTask {
 
     try {
       this.logger.log('Starting subscription expiry job');
+
+      const endedTrials = await this.db
+        .update(subscriptions)
+        .set({ status: SubscriptionStatus.ACTIVE, updated_at: new Date() })
+        .where(
+          and(
+            eq(subscriptions.status, SubscriptionStatus.TRIAL),
+            lte(subscriptions.trial_end_date, new Date()),
+          ),
+        )
+        .returning({ school_id: subscriptions.school_id });
+      await Promise.all(
+        endedTrials.map((t) => this.redisService.del(`subscription_status:${t.school_id}`)),
+      );
+      if (endedTrials.length > 0) {
+        this.logger.log(`Converted ${endedTrials.length} ended trial(s) to ACTIVE`);
+      }
 
       const dueSubs = await this.db
         .select({

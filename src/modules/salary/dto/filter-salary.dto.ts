@@ -1,12 +1,13 @@
 import { IsOptional, IsString, IsInt, IsBoolean, Min, Max } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { ToBoolean } from '../../../common/decorators/to-boolean.decorator';
 
 export class FilterSalaryHeadDto {
   @IsOptional() @IsString() head_type?: string;
 
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
+  @ToBoolean()
   is_enabled?: boolean;
 
   @IsOptional()

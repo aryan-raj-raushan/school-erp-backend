@@ -15,9 +15,10 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SchoolsService } from './schools.service';
 import { CreateSchoolDto } from './dto/create-school.dto';
 import { UpdateSchoolDto } from './dto/update-school.dto';
+import { UpdateSchoolProfileDto } from './dto/update-school-profile.dto';
 import { SchoolFilterDto } from './dto/school-filter.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { GetCurrentUser } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { CompanyRole } from '../../shared/enums';
@@ -38,7 +39,7 @@ export class SchoolsController {
 
   @Patch('profile')
   @ApiOperation({ summary: 'Update the current school profile (school-context auth)' })
-  async updateMyProfile(@GetSchoolId() schoolId: string, @Body() dto: UpdateSchoolDto) {
+  async updateMyProfile(@GetSchoolId() schoolId: string, @Body() dto: UpdateSchoolProfileDto) {
     const data = await this.schoolsService.updateMyProfile(schoolId, dto);
     return ApiResponse.success(data, 'School profile updated successfully');
   }

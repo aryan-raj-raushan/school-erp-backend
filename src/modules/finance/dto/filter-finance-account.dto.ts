@@ -1,6 +1,7 @@
 import { IsInt, IsOptional, IsBoolean, Min, Max } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ToBoolean } from '../../../common/decorators/to-boolean.decorator';
 
 export class FilterFinanceAccountDto {
   @ApiPropertyOptional({ default: 1 })
@@ -21,5 +22,6 @@ export class FilterFinanceAccountDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
+  @ToBoolean()
   is_enabled?: boolean;
 }

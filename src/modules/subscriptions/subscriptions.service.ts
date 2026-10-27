@@ -21,7 +21,7 @@ import { CompanyRole, SubscriptionPlan, BillingModel } from '../../shared/enums'
 import { CacheTTL } from '../../shared/constants';
 import { APP_EVENTS } from '../../shared/events/event-names';
 import { SubscriptionAssignedEvent } from './events/subscription.events';
-import { addBillingCycle } from './utils/billing-cycle.utils';
+import { addBillingCycle, billingAnchor } from './utils/billing-cycle.utils';
 
 @Injectable()
 export class SubscriptionsService {
@@ -188,7 +188,7 @@ export class SubscriptionsService {
     const sub = await this.subscriptionsRepo.create({
       id: generateId(),
       created_by: userId,
-      status: 'ACTIVE',
+      status: dto.is_trial ? 'TRIAL' : 'ACTIVE',
       school_id: dto.school_id,
       plan_id: dto.plan_id,
       plan_name,
@@ -207,7 +207,10 @@ export class SubscriptionsService {
       restricted_resources: dto.restricted_resources ?? [],
       payment_methods_allowed: dto.payment_methods_allowed ?? [],
       start_date,
-      next_billing_date: addBillingCycle(start_date, plan_type),
+      next_billing_date: addBillingCycle(
+        dto.is_trial && trial_end_date ? trial_end_date : start_date,
+        plan_type,
+      ),
       end_date,
       trial_end_date,
     });
@@ -246,16 +249,33 @@ export class SubscriptionsService {
       trial_end_date: trial_end_date ?? existing.trial_end_date,
     });
 
-    const cycleChanged = start_date !== undefined || dto.plan_type !== undefined;
+    const isTrial = dto.is_trial ?? existing.is_trial;
+    const trialEnd = trial_end_date ?? existing.trial_end_date;
+    const trialChanged = dto.is_trial !== undefined || trial_end_date !== undefined;
+    const cycleChanged = start_date !== undefined || dto.plan_type !== undefined || trialChanged;
+    const anchor = billingAnchor({
+      is_trial: isTrial,
+      trial_end_date: trialEnd,
+      start_date: effectiveStart,
+      created_at: existing.created_at,
+    });
+    const isCurrent = existing.status === 'ACTIVE' || existing.status === 'TRIAL';
+    const status =
+      trialChanged && isCurrent
+        ? isTrial && trialEnd && trialEnd > new Date()
+          ? ('TRIAL' as const)
+          : ('ACTIVE' as const)
+        : undefined;
     const updated = await this.subscriptionsRepo.update(id, {
       ...dto,
+      status,
       amount: dto.amount != null ? String(dto.amount) : undefined,
       price_per_student: dto.price_per_student != null ? String(dto.price_per_student) : undefined,
       start_date,
       end_date,
       trial_end_date,
       next_billing_date: cycleChanged
-        ? addBillingCycle(effectiveStart, dto.plan_type ?? existing.plan_type)
+        ? addBillingCycle(anchor, dto.plan_type ?? existing.plan_type)
         : undefined,
     });
     await this.invalidateCache(id, updated.school_id);

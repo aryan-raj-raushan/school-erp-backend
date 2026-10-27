@@ -1,7 +1,8 @@
 import { IsOptional, IsEnum, IsString, IsBoolean, IsInt, Min, Max } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { SchoolRole } from '../../../shared/enums';
+import { ToBoolean } from '../../../common/decorators/to-boolean.decorator';
 
 export class FilterStaffDto {
   @ApiPropertyOptional({ enum: SchoolRole })
@@ -16,8 +17,8 @@ export class FilterStaffDto {
 
   @ApiPropertyOptional({ default: true })
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
+  @ToBoolean()
   is_active?: boolean;
 
   @ApiPropertyOptional({ default: 1 })

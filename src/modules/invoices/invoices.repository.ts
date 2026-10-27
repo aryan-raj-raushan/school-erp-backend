@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, inArray, sql, lt, ne, desc, isNotNull } from 'drizzle-orm';
+import { eq, and, inArray, sql, lt, ne, desc, isNotNull, SQL } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -11,6 +11,7 @@ import {
   companyUserSchools,
 } from '../../database/drizzle/schema';
 import { InvoiceFilterDto } from './dto/invoice-filter.dto';
+import { OneTimeChargeFilterDto } from './dto/one-time-charge-filter.dto';
 import {
   Invoice,
   InvoiceLineItem,
@@ -126,6 +127,36 @@ export class InvoicesRepository {
           eq(subscriptionOneTimeCharges.status, 'PENDING'),
         ),
       );
+  }
+
+  async findOneTimeCharges(
+    filters: OneTimeChargeFilterDto,
+    allowedSchoolIds?: string[],
+  ): Promise<[OneTimeCharge[], number]> {
+    const conditions: SQL[] = [];
+    if (filters.school_id)
+      conditions.push(eq(subscriptionOneTimeCharges.school_id, filters.school_id));
+    if (filters.status) conditions.push(eq(subscriptionOneTimeCharges.status, filters.status));
+    if (allowedSchoolIds) {
+      if (allowedSchoolIds.length === 0) return [[], 0];
+      conditions.push(inArray(subscriptionOneTimeCharges.school_id, allowedSchoolIds));
+    }
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const limit = filters.limit ?? 20;
+    const [items, [{ count }]] = await Promise.all([
+      this.db
+        .select()
+        .from(subscriptionOneTimeCharges)
+        .where(where)
+        .orderBy(desc(subscriptionOneTimeCharges.created_at))
+        .limit(limit)
+        .offset(((filters.page ?? 1) - 1) * limit),
+      this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(subscriptionOneTimeCharges)
+        .where(where),
+    ]);
+    return [items, Number(count)];
   }
 
   async createOneTimeCharge(data: NewOneTimeCharge): Promise<OneTimeCharge> {
