@@ -18,8 +18,10 @@ import { UpdateSchoolProfileDto } from './dto/update-school-profile.dto';
 import { SchoolFilterDto } from './dto/school-filter.dto';
 import { School, SchoolAdminCredentials, SchoolWithCredentials } from './types/school.types';
 import { CompanyRole } from '../../shared/enums';
-import { CacheTTL } from '../../shared/constants';
+import { CacheTTL, NO_PHONE_PLACEHOLDER } from '../../shared/constants';
 import { APP_EVENTS } from '../../shared/events/event-names';
+
+const ADMIN_LOGIN_REQUIRED = 'Provide the admin phone number or email so the school admin can log in';
 
 @Injectable()
 export class SchoolsService {
@@ -144,6 +146,9 @@ export class SchoolsService {
     if (dto.admin_email && !dto.admin_phone && !dto.admin_first_name) {
       throw new BadRequestException('admin_first_name is required when admin_email is provided');
     }
+    if (dto.admin_first_name && !dto.admin_phone && !dto.admin_email) {
+      throw new BadRequestException(ADMIN_LOGIN_REQUIRED);
+    }
     await this.assertNameAvailable(dto.name);
     await this.assertAdminLoginAvailable(
       dto.admin_phone,
@@ -206,10 +211,7 @@ export class SchoolsService {
       await hashPassword(temporaryPassword),
     );
     return {
-      login_id:
-        admin.phone_number && admin.phone_number !== '0000000000'
-          ? admin.phone_number
-          : admin.email!,
+      login_id: admin.phone_number ?? admin.email!,
       temporary_password: temporaryPassword,
     };
   }
@@ -290,7 +292,12 @@ export class SchoolsService {
       return undefined;
     }
 
-    if (!fields.admin_phone && !fields.admin_email) return undefined;
+    if (!fields.admin_phone && !fields.admin_email) {
+      if (fields.admin_first_name || fields.admin_last_name) {
+        throw new BadRequestException(ADMIN_LOGIN_REQUIRED);
+      }
+      return undefined;
+    }
     if (!fields.admin_first_name) {
       throw new BadRequestException('admin_first_name is required to create a school admin');
     }
@@ -302,7 +309,7 @@ export class SchoolsService {
       first_name: fields.admin_first_name,
       last_name: fields.admin_last_name,
       dial_code: fields.admin_dial_code ?? '+91',
-      phone_number: fields.admin_phone ?? '0000000000',
+      phone_number: fields.admin_phone ?? NO_PHONE_PLACEHOLDER,
       email: fields.admin_email,
       password_hash: await hashPassword(temporaryPassword),
       role: 'SCHOOL_ADMIN',

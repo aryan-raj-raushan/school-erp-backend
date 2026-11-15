@@ -5,6 +5,7 @@ import { RolesService } from '../../roles/roles.service';
 import { hashPassword } from '../../../utils/hash.utils';
 import { generateId } from '../../../utils/uuid.utils';
 import { APP_EVENTS } from '../../../shared/events/event-names';
+import { NO_PHONE_PLACEHOLDER } from '../../../shared/constants';
 import { SchoolCreatedEvent } from './school.events';
 
 @Injectable()
@@ -21,7 +22,7 @@ export class SchoolCreatedListener {
     if (!event.adminPassword || (!event.adminPhone && !event.adminEmail)) return;
 
     const dialCode = event.adminDialCode ?? '+91';
-    const phone = event.adminPhone ?? '0000000000';
+    const phone = event.adminPhone ?? NO_PHONE_PLACEHOLDER;
 
     const alreadyExists = event.adminPhone
       ? await this.authRepo.findSchoolUserByPhoneExists(phone, dialCode, event.schoolId)

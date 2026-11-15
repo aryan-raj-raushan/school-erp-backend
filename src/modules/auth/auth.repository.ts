@@ -16,6 +16,7 @@ import {
   sections,
 } from '../../database/drizzle/schema';
 import { CompanyRole } from '../../shared/enums';
+import { NO_PHONE_PLACEHOLDER } from '../../shared/constants';
 
 @Injectable()
 export class AuthRepository {
@@ -79,6 +80,7 @@ export class AuthRepository {
   }
 
   async findSchoolUserByPhone(phone_number: string, dial_code: string) {
+    if (phone_number === NO_PHONE_PLACEHOLDER) return null;
     const [user] = await this.db
       .select()
       .from(schoolUsers)
@@ -173,7 +175,11 @@ export class AuthRepository {
         ),
       )
       .limit(1);
-    return user ?? null;
+    if (!user) return null;
+    return {
+      ...user,
+      phone_number: user.phone_number === NO_PHONE_PLACEHOLDER ? null : user.phone_number,
+    };
   }
 
   async updateSchoolUserProfile(
