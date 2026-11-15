@@ -17,6 +17,7 @@ import { CreateRfidDeviceDto } from './dto/create-rfid-device.dto';
 import { UpdateRfidDeviceDto } from './dto/update-rfid-device.dto';
 import { AssignRfidDeviceDto } from './dto/assign-rfid-device.dto';
 import { RfidDeviceFilterDto } from './dto/rfid-device-filter.dto';
+import { MapRfidDeviceDto } from './dto/map-rfid-device.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
@@ -34,6 +35,22 @@ export class RfidInventoryController {
   async findAll(@Query() filters: RfidDeviceFilterDto) {
     const data = await this.rfidInventoryService.findAll(filters);
     return ApiResponse.success(data.items, 'RFID devices fetched', data.meta);
+  }
+
+  @Get('discovered')
+  @ApiOperation({
+    summary: 'Devices that sent taps in the last 30 days but are not mapped to a school',
+  })
+  async findDiscovered() {
+    const data = await this.rfidInventoryService.findDiscovered();
+    return ApiResponse.success(data, 'Discovered RFID devices fetched');
+  }
+
+  @Post('map')
+  @ApiOperation({ summary: 'Map a device ID to a school, adding it to inventory if needed' })
+  async map(@Body() dto: MapRfidDeviceDto, @GetCurrentUserId() userId: string) {
+    const data = await this.rfidInventoryService.map(dto, userId);
+    return ApiResponse.success(data, 'RFID device mapped');
   }
 
   @Get(':id')

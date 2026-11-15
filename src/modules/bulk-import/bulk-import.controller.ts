@@ -18,12 +18,14 @@ import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nes
 import { Response } from 'express';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
-import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
+import { GetCurrentUser, GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { AppPermission, PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 import { BULK_IMPORT } from './bulk-import.constants';
 import { BulkEntity } from './bulk-import.types';
 import { BulkImportService, ExcelFile } from './bulk-import.service';
+import { BulkImportWorkbookService } from './bulk-import-workbook.service';
+import { RequestUser } from '../../shared/types/jwt-payload.types';
 
 const FILE_BODY = {
   schema: {
@@ -123,7 +125,97 @@ function createBulkImportController(entity: BulkEntity, permission: AppPermissio
   return BulkImportController;
 }
 
+/**
+ * One workbook, one sheet per data type. The route accepts anyone who can create at least one
+ * type; each sheet is then checked against the caller's own permissions.
+ */
+@ApiTags('Bulk Import')
+@ApiBearerAuth('access-token')
+@Permissions(
+  PERMISSION_REGISTRY.students.create,
+  PERMISSION_REGISTRY.staff.create,
+  PERMISSION_REGISTRY.finance.create,
+)
+@Controller('bulk-import/workbook')
+export class WorkbookImportController {
+  constructor(private readonly workbook: BulkImportWorkbookService) {}
+
+  @Get('template')
+  @ApiOperation({ summary: 'Download a multi-sheet template for every type the caller can import' })
+  async template(
+    @GetCurrentUser() user: RequestUser,
+    @GetSchoolId() schoolId: string,
+    @Res() res: Response,
+  ) {
+    sendExcel(res, await this.workbook.template(user, schoolId));
+  }
+
+  @Post('validate')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(uploadInterceptor)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(FILE_BODY)
+  @ApiOperation({ summary: 'Dry-run every sheet of a workbook, in import order' })
+  async validate(
+    @UploadedFile() file: Express.Multer.File,
+    @GetCurrentUser() user: RequestUser,
+    @GetSchoolId() schoolId: string,
+  ) {
+    const data = await this.workbook.validate(user, file, schoolId);
+    return ApiResponse.success(data, 'Workbook validated');
+  }
+
+  @Post('report')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(uploadInterceptor)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(FILE_BODY)
+  @ApiOperation({ summary: 'Download the workbook annotated with every problem, sheet by sheet' })
+  async report(
+    @UploadedFile() file: Express.Multer.File,
+    @GetCurrentUser() user: RequestUser,
+    @GetSchoolId() schoolId: string,
+    @Query('errors_only') errorsOnly: string | undefined,
+    @Res() res: Response,
+  ) {
+    sendExcel(res, await this.workbook.report(user, file, schoolId, errorsOnly === 'true'));
+  }
+
+  @Post('commit')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @UseInterceptors(uploadInterceptor)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(FILE_BODY)
+  @ApiOperation({
+    summary: 'Import every sheet of a workbook in the background, in dependency order',
+  })
+  async commit(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('skip_errors') skipErrors: string | undefined,
+    @GetCurrentUser() user: RequestUser,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    const data = await this.workbook.startImport(
+      user,
+      file,
+      schoolId,
+      userId,
+      skipErrors === 'true',
+    );
+    return ApiResponse.success(data, 'Import started');
+  }
+
+  @Get('jobs/:jobId')
+  @ApiOperation({ summary: 'Poll a workbook import job' })
+  async job(@Param('jobId', ParseUUIDPipe) jobId: string, @GetSchoolId() schoolId: string) {
+    const data = await this.workbook.getJob(schoolId, jobId);
+    return ApiResponse.success(data, 'Import status fetched');
+  }
+}
+
 export const BULK_IMPORT_CONTROLLERS = [
+  WorkbookImportController,
   createBulkImportController('students', PERMISSION_REGISTRY.students.create),
   createBulkImportController('staff', PERMISSION_REGISTRY.staff.create),
   createBulkImportController('finance-accounts', PERMISSION_REGISTRY.finance.create),

@@ -22,6 +22,7 @@ export const rfidDevices = pgTable('rfid_devices', {
   installation_date: date('installation_date'),
   warranty_expiry: date('warranty_expiry'),
   notes: varchar('notes', { length: 500 }),
+  last_seen_at: timestamp('last_seen_at', { withTimezone: true }),
   created_by: varchar('created_by', { length: 36 }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),

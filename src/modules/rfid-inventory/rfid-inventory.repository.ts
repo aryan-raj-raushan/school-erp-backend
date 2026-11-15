@@ -1,10 +1,11 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, ilike, sql } from 'drizzle-orm';
+import { eq, and, ilike, sql, ne, gte, or, isNull, inArray, desc } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { rfidDevices, schools } from '../../database/drizzle/schema';
+import { rfidDevices, rfidScanEvents, schools } from '../../database/drizzle/schema';
 import { RfidDeviceFilterDto } from './dto/rfid-device-filter.dto';
-import { RfidDevice, NewRfidDevice } from './types/rfid-device.types';
+import { RfidDevice, NewRfidDevice, DiscoveredRfidDevice } from './types/rfid-device.types';
+import { RfidDeviceStatus } from '../../shared/enums';
 
 @Injectable()
 export class RfidInventoryRepository {
@@ -52,6 +53,37 @@ export class RfidInventoryRepository {
       .from(rfidDevices)
       .where(sql`upper(${rfidDevices.device_identifier}) = upper(${deviceIdentifier})`);
     return row;
+  }
+
+  async findDiscovered(since: Date, limit: number): Promise<DiscoveredRfidDevice[]> {
+    const lastSeen = sql<string>`max(${rfidScanEvents.received_at})`;
+    return this.db
+      .select({
+        device_identifier: rfidScanEvents.device_id,
+        tap_count: sql<number>`count(*)::int`,
+        last_seen_at: lastSeen,
+        last_card: sql<string>`(array_agg(${rfidScanEvents.rfid_card_id} order by ${rfidScanEvents.received_at} desc))[1]`,
+        inventory_id: rfidDevices.id,
+        status: rfidDevices.status,
+      })
+      .from(rfidScanEvents)
+      .leftJoin(
+        rfidDevices,
+        sql`upper(${rfidDevices.device_identifier}) = upper(${rfidScanEvents.device_id})`,
+      )
+      .where(
+        and(
+          ne(rfidScanEvents.device_id, ''),
+          gte(rfidScanEvents.received_at, since),
+          or(
+            isNull(rfidDevices.id),
+            inArray(rfidDevices.status, [RfidDeviceStatus.IN_STOCK, RfidDeviceStatus.RETURNED]),
+          ),
+        ),
+      )
+      .groupBy(rfidScanEvents.device_id, rfidDevices.id, rfidDevices.status)
+      .orderBy(desc(lastSeen))
+      .limit(limit);
   }
 
   async isActiveSchool(schoolId: string): Promise<boolean> {

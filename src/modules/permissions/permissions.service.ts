@@ -1,9 +1,13 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PermissionsRepository } from './permissions.repository';
 import { RedisService } from '../redis/redis.service';
 import { ALL_PERMISSIONS } from '../../shared/constants/permissions.registry';
 import { generateId } from '../../utils/uuid.utils';
 import { CacheTTL } from '../../shared/constants';
+import { AuthContext, CompanyRole } from '../../shared/enums';
+import { JwtPayload } from '../../shared/types/jwt-payload.types';
+
+const COMPANY_ROLES: string[] = Object.values(CompanyRole);
 
 @Injectable()
 export class PermissionsService implements OnModuleInit {
@@ -55,6 +59,28 @@ export class PermissionsService implements OnModuleInit {
       });
     }
     return grouped;
+  }
+
+  /**
+   * Permissions a caller holds in a school, or 'all' when they bypass the matrix:
+   * SUPER_ADMIN, parents (scoped by ParentScopeGuard instead), and company users
+   * impersonating a school they were already allowed into via switchSchool.
+   */
+  async grantedPermissions(
+    user: JwtPayload,
+    schoolId: string | undefined,
+  ): Promise<'all' | string[]> {
+    if (user.role === CompanyRole.SUPER_ADMIN) return 'all';
+    if (user.context === AuthContext.PARENT) return 'all';
+    if (
+      COMPANY_ROLES.includes(user.role) &&
+      user.context === AuthContext.SCHOOL &&
+      user.school_id
+    ) {
+      return 'all';
+    }
+    if (!schoolId) throw new ForbiddenException('School context required');
+    return this.resolveUserPermissions(user.sub, schoolId, user.custom_role_id ?? null, user.role);
   }
 
   /**

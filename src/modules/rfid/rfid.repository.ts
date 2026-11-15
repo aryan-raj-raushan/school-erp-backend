@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { desc, eq, and, or, ilike } from 'drizzle-orm';
+import { desc, eq, and, or, ilike, sql, SQL } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
@@ -9,6 +9,7 @@ import {
   RfidScanEventRow,
 } from '../../database/drizzle/schema/rfid-scan-events.schema';
 import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
+import { rfidDevices } from '../../database/drizzle/schema/rfid-devices.schema';
 import { students, studentAcademicInfo } from '../../database/drizzle/schema/students.schema';
 import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
 import { attendances } from '../../database/drizzle/schema/attendance.schema';
@@ -18,6 +19,14 @@ import { examAttendance } from '../../database/drizzle/schema/exam-attendance.sc
 import { AttendanceEngineService } from '../attendance/attendance-engine.service';
 import { rfidPunchLog } from '../../database/drizzle/schema/rfid-punch-log.schema';
 import { studentMovements } from '../../database/drizzle/schema/student-movements.schema';
+
+export type CardOwner = { id: string; school_id: string; type: 'staff' | 'student' };
+
+export type DeviceMapping = {
+  id: string;
+  status: string;
+  assigned_school_id: string | null;
+};
 
 export type PersonRow = {
   id: string;
@@ -37,12 +46,30 @@ export class RfidRepository {
     await this.db.insert(rfidScanEvents).values(data).onConflictDoNothing();
   }
 
-  async findRecent(limit = 100): Promise<RfidScanEventRow[]> {
+  async findRecentBySchool(schoolId: string, limit: number): Promise<RfidScanEventRow[]> {
     return this.db
       .select()
       .from(rfidScanEvents)
+      .where(eq(rfidScanEvents.school_id, schoolId))
       .orderBy(desc(rfidScanEvents.received_at))
       .limit(limit);
+  }
+
+  async findDeviceByIdentifier(deviceIdentifier: string): Promise<DeviceMapping | null> {
+    const [row] = await this.db
+      .select({
+        id: rfidDevices.id,
+        status: rfidDevices.status,
+        assigned_school_id: rfidDevices.assigned_school_id,
+      })
+      .from(rfidDevices)
+      .where(sql`upper(${rfidDevices.device_identifier}) = upper(${deviceIdentifier})`)
+      .limit(1);
+    return row ?? null;
+  }
+
+  async touchDevice(id: string, seenAt: Date): Promise<void> {
+    await this.db.update(rfidDevices).set({ last_seen_at: seenAt }).where(eq(rfidDevices.id, id));
   }
 
   async getAllPersonsWithRfid(
@@ -290,22 +317,37 @@ export class RfidRepository {
       .onConflictDoNothing();
   }
 
-  async findStudentByRfid(rfidCardId: string): Promise<{ id: string; school_id: string } | null> {
-    const [row] = await this.db
-      .select({ id: students.id, school_id: students.school_id })
-      .from(students)
-      .where(and(eq(students.id_card_number, rfidCardId), eq(students.deleted, false)))
-      .limit(1);
-    return row ?? null;
-  }
+  async findCardOwners(rfidCardId: string, schoolId?: string): Promise<CardOwner[]> {
+    const studentConditions: SQL[] = [
+      eq(students.id_card_number, rfidCardId),
+      eq(students.deleted, false),
+    ];
+    const staffConditions: SQL[] = [
+      eq(schoolUsers.rfid_card_number, rfidCardId),
+      eq(schoolUsers.deleted, false),
+    ];
+    if (schoolId) {
+      studentConditions.push(eq(students.school_id, schoolId));
+      staffConditions.push(eq(schoolUsers.school_id, schoolId));
+    }
 
-  async findStaffByRfid(rfidCardId: string): Promise<{ id: string; school_id: string } | null> {
-    const [row] = await this.db
-      .select({ id: schoolUsers.id, school_id: schoolUsers.school_id })
-      .from(schoolUsers)
-      .where(and(eq(schoolUsers.rfid_card_number, rfidCardId), eq(schoolUsers.deleted, false)))
-      .limit(1);
-    return row ?? null;
+    const [studentRows, staffRows] = await Promise.all([
+      this.db
+        .select({ id: students.id, school_id: students.school_id })
+        .from(students)
+        .where(and(...studentConditions))
+        .limit(2),
+      this.db
+        .select({ id: schoolUsers.id, school_id: schoolUsers.school_id })
+        .from(schoolUsers)
+        .where(and(...staffConditions))
+        .limit(2),
+    ]);
+
+    return [
+      ...studentRows.map((r) => ({ ...r, type: 'student' as const })),
+      ...staffRows.map((r) => ({ ...r, type: 'staff' as const })),
+    ];
   }
 
   async autoMarkStaffAttendance(staffId: string, schoolId: string, tapDate: Date): Promise<void> {

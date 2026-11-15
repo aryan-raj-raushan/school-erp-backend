@@ -17,15 +17,24 @@ import {
   ImportColumn,
   ImportJob,
   ParsedValues,
+  PendingRecords,
+  ReportColumn,
   ReportRow,
   RowIssue,
   RowValues,
   ValidatedRow,
   ValidationReport,
+  ValidationSummary,
 } from './bulk-import.types';
 import { hasErrors, rowStatus } from './bulk-import.utils';
 import { parseCell, parseDate, rawToText } from './excel/cell-parsers';
-import { SheetRow, UploadedSheetFile, fileExtension, readSheet } from './excel/sheet-reader';
+import {
+  SheetData,
+  SheetRow,
+  UploadedSheetFile,
+  fileExtension,
+  readSheet,
+} from './excel/sheet-reader';
 import { buildReport, buildTemplate } from './excel/workbook-builder';
 import { StudentsImporter } from './importers/students.importer';
 import { StaffImporter } from './importers/staff.importer';
@@ -34,9 +43,9 @@ import { FinanceHeadsImporter } from './importers/finance-heads.importer';
 import { FinanceIncomeImporter } from './importers/finance-income.importer';
 import { FinanceExpensesImporter } from './importers/finance-expenses.importer';
 
-type AnyImporter = BulkImporter<unknown, object>;
+export type AnyImporter = BulkImporter<unknown, object>;
 
-interface ValidationRun {
+export interface SheetRun {
   importer: AnyImporter;
   columns: ImportColumn[];
   headerIssues: string[];
@@ -58,7 +67,7 @@ function flattenValidation(errors: ValidationError[], parent = ''): [string, str
   });
 }
 
-function messageOf(error: unknown): string {
+export function messageOf(error: unknown): string {
   if (error instanceof HttpException) {
     const response = error.getResponse();
     if (typeof response === 'string') return response;
@@ -66,6 +75,10 @@ function messageOf(error: unknown): string {
     return Array.isArray(message) ? message.join(', ') : (message ?? error.message);
   }
   return 'Unexpected error while saving this row';
+}
+
+export function emptyPending(): PendingRecords {
+  return { accounts: [], heads: [], staff: [], students: [] };
 }
 
 @Injectable()
@@ -86,22 +99,25 @@ export class BulkImportService {
     this.importers = new Map(all.map((importer) => [importer.entity, importer]));
   }
 
-  private importerFor(entity: BulkEntity): AnyImporter {
+  importerFor(entity: BulkEntity): AnyImporter {
     const importer = this.importers.get(entity);
     if (!importer) throw new NotFoundException(`Bulk import for '${entity}' is not supported`);
     return importer;
   }
 
-  private assertSchool(schoolId: string | undefined): asserts schoolId is string {
+  assertSchool(schoolId: string | undefined): asserts schoolId is string {
     if (!schoolId) throw new BadRequestException('Switch to a school before importing data');
   }
 
-  private assertFile(file: UploadedSheetFile | undefined): asserts file is UploadedSheetFile {
-    if (!file?.buffer?.length) throw new BadRequestException('Attach an Excel (.xlsx) or CSV file');
+  assertFile(
+    file: UploadedSheetFile | undefined,
+    extensions: readonly string[] = ALLOWED_EXTENSIONS,
+  ): asserts file is UploadedSheetFile {
+    if (!file?.buffer?.length) throw new BadRequestException('Attach an Excel (.xlsx) file');
     const extension = fileExtension(file.originalname);
-    if (!(ALLOWED_EXTENSIONS as readonly string[]).includes(extension)) {
+    if (!extensions.includes(extension)) {
       throw new BadRequestException(
-        `'${extension || file.originalname}' files are not supported — upload .xlsx or .csv`,
+        `'${extension || file.originalname}' files are not supported — upload ${extensions.join(' or ')}`,
       );
     }
     if (file.size > BULK_IMPORT.MAX_FILE_BYTES) {
@@ -114,10 +130,16 @@ export class BulkImportService {
     const importer = this.importerFor(entity);
     const ctx = await importer.loadContext(schoolId);
     const buffer = await buildTemplate({
-      label: importer.label,
-      columns: importer.columns(ctx),
-      examples: importer.examples(ctx),
-      notes: importer.notes(ctx),
+      title: `${importer.label} import`,
+      sections: [
+        {
+          label: importer.label,
+          sheetName: BULK_IMPORT.DATA_SHEET,
+          columns: importer.columns(ctx),
+          examples: importer.examples(ctx),
+          notes: importer.notes(ctx),
+        },
+      ],
     });
     return { buffer, fileName: `${entity}-import-template.xlsx` };
   }
@@ -127,22 +149,8 @@ export class BulkImportService {
     file: UploadedSheetFile | undefined,
     schoolId: string,
   ): Promise<ValidationReport> {
-    const run = await this.run(entity, file, schoolId);
-    const rows = this.toReportRows(run.rows);
-    return {
-      entity,
-      label: run.importer.label,
-      file_name: file!.originalname,
-      columns: run.columns.map((c) => ({ key: c.key, header: c.header, required: !!c.required })),
-      header_issues: run.headerIssues,
-      summary: {
-        total: rows.length,
-        ready: rows.filter((r) => r.status === 'ready').length,
-        warning: rows.filter((r) => r.status === 'warning').length,
-        error: rows.filter((r) => r.status === 'error').length,
-      },
-      rows,
-    };
+    const run = await this.runFile(entity, file, schoolId);
+    return this.toReport(entity, run, file!.originalname);
   }
 
   async report(
@@ -151,10 +159,12 @@ export class BulkImportService {
     schoolId: string,
     errorsOnly: boolean,
   ): Promise<ExcelFile> {
-    const run = await this.run(entity, file, schoolId);
+    const run = await this.runFile(entity, file, schoolId);
     const rows = this.toReportRows(run.rows).filter((r) => !errorsOnly || r.status === 'error');
     if (!rows.length) throw new BadRequestException('There are no rows with errors to export');
-    const buffer = await buildReport({ columns: run.columns, rows });
+    const buffer = await buildReport([
+      { sheetName: BULK_IMPORT.DATA_SHEET, columns: run.columns, rows },
+    ]);
     return { buffer, fileName: `${entity}-import-${errorsOnly ? 'errors' : 'report'}.xlsx` };
   }
 
@@ -165,8 +175,8 @@ export class BulkImportService {
     userId: string,
     skipErrors: boolean,
   ): Promise<ImportJob> {
-    const run = await this.run(entity, file, schoolId);
-    const importable = run.rows.filter((r) => r.payload && !hasErrors(r));
+    const run = await this.runFile(entity, file, schoolId);
+    const importable = this.importable(run.rows);
     const skipped = run.rows.length - importable.length;
 
     if (!importable.length) {
@@ -180,20 +190,33 @@ export class BulkImportService {
       );
     }
 
-    const jobId = generateId();
-    const lockKey = BULK_IMPORT_KEYS.lock(schoolId, entity);
-    if (!(await this.redis.setnx(lockKey, jobId))) {
-      throw new ConflictException(
-        `Another ${run.importer.label.toLowerCase()} import is already running for this school. Wait for it to finish.`,
-      );
-    }
-    await this.redis.expire(lockKey, BULK_IMPORT.LOCK_TTL_SECONDS);
+    const job = this.newJob(entity, generateId(), 'running', importable.length, skipped);
+    const locks = await this.acquireLocks(schoolId, [entity], job.job_id);
+    await this.saveJob(schoolId, job.job_id, job);
 
-    const job: ImportJob = {
+    const ordered = run.importer.persistOrder?.(importable) ?? importable;
+    setImmediate(() => void this.execute(job, run.importer, ordered, schoolId, userId, locks));
+    return job;
+  }
+
+  async getJob(entity: BulkEntity, schoolId: string, jobId: string): Promise<ImportJob> {
+    const job = await this.loadJob<ImportJob>(schoolId, jobId);
+    if (job.entity !== entity) throw new NotFoundException('Import job not found or expired');
+    return job.status === 'running' ? { ...job, results: [], credentials: [] } : job;
+  }
+
+  newJob(
+    entity: BulkEntity,
+    jobId: string,
+    status: ImportJob['status'],
+    total: number,
+    skipped: number,
+  ): ImportJob {
+    return {
       job_id: jobId,
       entity,
-      status: 'running',
-      total: importable.length,
+      status,
+      total,
       processed: 0,
       created: 0,
       failed: 0,
@@ -202,27 +225,81 @@ export class BulkImportService {
       credentials: [],
       started_at: new Date().toISOString(),
     };
-    await this.saveJob(schoolId, job);
-
-    const ordered = run.importer.persistOrder?.(importable) ?? importable;
-    setImmediate(() => void this.execute(job, run.importer, ordered, schoolId, userId, lockKey));
-    return job;
   }
 
-  async getJob(entity: BulkEntity, schoolId: string, jobId: string): Promise<ImportJob> {
-    const raw = await this.redis.get(BULK_IMPORT_KEYS.job(schoolId, jobId));
-    if (!raw) throw new NotFoundException('Import job not found or expired');
-    const job = JSON.parse(raw) as ImportJob;
-    if (job.entity !== entity) throw new NotFoundException('Import job not found or expired');
-    return job.status === 'running' ? { ...job, results: [], credentials: [] } : job;
-  }
-
-  private async saveJob(schoolId: string, job: ImportJob): Promise<void> {
+  async saveJob(schoolId: string, jobId: string, job: object): Promise<void> {
     await this.redis.setex(
-      BULK_IMPORT_KEYS.job(schoolId, job.job_id),
+      BULK_IMPORT_KEYS.job(schoolId, jobId),
       BULK_IMPORT.JOB_TTL_SECONDS,
       JSON.stringify(job),
     );
+  }
+
+  async loadJob<T>(schoolId: string, jobId: string): Promise<T> {
+    const raw = await this.redis.get(BULK_IMPORT_KEYS.job(schoolId, jobId));
+    if (!raw) throw new NotFoundException('Import job not found or expired');
+    return JSON.parse(raw) as T;
+  }
+
+  /** Takes one lock per entity so single-sheet and workbook imports never overlap. */
+  async acquireLocks(schoolId: string, entities: BulkEntity[], jobId: string): Promise<string[]> {
+    const taken: string[] = [];
+    for (const entity of entities) {
+      const key = BULK_IMPORT_KEYS.lock(schoolId, entity);
+      if (!(await this.redis.setnx(key, jobId))) {
+        await this.releaseLocks(taken);
+        throw new ConflictException(
+          `Another ${this.importerFor(entity).label.toLowerCase()} import is already running for this school. Wait for it to finish.`,
+        );
+      }
+      await this.redis.expire(key, BULK_IMPORT.LOCK_TTL_SECONDS);
+      taken.push(key);
+    }
+    return taken;
+  }
+
+  async releaseLocks(keys: string[]): Promise<void> {
+    await Promise.all(keys.map((key) => this.redis.del(key).catch(() => undefined)));
+  }
+
+  /** Saves rows one by one through the owning service, recording each outcome on the job. */
+  async persistRows(
+    job: ImportJob,
+    importer: AnyImporter,
+    rows: ValidatedRow<object>[],
+    schoolId: string,
+    userId: string,
+    flush: () => Promise<void>,
+  ): Promise<void> {
+    let lastFlush = Date.now();
+    for (const row of rows) {
+      try {
+        const result = await importer.persist(row.payload!, schoolId, userId, row.row);
+        job.created++;
+        job.results.push({ row: row.row, status: 'created', label: result.label });
+        if (result.credentials) job.credentials.push(...result.credentials);
+      } catch (error) {
+        if (!(error instanceof HttpException)) {
+          this.logger.error(
+            `Bulk ${job.entity} row ${row.row} failed: ${(error as Error).message}`,
+            (error as Error).stack,
+          );
+        }
+        job.failed++;
+        job.results.push({
+          row: row.row,
+          status: 'failed',
+          label: `Row ${row.row}`,
+          message: messageOf(error),
+        });
+      }
+      job.processed++;
+      if (Date.now() - lastFlush >= BULK_IMPORT.PROGRESS_FLUSH_MS) {
+        await flush();
+        lastFlush = Date.now();
+      }
+    }
+    job.results.sort((a, b) => a.row - b.row);
   }
 
   private async execute(
@@ -231,62 +308,45 @@ export class BulkImportService {
     rows: ValidatedRow<object>[],
     schoolId: string,
     userId: string,
-    lockKey: string,
+    locks: string[],
   ): Promise<void> {
-    let lastFlush = Date.now();
+    const flush = () => this.saveJob(schoolId, job.job_id, job);
     try {
-      for (const row of rows) {
-        try {
-          const result = await importer.persist(row.payload!, schoolId, userId, row.row);
-          job.created++;
-          job.results.push({ row: row.row, status: 'created', label: result.label });
-          if (result.credentials) job.credentials.push(...result.credentials);
-        } catch (error) {
-          if (!(error instanceof HttpException)) {
-            this.logger.error(
-              `Bulk ${job.entity} row ${row.row} failed: ${(error as Error).message}`,
-              (error as Error).stack,
-            );
-          }
-          job.failed++;
-          job.results.push({
-            row: row.row,
-            status: 'failed',
-            label: `Row ${row.row}`,
-            message: messageOf(error),
-          });
-        }
-        job.processed++;
-        if (Date.now() - lastFlush >= BULK_IMPORT.PROGRESS_FLUSH_MS) {
-          await this.saveJob(schoolId, job);
-          lastFlush = Date.now();
-        }
-      }
+      await this.persistRows(job, importer, rows, schoolId, userId, flush);
       job.status = 'completed';
     } catch (error) {
       this.logger.error(`Bulk ${job.entity} import crashed: ${(error as Error).message}`);
       job.status = 'failed';
       job.error = 'The import stopped unexpectedly. Rows saved so far are kept.';
     } finally {
-      job.results.sort((a, b) => a.row - b.row);
       job.finished_at = new Date().toISOString();
-      await this.saveJob(schoolId, job).catch(() => undefined);
-      await this.redis.del(lockKey).catch(() => undefined);
+      await flush().catch(() => undefined);
+      await this.releaseLocks(locks);
     }
   }
 
-  private async run(
+  private async runFile(
     entity: BulkEntity,
     file: UploadedSheetFile | undefined,
     schoolId: string,
-  ): Promise<ValidationRun> {
+  ): Promise<SheetRun> {
     this.assertSchool(schoolId);
     this.assertFile(file);
     const importer = this.importerFor(entity);
     const ctx = await importer.loadContext(schoolId);
     const columns = importer.columns(ctx);
     const sheet = await readSheet(file, columns);
+    return this.runSheet(importer, ctx, columns, sheet, schoolId);
+  }
 
+  /** Validates one sheet: cell parsing, importer rules, DTO rules, in-file and database duplicates. */
+  async runSheet(
+    importer: AnyImporter,
+    ctx: unknown,
+    columns: ImportColumn[],
+    sheet: SheetData,
+    schoolId: string,
+  ): Promise<SheetRun> {
     const rows = sheet.rows.map((sheetRow) => this.validateRow(sheetRow, columns, importer, ctx));
     this.flagInFileDuplicates(rows, importer);
     await importer.checkExisting(
@@ -295,6 +355,45 @@ export class BulkImportService {
       schoolId,
     );
     return { importer, columns, headerIssues: sheet.headerIssues, rows };
+  }
+
+  importable(rows: ValidatedRow<object>[]): ValidatedRow<object>[] {
+    return rows.filter((r) => r.payload && !hasErrors(r));
+  }
+
+  toReport(entity: BulkEntity, run: SheetRun, fileName: string): ValidationReport {
+    const rows = this.toReportRows(run.rows);
+    return {
+      entity,
+      label: run.importer.label,
+      file_name: fileName,
+      columns: this.toReportColumns(run.columns),
+      header_issues: run.headerIssues,
+      summary: this.summarize(rows),
+      rows,
+    };
+  }
+
+  toReportColumns(columns: ImportColumn[]): ReportColumn[] {
+    return columns.map((c) => ({ key: c.key, header: c.header, required: !!c.required }));
+  }
+
+  summarize(rows: ReportRow[]): ValidationSummary {
+    return {
+      total: rows.length,
+      ready: rows.filter((r) => r.status === 'ready').length,
+      warning: rows.filter((r) => r.status === 'warning').length,
+      error: rows.filter((r) => r.status === 'error').length,
+    };
+  }
+
+  toReportRows(rows: ValidatedRow<object>[]): ReportRow[] {
+    return rows.map((row) => ({
+      row: row.row,
+      status: rowStatus(row),
+      values: row.values,
+      issues: row.issues,
+    }));
   }
 
   private validateRow(
@@ -357,14 +456,5 @@ export class BulkImportService {
         });
       });
     });
-  }
-
-  private toReportRows(rows: ValidatedRow<object>[]): ReportRow[] {
-    return rows.map((row) => ({
-      row: row.row,
-      status: rowStatus(row),
-      values: row.values,
-      issues: row.issues,
-    }));
   }
 }

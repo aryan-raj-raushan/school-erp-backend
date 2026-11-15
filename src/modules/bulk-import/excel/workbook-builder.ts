@@ -6,6 +6,20 @@ interface ValidationTarget {
   dataValidations: { add(address: string, validation: ExcelJS.DataValidation): void };
 }
 
+export interface TemplateSection {
+  label: string;
+  sheetName: string;
+  columns: ImportColumn[];
+  examples: RowValues[];
+  notes: string[];
+}
+
+export interface ReportSection {
+  sheetName: string;
+  columns: ImportColumn[];
+  rows: ReportRow[];
+}
+
 const COLORS = {
   requiredHeader: 'FF1E3A8A',
   optionalHeader: 'FFE5E7EB',
@@ -55,15 +69,19 @@ function formatLabel(column: ImportColumn): string {
   }
 }
 
+function styleHeaderCell(cell: ExcelJS.Cell, column: ImportColumn) {
+  cell.value = headerLabel(column);
+  cell.font = { bold: true, color: { argb: column.required ? COLORS.white : COLORS.dark } };
+  cell.fill = fill(column.required ? COLORS.requiredHeader : COLORS.optionalHeader);
+  cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+}
+
 function writeHeaderRow(sheet: ExcelJS.Worksheet, columns: ImportColumn[], withNotes: boolean) {
   const header = sheet.getRow(1);
   header.height = 30;
   columns.forEach((column, index) => {
     const cell = header.getCell(index + 1);
-    cell.value = headerLabel(column);
-    cell.font = { bold: true, color: { argb: column.required ? COLORS.white : COLORS.dark } };
-    cell.fill = fill(column.required ? COLORS.requiredHeader : COLORS.optionalHeader);
-    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    styleHeaderCell(cell, column);
     if (withNotes) cell.note = column.hint;
     sheet.getColumn(index + 1).width = column.width ?? Math.max(16, headerLabel(column).length + 6);
   });
@@ -74,6 +92,7 @@ function applyColumnRules(
   sheet: ExcelJS.Worksheet,
   columns: ImportColumn[],
   listRanges: Map<string, string>,
+  strictLists: boolean,
 ) {
   const target = sheet as unknown as ValidationTarget;
   columns.forEach((column, index) => {
@@ -100,8 +119,10 @@ function applyColumnRules(
         ...base,
         type: 'list',
         formulae: [listRange],
-        errorStyle: 'stop',
-        error: 'Pick a value from the dropdown list.',
+        errorStyle: strictLists ? 'stop' : 'warning',
+        error: strictLists
+          ? 'Pick a value from the dropdown list.'
+          : 'Not in the list — fine only if it is added by an earlier sheet in this file.',
       });
     } else if (column.kind === 'date') {
       target.dataValidations.add(range, {
@@ -143,70 +164,58 @@ function applyColumnRules(
   });
 }
 
-function writeLists(workbook: ExcelJS.Workbook, columns: ImportColumn[]): Map<string, string> {
+function writeLists(
+  workbook: ExcelJS.Workbook,
+  sections: TemplateSection[],
+): Map<TemplateSection, Map<string, string>> {
   const sheet = workbook.addWorksheet(BULK_IMPORT.LISTS_SHEET, { state: 'veryHidden' });
-  const ranges = new Map<string, string>();
-  columns
-    .filter((c) => c.options?.length)
-    .forEach((column, index) => {
-      const sheetColumn = sheet.getColumn(index + 1);
-      sheet.getCell(1, index + 1).value = column.header;
-      column.options!.forEach((option, i) => {
-        sheet.getCell(i + 2, index + 1).value = option.label;
+  const ranges = new Map<TemplateSection, Map<string, string>>();
+  let index = 0;
+  sections.forEach((section) => {
+    const sectionRanges = new Map<string, string>();
+    section.columns
+      .filter((c) => c.options?.length)
+      .forEach((column) => {
+        index++;
+        const letter = sheet.getColumn(index).letter;
+        sheet.getCell(1, index).value = `${section.label} — ${column.header}`;
+        column.options!.forEach((option, i) => {
+          sheet.getCell(i + 2, index).value = option.label;
+        });
+        sectionRanges.set(
+          column.key,
+          `${BULK_IMPORT.LISTS_SHEET}!$${letter}$2:$${letter}$${column.options!.length + 1}`,
+        );
       });
-      const letter = sheetColumn.letter;
-      ranges.set(
-        column.key,
-        `${BULK_IMPORT.LISTS_SHEET}!$${letter}$2:$${letter}$${column.options!.length + 1}`,
-      );
-    });
+    ranges.set(section, sectionRanges);
+  });
   return ranges;
 }
 
-function writeInstructions(
-  sheet: ExcelJS.Worksheet,
-  label: string,
-  columns: ImportColumn[],
-  notes: string[],
-) {
-  sheet.getColumn(1).width = 30;
-  sheet.getColumn(2).width = 12;
-  sheet.getColumn(3).width = 34;
-  sheet.getColumn(4).width = 90;
+function listedOptions(column: ImportColumn): string {
+  const options = column.options?.map((o) => o.label) ?? [];
+  return options.length > MAX_LISTED_OPTIONS
+    ? `${options.slice(0, MAX_LISTED_OPTIONS).join(', ')}, … (see dropdown)`
+    : options.join(', ');
+}
 
-  const title = sheet.addRow([`${label} import — how to fill this file`]);
-  title.font = { bold: true, size: 14 };
-  sheet.addRow([`Generated on ${new Date().toISOString().slice(0, 10)} from your school's setup.`]);
-  sheet.addRow([]);
-
-  const steps = [
-    `Fill one record per row in the "${BULK_IMPORT.DATA_SHEET}" sheet. Keep the header row as it is.`,
-    'Columns marked * (dark blue headers) are required.',
-    'Dropdown columns only accept the listed values. They come from your current setup, so download a fresh template after adding classes, roles, accounts or heads.',
-    'Dates: YYYY-MM-DD (2024-06-15) or DD-MM-YYYY (15-06-2024).',
-    `Sample rows are in the "${BULK_IMPORT.EXAMPLE_SHEET}" sheet. That sheet is never imported.`,
-    'After uploading you get a full preview with every problem highlighted. Nothing is saved until you confirm.',
-    ...notes,
-  ];
+function writeSteps(sheet: ExcelJS.Worksheet, steps: string[]) {
   steps.forEach((step, i) => {
     const row = sheet.addRow([`${i + 1}. ${step}`]);
     sheet.mergeCells(row.number, 1, row.number, 4);
     row.alignment = { wrapText: true, vertical: 'top' };
   });
   sheet.addRow([]);
+}
 
+function writeColumnTable(sheet: ExcelJS.Worksheet, columns: ImportColumn[]) {
   const head = sheet.addRow(['Column', 'Required', 'Format', 'Rules / allowed values']);
   head.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: COLORS.white } };
     cell.fill = fill(COLORS.requiredHeader);
   });
-
   columns.forEach((column) => {
-    const options = column.options?.map((o) => o.label) ?? [];
-    const listed =
-      options.length > MAX_LISTED_OPTIONS
-        ? `${options.slice(0, MAX_LISTED_OPTIONS).join(', ')}, … (see dropdown)`
-        : options.join(', ');
+    const listed = listedOptions(column);
     const rules = [column.hint, listed && `Allowed: ${listed}`].filter(Boolean).join('\n');
     const row = sheet.addRow([
       column.header,
@@ -217,39 +226,97 @@ function writeInstructions(
     row.alignment = { wrapText: true, vertical: 'top' };
     if (column.required) row.getCell(2).font = { bold: true };
   });
+  sheet.addRow([]);
+}
+
+function writeInstructions(sheet: ExcelJS.Worksheet, title: string, sections: TemplateSection[]) {
+  sheet.getColumn(1).width = 30;
+  sheet.getColumn(2).width = 12;
+  sheet.getColumn(3).width = 34;
+  sheet.getColumn(4).width = 90;
+
+  sheet.addRow([`${title} — how to fill this file`]).font = { bold: true, size: 14 };
+  sheet.addRow([`Generated on ${new Date().toISOString().slice(0, 10)} from your school's setup.`]);
+  sheet.addRow([]);
+
+  const multi = sections.length > 1;
+  const sheetList = sections.map((s) => `"${s.sheetName}"`).join(', ');
+  writeSteps(sheet, [
+    multi
+      ? `Each data type has its own sheet: ${sheetList}. Fill only the sheets you need — empty sheets are skipped, and you can delete sheets you don't use.`
+      : `Fill one record per row in the "${sections[0].sheetName}" sheet. Keep the header row as it is.`,
+    ...(multi
+      ? [
+          'Sheets are imported in the order listed above, so later sheets can use records added by earlier ones — for example an Income row can use an account from the Finance Accounts sheet.',
+        ]
+      : []),
+    'Columns marked * (dark blue headers) are required.',
+    'Dropdown columns only accept the listed values. They come from your current setup, so download a fresh template after adding classes, roles, accounts or heads.',
+    'Dates: YYYY-MM-DD (2024-06-15) or DD-MM-YYYY (15-06-2024).',
+    `Sample rows are in the "${BULK_IMPORT.EXAMPLE_SHEET}" sheet. That sheet is never imported.`,
+    'After uploading you get a full preview with every problem highlighted. Nothing is saved until you confirm.',
+    ...(multi ? [] : sections[0].notes),
+  ]);
+
+  sections.forEach((section) => {
+    if (multi) {
+      sheet.addRow([`Sheet "${section.sheetName}"`]).font = { bold: true, size: 12 };
+      if (section.notes.length) writeSteps(sheet, section.notes);
+    }
+    writeColumnTable(sheet, section.columns);
+  });
 }
 
 function writeValues(sheet: ExcelJS.Worksheet, columns: ImportColumn[], values: RowValues) {
   return sheet.addRow(columns.map((c) => values[c.key] ?? ''));
 }
 
+function writeExampleRows(sheet: ExcelJS.Worksheet, section: TemplateSection) {
+  section.examples.forEach((values) => {
+    writeValues(sheet, section.columns, values).eachCell({ includeEmpty: true }, (cell) => {
+      cell.fill = fill(COLORS.example);
+    });
+  });
+}
+
+function writeExamples(sheet: ExcelJS.Worksheet, sections: TemplateSection[]) {
+  if (sections.length === 1) {
+    writeHeaderRow(sheet, sections[0].columns, false);
+    writeExampleRows(sheet, sections[0]);
+    return;
+  }
+  sections.forEach((section) => {
+    sheet.addRow([`${section.sheetName} — sample rows`]).font = { bold: true, size: 12 };
+    const header = sheet.addRow([]);
+    section.columns.forEach((column, i) => styleHeaderCell(header.getCell(i + 1), column));
+    writeExampleRows(sheet, section);
+    sheet.addRow([]);
+  });
+  const widest = Math.max(...sections.map((s) => s.columns.length));
+  for (let i = 1; i <= widest; i++) sheet.getColumn(i).width = 20;
+}
+
 export async function buildTemplate(options: {
-  label: string;
-  columns: ImportColumn[];
-  examples: RowValues[];
-  notes: string[];
+  title: string;
+  sections: TemplateSection[];
 }): Promise<Buffer> {
-  const { label, columns, examples, notes } = options;
+  const { title, sections } = options;
+  const strictLists = sections.length === 1;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'School ERP';
   workbook.created = new Date();
 
   const instructions = workbook.addWorksheet(BULK_IMPORT.INSTRUCTIONS_SHEET);
-  const data = workbook.addWorksheet(BULK_IMPORT.DATA_SHEET);
+  const dataSheets = sections.map((section) => workbook.addWorksheet(section.sheetName));
   const example = workbook.addWorksheet(BULK_IMPORT.EXAMPLE_SHEET);
-  const listRanges = writeLists(workbook, columns);
+  const listRanges = writeLists(workbook, sections);
 
-  writeInstructions(instructions, label, columns, notes);
-
-  writeHeaderRow(data, columns, true);
-  applyColumnRules(data, columns, listRanges);
-
-  writeHeaderRow(example, columns, false);
-  examples.forEach((values) => {
-    writeValues(example, columns, values).eachCell({ includeEmpty: true }, (cell) => {
-      cell.fill = fill(COLORS.example);
-    });
+  writeInstructions(instructions, title, sections);
+  sections.forEach((section, i) => {
+    writeHeaderRow(dataSheets[i], section.columns, true);
+    applyColumnRules(dataSheets[i], section.columns, listRanges.get(section)!, strictLists);
   });
+  writeExamples(example, sections);
 
   workbook.views = [
     { x: 0, y: 0, width: 20000, height: 12000, firstSheet: 0, activeTab: 1, visibility: 'visible' },
@@ -267,14 +334,7 @@ function issueText(issues: RowIssue[], columns: ImportColumn[]): string {
     .join('\n');
 }
 
-export async function buildReport(options: {
-  columns: ImportColumn[];
-  rows: ReportRow[];
-}): Promise<Buffer> {
-  const { columns, rows } = options;
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet(BULK_IMPORT.DATA_SHEET);
-
+function writeReportSheet(sheet: ExcelJS.Worksheet, columns: ImportColumn[], rows: ReportRow[]) {
   writeHeaderRow(sheet, columns, true);
   const statusCol = columns.length + 1;
   const issuesCol = columns.length + 2;
@@ -320,5 +380,12 @@ export async function buildReport(options: {
   });
 
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: issuesCol } };
+}
+
+export async function buildReport(sections: ReportSection[]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  sections.forEach((section) =>
+    writeReportSheet(workbook.addWorksheet(section.sheetName), section.columns, section.rows),
+  );
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }

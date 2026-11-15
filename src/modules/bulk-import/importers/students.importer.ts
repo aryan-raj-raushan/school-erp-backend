@@ -13,6 +13,7 @@ import { BulkImportLookups } from '../bulk-import.lookups';
 import {
   BulkImporter,
   ImportColumn,
+  PendingRecords,
   PersistResult,
   RowContext,
   RowValues,
@@ -791,6 +792,14 @@ export class StudentsImporter implements BulkImporter<StudentsContext, CreateStu
     const explicit = rows.filter((r) => r.payload?.academic_info?.roll_number);
     const automatic = rows.filter((r) => !r.payload?.academic_info?.roll_number);
     return [...explicit, ...automatic];
+  }
+
+  collectPending(rows: ValidatedRow<CreateStudentDto>[], pending: PendingRecords): void {
+    rows.forEach(({ payload }) => {
+      const admission = payload!.academic_info?.admission_number;
+      if (admission)
+        pending.students.push({ admission_number: admission, name: fullName(payload!) });
+    });
   }
 
   async persist(

@@ -12,10 +12,14 @@ import { CreateRfidDeviceDto } from './dto/create-rfid-device.dto';
 import { UpdateRfidDeviceDto } from './dto/update-rfid-device.dto';
 import { AssignRfidDeviceDto } from './dto/assign-rfid-device.dto';
 import { RfidDeviceFilterDto } from './dto/rfid-device-filter.dto';
-import { RfidDevice } from './types/rfid-device.types';
+import { MapRfidDeviceDto } from './dto/map-rfid-device.dto';
+import { RfidDevice, DiscoveredRfidDevice } from './types/rfid-device.types';
 import { RfidDeviceStatus } from '../../shared/enums';
 import { APP_EVENTS } from '../../shared/events/event-names';
 import { RfidDeviceAssignedEvent } from './events/rfid-inventory.events';
+
+const DISCOVERY_WINDOW_DAYS = 30;
+const DISCOVERY_LIMIT = 100;
 
 @Injectable()
 export class RfidInventoryService {
@@ -36,6 +40,11 @@ export class RfidInventoryService {
     const device = await this.rfidInventoryRepo.findById(id);
     if (!device) throw new NotFoundException(`RFID device '${id}' not found`);
     return device;
+  }
+
+  async findDiscovered(): Promise<DiscoveredRfidDevice[]> {
+    const since = new Date(Date.now() - DISCOVERY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    return this.rfidInventoryRepo.findDiscovered(since, DISCOVERY_LIMIT);
   }
 
   private static assertValidDates(purchaseDate?: string | null, warrantyExpiry?: string | null) {
@@ -93,6 +102,29 @@ export class RfidInventoryService {
     await this.rfidInventoryRepo.delete(id);
   }
 
+  private async assertAssignment(dto: AssignRfidDeviceDto) {
+    if (!(await this.rfidInventoryRepo.isActiveSchool(dto.school_id))) {
+      throw new BadRequestException('Devices can only be assigned to an active school');
+    }
+    if (dto.billable && dto.charge_amount == null) {
+      throw new BadRequestException('charge_amount is required when billable = true');
+    }
+  }
+
+  async map(dto: MapRfidDeviceDto, createdBy: string): Promise<RfidDevice> {
+    const existing = await this.rfidInventoryRepo.findByIdentifier(dto.device_identifier);
+    if (existing) return this.assign(existing.id, dto, createdBy);
+
+    await this.assertAssignment(dto);
+    const device = await this.rfidInventoryRepo.create({
+      id: generateId(),
+      created_by: createdBy,
+      device_identifier: dto.device_identifier,
+      device_model: dto.device_model,
+    });
+    return this.assign(device.id, dto, createdBy);
+  }
+
   async assign(id: string, dto: AssignRfidDeviceDto, createdBy: string): Promise<RfidDevice> {
     const device = await this.findById(id);
     if (
@@ -101,12 +133,7 @@ export class RfidInventoryService {
     ) {
       throw new BadRequestException(`Device is '${device.status}' and cannot be assigned`);
     }
-    if (!(await this.rfidInventoryRepo.isActiveSchool(dto.school_id))) {
-      throw new BadRequestException('Devices can only be assigned to an active school');
-    }
-    if (dto.billable && dto.charge_amount == null) {
-      throw new BadRequestException('charge_amount is required when billable = true');
-    }
+    await this.assertAssignment(dto);
 
     const updated = await this.rfidInventoryRepo.update(id, {
       assigned_school_id: dto.school_id,

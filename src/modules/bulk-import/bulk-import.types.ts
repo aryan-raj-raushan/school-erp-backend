@@ -112,7 +112,7 @@ export interface ImportCredential {
   temporary_password: string;
 }
 
-export type ImportJobStatus = 'running' | 'completed' | 'failed';
+export type ImportJobStatus = 'pending' | 'running' | 'completed' | 'failed';
 
 export interface ImportRowResult {
   row: number;
@@ -137,10 +137,39 @@ export interface ImportJob {
   finished_at?: string;
 }
 
+export interface WorkbookSheetReport extends ValidationReport {
+  sheet_name: string;
+  sheet_error?: string;
+}
+
+export interface WorkbookReport {
+  file_name: string;
+  sheets: WorkbookSheetReport[];
+  ignored_sheets: string[];
+  summary: ValidationSummary;
+}
+
+export interface WorkbookJob {
+  job_id: string;
+  status: ImportJobStatus;
+  sections: ImportJob[];
+  error?: string;
+  started_at: string;
+  finished_at?: string;
+}
+
 export interface RowContext {
   row: number;
   values: ParsedValues;
   issue(column: string | undefined, message: string, severity?: IssueSeverity): void;
+}
+
+/** Records earlier workbook sheets will create, so later sheets can reference them in the preview. */
+export interface PendingRecords {
+  accounts: { name: string; is_enabled: boolean; opening_balance: number; start_date: string }[];
+  heads: { name: string; head_type: string; is_enabled: boolean }[];
+  staff: { phone_number: string; employee_code?: string; name: string }[];
+  students: { admission_number: string; name: string }[];
 }
 
 export interface BulkImporter<TCtx = unknown, TPayload extends object = object> {
@@ -156,5 +185,7 @@ export interface BulkImporter<TCtx = unknown, TPayload extends object = object> 
   toPayload(row: RowContext, ctx: TCtx): TPayload | undefined;
   checkExisting(rows: ValidatedRow<TPayload>[], ctx: TCtx, schoolId: string): Promise<void>;
   persistOrder?(rows: ValidatedRow<TPayload>[]): ValidatedRow<TPayload>[];
+  collectPending?(rows: ValidatedRow<TPayload>[], pending: PendingRecords): void;
+  applyPending?(ctx: TCtx, pending: PendingRecords): void;
   persist(payload: TPayload, schoolId: string, userId: string, row: number): Promise<PersistResult>;
 }

@@ -5,7 +5,13 @@ import { BulkImportRepository } from '../bulk-import.repository';
 import { BulkImportLookups } from '../bulk-import.lookups';
 import { lower } from '../bulk-import.utils';
 import { parsePhone } from '../excel/cell-parsers';
-import { LedgerEntry, LedgerEntryImporter, Party } from './ledger-entry.importer';
+import { PendingRecords } from '../bulk-import.types';
+import {
+  LedgerEntry,
+  LedgerEntryImporter,
+  PENDING_ID_PREFIX,
+  Party,
+} from './ledger-entry.importer';
 
 @Injectable()
 export class FinanceExpensesImporter extends LedgerEntryImporter<CreateFinanceExpenseDto> {
@@ -60,6 +66,16 @@ export class FinanceExpensesImporter extends LedgerEntryImporter<CreateFinanceEx
 
   protected partyId(p: CreateFinanceExpenseDto): string | undefined {
     return p.employee_id;
+  }
+
+  protected pendingParties(pending: PendingRecords): Map<string, Party> {
+    const parties = new Map<string, Party>();
+    pending.staff.forEach((s) => {
+      const party = { id: `${PENDING_ID_PREFIX}staff:${s.phone_number}`, name: s.name };
+      parties.set(lower(s.phone_number), party);
+      if (s.employee_code) parties.set(lower(s.employee_code), party);
+    });
+    return parties;
   }
 
   protected async resolveParties(schoolId: string, refs: string[]): Promise<Map<string, Party>> {

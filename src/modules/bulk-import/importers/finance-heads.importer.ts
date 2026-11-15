@@ -6,6 +6,7 @@ import { BulkImportLookups } from '../bulk-import.lookups';
 import {
   BulkImporter,
   ImportColumn,
+  PendingRecords,
   PersistResult,
   RowContext,
   RowValues,
@@ -107,6 +108,16 @@ export class FinanceHeadsImporter implements BulkImporter<HeadsContext, CreateFi
         flag(row, 'name', `${p.head_type} head '${p.name}' already exists`);
       }
     });
+  }
+
+  collectPending(rows: ValidatedRow<CreateFinanceHeadDto>[], pending: PendingRecords): void {
+    rows.forEach(({ payload }) =>
+      pending.heads.push({
+        name: payload!.name,
+        head_type: payload!.head_type,
+        is_enabled: payload!.is_enabled ?? true,
+      }),
+    );
   }
 
   async persist(

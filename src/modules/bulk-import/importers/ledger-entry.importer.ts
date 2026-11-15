@@ -5,6 +5,7 @@ import {
   BulkEntity,
   BulkImporter,
   ImportColumn,
+  PendingRecords,
   PersistResult,
   RowContext,
   RowValues,
@@ -19,8 +20,11 @@ type Head = Awaited<ReturnType<BulkImportLookups['financeHeads']>>[number];
 export interface LedgerContext {
   accounts: Account[];
   heads: Head[];
+  pendingParties: Map<string, Party>;
   today: string;
 }
+
+export const PENDING_ID_PREFIX = 'pending:';
 
 export interface LedgerEntry {
   head_id: string;
@@ -81,6 +85,7 @@ export abstract class LedgerEntryImporter<TPayload extends object> implements Bu
   protected abstract resolveParties(schoolId: string, refs: string[]): Promise<Map<string, Party>>;
   protected abstract findExisting(schoolId: string, dates: string[]): Promise<ExistingEntry[]>;
   protected abstract partyId(payload: TPayload): string | undefined;
+  protected abstract pendingParties(pending: PendingRecords): Map<string, Party>;
   protected abstract save(
     payload: TPayload,
     schoolId: string,
@@ -92,7 +97,36 @@ export abstract class LedgerEntryImporter<TPayload extends object> implements Bu
       this.lookups.financeAccounts(schoolId),
       this.lookups.financeHeads(schoolId),
     ]);
-    return { accounts, heads, today: todayIst() };
+    return { accounts, heads, pendingParties: new Map(), today: todayIst() };
+  }
+
+  applyPending(ctx: LedgerContext, pending: PendingRecords): void {
+    const knownAccounts = new Set(ctx.accounts.map((a) => lower(a.name)));
+    const knownHeads = new Set(ctx.heads.map((h) => `${h.head_type}|${lower(h.name)}`));
+    ctx.accounts = [
+      ...ctx.accounts,
+      ...pending.accounts
+        .filter((a) => !knownAccounts.has(lower(a.name)))
+        .map((a) => ({
+          id: `${PENDING_ID_PREFIX}account:${lower(a.name)}`,
+          name: a.name,
+          is_enabled: a.is_enabled,
+          current_balance: a.opening_balance.toFixed(2),
+          account_start_date: a.start_date,
+        })),
+    ];
+    ctx.heads = [
+      ...ctx.heads,
+      ...pending.heads
+        .filter((h) => !knownHeads.has(`${h.head_type}|${lower(h.name)}`))
+        .map((h) => ({
+          id: `${PENDING_ID_PREFIX}head:${h.head_type}:${lower(h.name)}`,
+          name: h.name,
+          head_type: h.head_type,
+          is_enabled: h.is_enabled,
+        })),
+    ];
+    ctx.pendingParties = this.pendingParties(pending);
   }
 
   private usableHeads(ctx: LedgerContext): Head[] {
@@ -225,10 +259,11 @@ export abstract class LedgerEntryImporter<TPayload extends object> implements Bu
     const refOf = (row: ValidatedRow<TPayload>) => str(row.parsed.party);
     const refs = [...new Set(rows.map(refOf).filter((x): x is string => !!x))];
     const dates = [...new Set(entries.map((e) => e.date))];
-    const [parties, existing] = await Promise.all([
+    const [resolved, existing] = await Promise.all([
       this.resolveParties(schoolId, refs),
       this.findExisting(schoolId, dates),
     ]);
+    const parties = new Map([...ctx.pendingParties, ...resolved]);
 
     const existingKeys = new Set(
       existing.map((e) =>

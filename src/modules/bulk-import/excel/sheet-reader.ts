@@ -50,7 +50,7 @@ export function fileExtension(name: string): string {
   return dot === -1 ? '' : name.slice(dot).toLowerCase();
 }
 
-async function loadWorkbook(file: UploadedSheetFile): Promise<ExcelJS.Workbook> {
+export async function loadWorkbook(file: UploadedSheetFile): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   try {
     if (fileExtension(file.originalname) === '.csv') {
@@ -80,8 +80,15 @@ export async function readSheet(
   file: UploadedSheetFile,
   columns: ImportColumn[],
 ): Promise<SheetData> {
-  const workbook = await loadWorkbook(file);
-  const sheet = pickSheet(workbook);
+  const data = readWorksheet(pickSheet(await loadWorkbook(file)), columns);
+  if (data.rows.length === 0) {
+    throw new BadRequestException('The file has no data rows below the header');
+  }
+  return data;
+}
+
+/** Reads one worksheet; an empty sheet yields no rows rather than an error. */
+export function readWorksheet(sheet: ExcelJS.Worksheet, columns: ImportColumn[]): SheetData {
   const byHeader = new Map<string, ImportColumn>();
   columns.forEach((c) => {
     byHeader.set(headerKey(c.header), c);
@@ -98,7 +105,7 @@ export async function readSheet(
   }
   if (!headerRow) {
     throw new BadRequestException(
-      'Could not find the header row. Download the sample template and keep its first row unchanged.',
+      `Could not find the header row in sheet '${sheet.name}'. Download the sample template and keep its first row unchanged.`,
     );
   }
 
@@ -142,13 +149,9 @@ export async function readSheet(
     rows.push({ row: r, cells });
     if (rows.length > BULK_IMPORT.MAX_ROWS) {
       throw new BadRequestException(
-        `The file has more than ${BULK_IMPORT.MAX_ROWS} rows. Split it into smaller files.`,
+        `Sheet '${sheet.name}' has more than ${BULK_IMPORT.MAX_ROWS} rows. Split it into smaller files.`,
       );
     }
-  }
-
-  if (rows.length === 0) {
-    throw new BadRequestException('The file has no data rows below the header');
   }
   return { rows, headerIssues };
 }

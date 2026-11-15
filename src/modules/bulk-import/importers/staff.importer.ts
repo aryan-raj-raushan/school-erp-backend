@@ -8,6 +8,7 @@ import { BulkImportLookups } from '../bulk-import.lookups';
 import {
   BulkImporter,
   ImportColumn,
+  PendingRecords,
   PersistResult,
   RowContext,
   RowValues,
@@ -359,6 +360,16 @@ export class StaffImporter implements BulkImporter<StaffContext, CreateStaffDto>
         if (owner) flag(row, f.column, `${f.label} is already used by ${owner}`);
       });
     });
+  }
+
+  collectPending(rows: ValidatedRow<CreateStaffDto>[], pending: PendingRecords): void {
+    rows.forEach(({ payload }) =>
+      pending.staff.push({
+        phone_number: payload!.phone_number,
+        employee_code: payload!.employee_code,
+        name: fullName(payload!),
+      }),
+    );
   }
 
   async persist(

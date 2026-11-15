@@ -6,6 +6,7 @@ import { BulkImportLookups } from '../bulk-import.lookups';
 import {
   BulkImporter,
   ImportColumn,
+  PendingRecords,
   PersistResult,
   RowContext,
   RowValues,
@@ -146,6 +147,17 @@ export class FinanceAccountsImporter implements BulkImporter<
         flag(row, 'name', `An account named '${row.payload!.name}' already exists`);
       }
     });
+  }
+
+  collectPending(rows: ValidatedRow<CreateFinanceAccountDto>[], pending: PendingRecords): void {
+    rows.forEach(({ payload }) =>
+      pending.accounts.push({
+        name: payload!.name,
+        is_enabled: payload!.is_enabled ?? true,
+        opening_balance: payload!.opening_balance ?? 0,
+        start_date: payload!.account_start_date,
+      }),
+    );
   }
 
   async persist(

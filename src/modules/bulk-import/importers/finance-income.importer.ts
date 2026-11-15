@@ -4,7 +4,13 @@ import { CreateFinanceIncomeDto } from '../../finance/dto/create-finance-income.
 import { BulkImportRepository } from '../bulk-import.repository';
 import { BulkImportLookups } from '../bulk-import.lookups';
 import { lower } from '../bulk-import.utils';
-import { LedgerEntry, LedgerEntryImporter, Party } from './ledger-entry.importer';
+import { PendingRecords } from '../bulk-import.types';
+import {
+  LedgerEntry,
+  LedgerEntryImporter,
+  PENDING_ID_PREFIX,
+  Party,
+} from './ledger-entry.importer';
 
 @Injectable()
 export class FinanceIncomeImporter extends LedgerEntryImporter<CreateFinanceIncomeDto> {
@@ -59,6 +65,15 @@ export class FinanceIncomeImporter extends LedgerEntryImporter<CreateFinanceInco
 
   protected partyId(p: CreateFinanceIncomeDto): string | undefined {
     return p.student_id;
+  }
+
+  protected pendingParties(pending: PendingRecords): Map<string, Party> {
+    return new Map(
+      pending.students.map((s) => [
+        lower(s.admission_number),
+        { id: `${PENDING_ID_PREFIX}student:${lower(s.admission_number)}`, name: s.name },
+      ]),
+    );
   }
 
   protected async resolveParties(schoolId: string, refs: string[]): Promise<Map<string, Party>> {

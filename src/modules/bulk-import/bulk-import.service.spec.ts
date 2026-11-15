@@ -14,7 +14,10 @@ import { FinanceIncomeImporter } from './importers/finance-income.importer';
 import { FinanceExpensesImporter } from './importers/finance-expenses.importer';
 import { StudentsImporter } from './importers/students.importer';
 import { StaffImporter } from './importers/staff.importer';
-import { ImportJob } from './bulk-import.types';
+import { ImportJob, WorkbookJob } from './bulk-import.types';
+import { BulkImportWorkbookService } from './bulk-import-workbook.service';
+import { PermissionsService } from '../permissions/permissions.service';
+import { JwtPayload } from '../../shared/types/jwt-payload.types';
 
 const SCHOOL = 'school-1';
 const USER = 'user-1';
@@ -28,6 +31,16 @@ async function xlsx(headers: string[], rows: Cell[][], sheetName = 'Data') {
   rows.forEach((r) => sheet.addRow(r));
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
   return { buffer, originalname: 'upload.xlsx', size: buffer.length };
+}
+
+async function workbookFile(sheets: Record<string, Cell[][]>) {
+  const workbook = new ExcelJS.Workbook();
+  Object.entries(sheets).forEach(([name, rows]) => {
+    const sheet = workbook.addWorksheet(name);
+    rows.forEach((r) => sheet.addRow(r));
+  });
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  return { buffer, originalname: 'school.xlsx', size: buffer.length };
 }
 
 async function readBack(buffer: Buffer) {
@@ -80,6 +93,9 @@ describe('BulkImportService', () => {
   let students: Record<string, jest.Mock>;
   let staff: Record<string, jest.Mock>;
   let service: BulkImportService;
+  let workbook: BulkImportWorkbookService;
+  let granted: 'all' | string[];
+  const user = { sub: USER, role: 'SCHOOL_ADMIN', context: 'school' } as unknown as JwtPayload;
 
   beforeEach(() => {
     redis = fakeRedis();
@@ -221,6 +237,9 @@ describe('BulkImportService', () => {
       new FinanceIncomeImporter(r, lookups, fs),
       new FinanceExpensesImporter(r, lookups, fs),
     );
+    granted = 'all';
+    const permissions = { grantedPermissions: jest.fn(async () => granted) };
+    workbook = new BulkImportWorkbookService(service, permissions as unknown as PermissionsService);
   });
 
   describe('template', () => {
@@ -556,6 +575,169 @@ describe('BulkImportService', () => {
         /not found/,
       );
       await expect(service.getJob('staff', SCHOOL, job.job_id)).rejects.toThrow(/not found/);
+    });
+  });
+
+  describe('workbook', () => {
+    async function waitForWorkbook(jobId: string): Promise<WorkbookJob> {
+      for (let i = 0; i < 100; i++) {
+        await flush();
+        const job = await workbook.getJob(SCHOOL, jobId);
+        if (job.status !== 'running') return job;
+      }
+      throw new Error('workbook job did not finish');
+    }
+
+    it('builds one sheet per type the caller may import, in import order', async () => {
+      const all = await readBack((await workbook.template(user, SCHOOL)).buffer);
+      expect(all.worksheets.map((w) => w.name)).toEqual([
+        'Instructions',
+        'Finance Accounts',
+        'Finance Heads',
+        'Staff',
+        'Students',
+        'Income',
+        'Expenses',
+        'Example',
+        'Lists',
+      ]);
+
+      granted = ['finance.create'];
+      const financeOnly = await readBack((await workbook.template(user, SCHOOL)).buffer);
+      expect(financeOnly.worksheets.map((w) => w.name)).toEqual([
+        'Instructions',
+        'Finance Accounts',
+        'Finance Heads',
+        'Income',
+        'Expenses',
+        'Example',
+        'Lists',
+      ]);
+    });
+
+    it('lets later sheets use records added by earlier sheets and enforces per-sheet permissions', async () => {
+      granted = ['finance.create'];
+      const file = await workbookFile({
+        Income: [
+          ['Date', 'Income Head', 'Credit To Account', 'Amount'],
+          ['2025-05-01', 'Bus Fee', 'HDFC', 500],
+          ['2025-05-01', 'Bus Fee', 'Nowhere', 500],
+        ],
+        Accounts: [
+          ['Account Name', 'Account Type', 'Opening Balance', 'Account Start Date'],
+          ['HDFC', 'Bank', 1000, '2025-01-01'],
+        ],
+        Heads: [
+          ['Head Name', 'Head Type'],
+          ['Bus Fee', 'Income'],
+        ],
+        Students: [
+          ['First Name', 'Gender', 'Class'],
+          ['Asha', 'F', '5'],
+        ],
+        Expenses: [],
+        Notes: [['anything']],
+      });
+
+      const report = await workbook.validate(user, file, SCHOOL);
+      expect(report.sheets.map((s) => [s.sheet_name, s.entity])).toEqual([
+        ['Accounts', 'finance-accounts'],
+        ['Heads', 'finance-heads'],
+        ['Students', 'students'],
+        ['Income', 'finance-income'],
+        ['Expenses', 'finance-expenses'],
+      ]);
+      expect(report.ignored_sheets).toEqual(['Notes']);
+      const income = report.sheets.find((s) => s.entity === 'finance-income')!;
+      expect(income.rows.map((r) => r.status)).toEqual(['ready', 'error']);
+      expect(income.rows[1].issues[0].message).toMatch(
+        /'Nowhere' is not a valid Credit To Account/,
+      );
+      expect(report.sheets.find((s) => s.entity === 'students')!.sheet_error).toMatch(
+        /don't have permission to import students/,
+      );
+      expect(report.sheets.find((s) => s.entity === 'finance-expenses')!.summary.total).toBe(0);
+      expect(report.summary).toEqual({ total: 4, ready: 3, warning: 0, error: 1 });
+    });
+
+    it('imports sheets in order, re-checking each against records saved by earlier sheets', async () => {
+      const accounts = (await repo.findFinanceAccounts()) as object[];
+      const heads = (await repo.findFinanceHeads()) as object[];
+      repo.findFinanceAccounts.mockImplementation(async () => accounts);
+      repo.findFinanceHeads.mockImplementation(async () => heads);
+      finance.createAccount.mockImplementation(
+        async (dto: { name: string; account_type: string }) => {
+          if (dto.name === 'Broken') throw new ConflictException('Bank rejected this account');
+          const account = {
+            id: `acc-${dto.name}`,
+            name: dto.name,
+            is_enabled: true,
+            current_balance: '0',
+            account_start_date: '2025-01-01',
+            account_type: dto.account_type,
+          };
+          accounts.push(account);
+          redis.store.delete(`finance:accounts:${SCHOOL}:bulk-import`);
+          return account;
+        },
+      );
+      finance.createIncome.mockImplementation(async () => ({ id: 'inc-1' }));
+
+      const file = await workbookFile({
+        'Finance Accounts': [
+          ['Account Name', 'Account Type', 'Account Start Date'],
+          ['HDFC', 'Bank', '2025-01-01'],
+          ['Broken', 'Cash', '2025-01-01'],
+        ],
+        Income: [
+          ['Date', 'Income Head', 'Credit To Account', 'Amount'],
+          ['2025-05-01', 'Admission Fee', 'HDFC', 500],
+          ['2025-05-02', 'Admission Fee', 'Broken', 300],
+        ],
+      });
+
+      const started = await workbook.startImport(user, file, SCHOOL, USER, false);
+      expect(started.sections.map((s) => [s.entity, s.status, s.total])).toEqual([
+        ['finance-accounts', 'pending', 2],
+        ['finance-income', 'pending', 2],
+      ]);
+
+      const done = await waitForWorkbook(started.job_id);
+      expect(done.status).toBe('completed');
+      const [accountSection, incomeSection] = done.sections;
+      expect(accountSection).toMatchObject({ created: 1, failed: 1 });
+      expect(accountSection.results[1].message).toBe('Bank rejected this account');
+      expect(incomeSection).toMatchObject({ created: 1, failed: 1, processed: 2 });
+      expect(incomeSection.results.find((r) => r.row === 3)!.message).toMatch(
+        /'Broken' is not a valid Credit To Account/,
+      );
+      expect(finance.createIncome).toHaveBeenCalledWith(
+        expect.objectContaining({ to_account_id: 'acc-HDFC', income_head_id: 'h1' }),
+        SCHOOL,
+        USER,
+      );
+      expect([...redis.store.keys()].filter((k) => k.startsWith('bulk_import:lock:'))).toEqual([]);
+    });
+
+    it('rejects CSV, unrecognised workbooks and locked entities with a clear reason', async () => {
+      const csv = Buffer.from('a,b\n1,2\n');
+      await expect(
+        workbook.validate(user, { buffer: csv, originalname: 'x.csv', size: csv.length }, SCHOOL),
+      ).rejects.toThrow(/upload .xlsx/);
+      await expect(
+        workbook.validate(user, await workbookFile({ Sheet1: [['x']] }), SCHOOL),
+      ).rejects.toThrow(/No recognised sheets/);
+
+      redis.store.set(`bulk_import:lock:${SCHOOL}:finance-heads`, 'other-job');
+      const file = await workbookFile({
+        Heads: [
+          ['Head Name', 'Head Type'],
+          ['Bus Fee', 'Income'],
+        ],
+      });
+      await expect(workbook.startImport(user, file, SCHOOL, USER, true)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
     });
   });
 });
