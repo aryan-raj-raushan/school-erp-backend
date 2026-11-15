@@ -64,6 +64,7 @@ export class RfidRepository {
       })
       .from(rfidDevices)
       .where(sql`upper(${rfidDevices.device_identifier}) = upper(${deviceIdentifier})`)
+      .orderBy(sql`${rfidDevices.assigned_school_id} is null`)
       .limit(1);
     return row ?? null;
   }
