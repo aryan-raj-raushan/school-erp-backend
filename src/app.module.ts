@@ -80,6 +80,7 @@ import { NotificationRulesModule } from '@modules/notification-rules/notificatio
 import { AuditLogsModule } from '@modules/audit-logs/audit-logs.module';
 import { StudentMovementsModule } from '@modules/student-movements/student-movements.module';
 import { ParentPortalModule } from '@modules/parent-portal/parent-portal.module';
+import { BulkImportModule } from '@modules/bulk-import/bulk-import.module';
 
 @Module({
   imports: [
@@ -145,6 +146,7 @@ import { ParentPortalModule } from '@modules/parent-portal/parent-portal.module'
     AuditLogsModule,
     StudentMovementsModule,
     ParentPortalModule,
+    BulkImportModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

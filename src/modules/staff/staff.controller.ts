@@ -11,13 +11,8 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
-  UploadedFile,
-  UseInterceptors,
-  Res,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-import { Response } from 'express';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { StaffService } from './staff.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
@@ -53,39 +48,6 @@ export class StaffController {
   async findAll(@GetSchoolId() schoolId: string, @Query() filters: FilterStaffDto) {
     const data = await this.staffService.findAll(schoolId, filters);
     return ApiResponse.success(data.items, 'Staff members fetched successfully', data.meta);
-  }
-
-  @Get('bulk/template')
-  @ApiOperation({ summary: 'Download bulk staff import template' })
-  async getTemplate(@Res() res: Response) {
-    const buffer = await this.staffService.getBulkTemplate();
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    );
-    res.setHeader('Content-Disposition', 'attachment; filename=staff_import_template.xlsx');
-    res.send(buffer);
-  }
-
-  @Post('bulk/import')
-  @HttpCode(HttpStatus.ACCEPTED)
-  @UseInterceptors(FileInterceptor('file'))
-  @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Bulk-import staff via Excel' })
-  async bulkImport(
-    @UploadedFile() file: Express.Multer.File,
-    @GetSchoolId() schoolId: string,
-    @GetCurrentUserId() userId: string,
-  ) {
-    const data = await this.staffService.bulkImport(file.buffer, schoolId, userId);
-    return ApiResponse.success(data, 'Bulk import job enqueued');
-  }
-
-  @Get('bulk/status/:jobId')
-  @ApiOperation({ summary: 'Poll bulk import job status' })
-  async getBulkStatus(@Param('jobId') jobId: string) {
-    const data = await this.staffService.getBulkStatus(jobId);
-    return ApiResponse.success(data, 'Job status fetched');
   }
 
   @Get(':id')

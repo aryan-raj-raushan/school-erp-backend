@@ -14,6 +14,5 @@ export const AuthTTL = {
 } as const;
 
 export const JobTTL = {
-  BULK_JOB_SECONDS: 24 * 60 * 60,
   INVITE_SECONDS: 7 * 24 * 60 * 60,
 } as const;

@@ -4,7 +4,6 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
-import * as ExcelJS from 'exceljs';
 import { StaffRepository } from './staff.repository';
 import { RolesRepository } from '../roles/roles.repository';
 import { RedisService } from '../redis/redis.service';
@@ -14,22 +13,11 @@ import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { FilterStaffDto } from './dto/filter-staff.dto';
-import { StaffMember, BulkJobResult } from './types/staff.types';
+import { StaffMember } from './types/staff.types';
 import { SchoolRole } from '../../shared/enums';
 import { CacheTTL, JobTTL } from '../../shared/constants';
 
 const TEMP_PASSWORD = 'TrueSkul@123';
-
-const TEMPLATE_HEADERS = [
-  'first_name',
-  'last_name',
-  'dial_code',
-  'phone_number',
-  'email',
-  'role',
-  'gender',
-  'date_of_birth',
-];
 
 @Injectable()
 export class StaffService {
@@ -41,6 +29,15 @@ export class StaffService {
 
   private cacheKey(schoolId: string) {
     return `staff:${schoolId}`;
+  }
+
+  private async invalidate(schoolId: string): Promise<void> {
+    await Promise.all([
+      this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`),
+      this.redisService.delByPattern(`staff-attendance:${schoolId}:*`),
+      this.redisService.delByPattern(`dashboard:*:${schoolId}:*`),
+      this.redisService.delByPattern(`reports:admin:${schoolId}`),
+    ]);
   }
 
   async findAll(
@@ -125,9 +122,7 @@ export class StaffService {
     });
 
     const inviteToken = await this.generateInviteToken(id, schoolId);
-    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
-    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
-    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
+    await this.invalidate(schoolId);
 
     return { staff, inviteToken };
   }
@@ -147,26 +142,20 @@ export class StaffService {
       date_of_birth: dto.date_of_birth ? new Date(dto.date_of_birth) : undefined,
       joining_date: dto.joining_date ? new Date(dto.joining_date) : undefined,
     });
-    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
-    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
-    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
+    await this.invalidate(schoolId);
     return updated;
   }
 
   async remove(id: string, schoolId: string): Promise<void> {
     await this.findById(id, schoolId);
     await this.staffRepo.softDelete(id, schoolId);
-    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
-    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
-    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
+    await this.invalidate(schoolId);
   }
 
   async offboard(id: string, schoolId: string): Promise<StaffMember> {
     await this.findById(id, schoolId);
     const updated = await this.staffRepo.setActiveStatus(id, schoolId, false);
-    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
-    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
-    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
+    await this.invalidate(schoolId);
     return updated;
   }
 
@@ -174,55 +163,8 @@ export class StaffService {
     const member = await this.staffRepo.findById(id, schoolId);
     if (!member) throw new NotFoundException(`Staff member with id '${id}' not found`);
     const updated = await this.staffRepo.setActiveStatus(id, schoolId, true);
-    await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
-    await this.redisService.delByPattern(`dashboard:*:${schoolId}:*`);
-    await this.redisService.delByPattern(`reports:admin:${schoolId}`);
+    await this.invalidate(schoolId);
     return updated;
-  }
-
-  async getBulkTemplate(): Promise<Buffer> {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Staff Import');
-
-    sheet.columns = TEMPLATE_HEADERS.map((h) => ({ header: h, key: h, width: 20 }));
-    sheet.addRow({
-      first_name: 'John',
-      last_name: 'Doe',
-      dial_code: '+91',
-      phone_number: '9876543210',
-      email: 'john.doe@school.com',
-      role: SchoolRole.TEACHER,
-      gender: 'MALE',
-      date_of_birth: '1990-05-15',
-    });
-
-    return Buffer.from(await workbook.xlsx.writeBuffer());
-  }
-
-  async bulkImport(
-    fileBuffer: Buffer,
-    schoolId: string,
-    createdBy: string,
-  ): Promise<{ jobId: string }> {
-    const jobId = generateId();
-    const jobKey = `bulk_job:staff:${jobId}`;
-
-    await this.redisService.setex(
-      jobKey,
-      JobTTL.BULK_JOB_SECONDS,
-      JSON.stringify({ jobId, status: 'PENDING' }),
-    );
-
-    setImmediate(() => this.processBulkImport(jobId, jobKey, fileBuffer, schoolId, createdBy));
-
-    return { jobId };
-  }
-
-  async getBulkStatus(jobId: string): Promise<BulkJobResult> {
-    const jobKey = `bulk_job:staff:${jobId}`;
-    const raw = await this.redisService.get(jobKey);
-    if (!raw) throw new NotFoundException(`Job '${jobId}' not found or expired`);
-    return JSON.parse(raw) as BulkJobResult;
   }
 
   async verifyInviteToken(token: string): Promise<{ userId: string; schoolId: string }> {
@@ -248,125 +190,5 @@ export class StaffService {
       JSON.stringify({ userId, schoolId }),
     );
     return token;
-  }
-
-  private async processBulkImport(
-    jobId: string,
-    jobKey: string,
-    fileBuffer: Buffer,
-    schoolId: string,
-    createdBy: string,
-  ): Promise<void> {
-    await this.redisService.setex(
-      jobKey,
-      JobTTL.BULK_JOB_SECONDS,
-      JSON.stringify({ jobId, status: 'PROCESSING' }),
-    );
-
-    const errors: string[] = [];
-    let created = 0;
-
-    try {
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(fileBuffer as unknown as ExcelJS.Buffer);
-      const sheet = workbook.getWorksheet(1);
-
-      if (!sheet) {
-        await this.redisService.setex(
-          jobKey,
-          JobTTL.BULK_JOB_SECONDS,
-          JSON.stringify({ jobId, status: 'FAILED', errors: ['No worksheet found in file'] }),
-        );
-        return;
-      }
-
-      const rows: unknown[][] = [];
-      sheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // skip header
-        rows.push(row.values as unknown[]);
-      });
-
-      const password_hash = await hashPassword(TEMP_PASSWORD);
-
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const [
-          ,
-          first_name,
-          last_name,
-          dial_code,
-          phone_number,
-          email,
-          role,
-          gender,
-          date_of_birth,
-        ] = row;
-
-        if (!first_name || !phone_number || !dial_code || !role) {
-          errors.push(
-            `Row ${i + 2}: missing required fields (first_name, dial_code, phone_number, role)`,
-          );
-          continue;
-        }
-
-        if (!Object.values(SchoolRole).includes(String(role) as SchoolRole)) {
-          errors.push(`Row ${i + 2}: invalid role '${role}'`);
-          continue;
-        }
-
-        try {
-          const existing = await this.staffRepo.findByPhone(
-            String(phone_number),
-            String(dial_code),
-            schoolId,
-          );
-          if (existing) {
-            errors.push(`Row ${i + 2}: phone number '${phone_number}' already exists`);
-            continue;
-          }
-
-          await this.staffRepo.create({
-            id: generateId(),
-            school_id: schoolId,
-            created_by: createdBy,
-            first_name: String(first_name),
-            last_name: last_name ? String(last_name) : undefined,
-            dial_code: String(dial_code),
-            phone_number: String(phone_number),
-            email: email ? String(email) : undefined,
-            role: String(role) as SchoolRole,
-            gender: gender ? String(gender) : undefined,
-            date_of_birth: date_of_birth ? new Date(String(date_of_birth)) : undefined,
-            password_hash,
-            must_change_password: true,
-          });
-          created++;
-        } catch {
-          errors.push(`Row ${i + 2}: failed to create staff member`);
-        }
-      }
-
-      await this.redisService.delByPattern(`${this.cacheKey(schoolId)}:*`);
-
-      await this.redisService.setex(
-        jobKey,
-        JobTTL.BULK_JOB_SECONDS,
-        JSON.stringify({
-          jobId,
-          status: 'COMPLETED',
-          total: rows.length,
-          created,
-          failed: errors.length,
-          errors,
-          completedAt: new Date().toISOString(),
-        }),
-      );
-    } catch (err) {
-      await this.redisService.setex(
-        jobKey,
-        JobTTL.BULK_JOB_SECONDS,
-        JSON.stringify({ jobId, status: 'FAILED', errors: [(err as Error).message] }),
-      );
-    }
   }
 }
