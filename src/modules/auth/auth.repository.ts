@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, asc, isNotNull } from 'drizzle-orm';
+import { eq, and, asc, isNotNull, sql } from 'drizzle-orm';
 
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
@@ -96,6 +96,36 @@ export class AuthRepository {
     return user ?? null;
   }
 
+  async findSchoolUserCandidatesByPhone(phone_number: string, dial_code: string) {
+    if (phone_number === NO_PHONE_PLACEHOLDER) return [];
+    return this.db
+      .select()
+      .from(schoolUsers)
+      .where(
+        and(
+          eq(schoolUsers.phone_number, phone_number),
+          eq(schoolUsers.dial_code, dial_code),
+          eq(schoolUsers.deleted, false),
+          isNotNull(schoolUsers.password_hash),
+        ),
+      )
+      .orderBy(asc(schoolUsers.created_at));
+  }
+
+  async findSchoolUserCandidatesByEmail(email: string) {
+    return this.db
+      .select()
+      .from(schoolUsers)
+      .where(
+        and(
+          sql`lower(${schoolUsers.email}) = ${email.toLowerCase()}`,
+          eq(schoolUsers.deleted, false),
+          isNotNull(schoolUsers.password_hash),
+        ),
+      )
+      .orderBy(asc(schoolUsers.created_at));
+  }
+
   async findSchoolUserByEmail(email: string) {
     const [user] = await this.db
       .select()
@@ -174,6 +204,7 @@ export class AuthRepository {
           eq(schoolUsers.deleted, false),
         ),
       )
+      .orderBy(asc(schoolUsers.created_at))
       .limit(1);
     if (!user) return null;
     return {

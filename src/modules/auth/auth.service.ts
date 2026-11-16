@@ -168,8 +168,13 @@ export class AuthService {
   }
 
   async loginSchool(dto: LoginSchoolDto): Promise<LoginResponse | PasswordChangeRequired> {
-    const user = await this.authRepo.findSchoolUserByPhone(dto.phone_number, dto.dial_code);
-    return this.verifySchoolUserLogin(user, dto.password);
+    const candidates = await this.authRepo.findSchoolUserCandidatesByPhone(
+      dto.phone_number,
+      dto.dial_code,
+    );
+    const user = await this.matchSchoolUser(candidates, dto.password);
+    if (!user) throw new UnauthorizedException('Invalid credentials');
+    return this.completeSchoolUserLogin(user);
   }
 
   async loginParent(dto: LoginParentDto): Promise<LoginResponse | PasswordChangeRequired> {
@@ -341,31 +346,36 @@ export class AuthService {
       }
     }
 
-    // School user lookup — by email or phone
-    const schoolUser = isEmail
-      ? await this.authRepo.findSchoolUserByEmail(dto.identifier)
-      : await this.authRepo.findSchoolUserByPhone(dto.identifier, dto.dial_code ?? '+91');
+    // A phone or email can belong to accounts in more than one school, so the password picks the account.
+    const candidates = isEmail
+      ? await this.authRepo.findSchoolUserCandidatesByEmail(dto.identifier)
+      : await this.authRepo.findSchoolUserCandidatesByPhone(dto.identifier, dto.dial_code ?? '+91');
+    const schoolUser = await this.matchSchoolUser(candidates, dto.password);
+    if (schoolUser) return this.completeSchoolUserLogin(schoolUser);
 
-    // Not a school/company identity — try parent (phone-based only, same as school lookup)
-    if (!schoolUser) {
-      if (isEmail) throw new UnauthorizedException('Invalid credentials');
-      return this.loginParent({
-        phone_number: dto.identifier,
-        dial_code: dto.dial_code ?? '+91',
-        password: dto.password,
-      });
-    }
-
-    return this.verifySchoolUserLogin(schoolUser, dto.password);
+    if (isEmail) throw new UnauthorizedException('Invalid credentials');
+    return this.loginParent({
+      phone_number: dto.identifier,
+      dial_code: dto.dial_code ?? '+91',
+      password: dto.password,
+    });
   }
 
-  private async verifySchoolUserLogin(
-    user: Awaited<ReturnType<AuthRepository['findSchoolUserByPhone']>>,
+  private async matchSchoolUser<T extends { password_hash: string | null }>(
+    candidates: T[],
     password: string,
-  ): Promise<LoginResponse | PasswordChangeRequired> {
-    if (!user?.password_hash || !(await comparePassword(password, user.password_hash))) {
-      throw new UnauthorizedException('Invalid credentials');
+  ): Promise<T | undefined> {
+    for (const candidate of candidates) {
+      if (candidate.password_hash && (await comparePassword(password, candidate.password_hash))) {
+        return candidate;
+      }
     }
+    return undefined;
+  }
+
+  private async completeSchoolUserLogin(
+    user: Awaited<ReturnType<AuthRepository['findSchoolUserCandidatesByPhone']>>[number],
+  ): Promise<LoginResponse | PasswordChangeRequired> {
     if (!user.is_active) throw new UnauthorizedException('Account is deactivated');
 
     const school = await this.authRepo.findSchoolById(user.school_id);
