@@ -516,6 +516,7 @@ export class StudentsRepository {
     must_change_password: studentParents.must_change_password,
     is_active: studentParents.is_active,
     last_login_at: studentParents.last_login_at,
+    profile_confirmed_at: studentParents.profile_confirmed_at,
     has_login: sql<boolean>`${studentParents.password_hash} is not null`,
     deleted: studentParents.deleted,
     created_at: studentParents.created_at,

@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql, gte, lte, desc } from 'drizzle-orm';
+import { eq, and, ne, sql, gte, lte, desc, isNotNull } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -21,11 +21,93 @@ import {
   financeExpenses,
   financeIncome,
   exams,
+  schools,
+  sections,
+  schoolTimings,
 } from '../../database/drizzle/schema';
 
 @Injectable()
 export class DashboardRepository {
   constructor(@Inject(DRIZZLE_ORM) private readonly db: DrizzleDB) {}
+
+  // ── Setup progress ──────────────────────────────────────────────────────
+
+  async getSetupCounts(schoolId: string) {
+    const count = sql<number>`count(*)`;
+    const [
+      [school],
+      [{ count: academicYearCount }],
+      [{ count: classCount }],
+      [{ count: sectionCount }],
+      [{ count: timingCount }],
+      [{ count: staffCount }],
+      [{ count: studentCount }],
+      [{ count: parentLoginCount }],
+    ] = await Promise.all([
+      this.db
+        .select({
+          address: schools.address,
+          city: schools.city,
+          contact_number: schools.contact_number,
+          email: schools.email,
+        })
+        .from(schools)
+        .where(eq(schools.id, schoolId)),
+      this.db
+        .select({ count })
+        .from(academicYears)
+        .where(and(eq(academicYears.school_id, schoolId), eq(academicYears.is_active, true))),
+      this.db
+        .select({ count })
+        .from(classes)
+        .where(and(eq(classes.school_id, schoolId), eq(classes.deleted, false))),
+      this.db
+        .select({ count })
+        .from(sections)
+        .where(and(eq(sections.school_id, schoolId), eq(sections.deleted, false))),
+      this.db
+        .select({ count })
+        .from(schoolTimings)
+        .where(and(eq(schoolTimings.school_id, schoolId), eq(schoolTimings.deleted, false))),
+      this.db
+        .select({ count })
+        .from(schoolUsers)
+        .where(
+          and(
+            eq(schoolUsers.school_id, schoolId),
+            eq(schoolUsers.deleted, false),
+            ne(schoolUsers.role, 'SCHOOL_ADMIN'),
+          ),
+        ),
+      this.db
+        .select({ count })
+        .from(students)
+        .where(and(eq(students.school_id, schoolId), eq(students.deleted, false))),
+      this.db
+        .select({ count })
+        .from(studentParents)
+        .where(
+          and(
+            eq(studentParents.school_id, schoolId),
+            eq(studentParents.deleted, false),
+            isNotNull(studentParents.password_hash),
+          ),
+        ),
+    ]);
+
+    return {
+      profileComplete: Boolean(
+        school?.address && school.city && (school.contact_number || school.email),
+      ),
+      academicYears: Number(academicYearCount),
+      classes: Number(classCount),
+      sections: Number(sectionCount),
+      timings: Number(timingCount),
+      staff: Number(staffCount),
+      students: Number(studentCount),
+      parentLogins: Number(parentLoginCount),
+    };
+  }
 
   // ── Core counts ─────────────────────────────────────────────────────────
 

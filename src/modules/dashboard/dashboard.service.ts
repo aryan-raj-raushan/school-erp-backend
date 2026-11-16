@@ -16,6 +16,21 @@ export class DashboardService {
     private readonly feesService: FeesService,
   ) {}
 
+  async getSetupStatus(schoolId: string) {
+    const counts = await this.dashboardRepo.getSetupCounts(schoolId);
+    const steps = [
+      { key: 'school_profile', done: counts.profileComplete, count: null },
+      { key: 'academic_year', done: counts.academicYears > 0, count: counts.academicYears },
+      { key: 'classes', done: counts.classes > 0, count: counts.classes },
+      { key: 'sections', done: counts.sections > 0, count: counts.sections },
+      { key: 'timings', done: counts.timings > 0, count: counts.timings },
+      { key: 'staff', done: counts.staff > 0, count: counts.staff },
+      { key: 'students', done: counts.students > 0, count: counts.students },
+      { key: 'parent_logins', done: counts.parentLogins > 0, count: counts.parentLogins },
+    ];
+    return { steps, completed: steps.filter((s) => s.done).length, total: steps.length };
+  }
+
   async getAdminDashboard(schoolId: string) {
     const today = new Date().toISOString().split('T')[0];
     const key = `dashboard:admin:${schoolId}:${today}`;

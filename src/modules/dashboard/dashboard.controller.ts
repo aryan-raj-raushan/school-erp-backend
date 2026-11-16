@@ -6,12 +6,22 @@ import { GetCurrentUserId } from '../../common/decorators/current-user.decorator
 import { ParentAccessible } from '../../common/decorators/parent-accessible.decorator';
 import { GetCurrentStudentId } from '../../common/decorators/current-student-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { PERMISSION_REGISTRY } from '../../shared/constants/permissions.registry';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth('access-token')
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
+
+  @Get('setup-status')
+  @Permissions(PERMISSION_REGISTRY.settings.update)
+  @ApiOperation({ summary: 'School setup checklist progress for the school admin' })
+  async setupStatus(@GetSchoolId() schoolId: string) {
+    const data = await this.dashboardService.getSetupStatus(schoolId);
+    return ApiResponse.success(data, 'Setup status fetched');
+  }
 
   @Get('admin')
   @ApiOperation({ summary: 'Admin / Owner full dashboard — counts, charts, events, finance' })

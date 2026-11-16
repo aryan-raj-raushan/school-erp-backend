@@ -52,6 +52,7 @@ export const schoolUsers = pgTable(
     is_active: boolean('is_active').default(true).notNull(),
     deleted: boolean('deleted').default(false).notNull(),
     last_login_at: timestamp('last_login_at', { withTimezone: true }),
+    profile_confirmed_at: timestamp('profile_confirmed_at', { withTimezone: true }),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }),
     created_by: varchar('created_by', { length: 36 }),

@@ -79,6 +79,15 @@ export class StaffController {
     return ApiResponse.noContent('Staff member deleted successfully');
   }
 
+  @Post(':id/reset-password')
+  @Permissions(PERMISSION_REGISTRY.staff.update)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Issue a new temporary login password for a staff member' })
+  async resetPassword(@Param('id', ParseUUIDPipe) id: string, @GetSchoolId() schoolId: string) {
+    const data = await this.staffService.resetPassword(id, schoolId);
+    return ApiResponse.success(data, 'Temporary password generated');
+  }
+
   @Patch(':id/offboard')
   @Permissions(PERMISSION_REGISTRY.staff.offboard)
   @ApiOperation({ summary: 'Offboard a staff member (deactivate)' })

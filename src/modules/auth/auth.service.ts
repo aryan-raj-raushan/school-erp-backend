@@ -22,6 +22,7 @@ import { LoginParentDto } from './dto/login-parent.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
+import { ConfirmProfileDto } from './dto/confirm-profile.dto';
 import {
   LoginResponse,
   TokenPair,
@@ -676,6 +677,43 @@ export class AuthService {
       : [];
 
     return { ...user, permissions };
+  }
+
+  async confirmProfile(
+    userId: string,
+    context: AuthContext,
+    role: string,
+    schoolId: string,
+    dto: ConfirmProfileDto,
+  ) {
+    const identity = { first_name: dto.first_name, last_name: dto.last_name, email: dto.email };
+
+    if (context === AuthContext.PARENT) {
+      await this.authRepo.confirmParentProfile(userId, {
+        ...identity,
+        alternate_phone: dto.alternate_phone,
+        occupation: dto.occupation,
+      });
+    } else if (context === AuthContext.SCHOOL && !COMPANY_ROLE_VALUES.includes(role)) {
+      if (dto.email) {
+        const holder = await this.authRepo.findSchoolUserByEmail(dto.email);
+        if (holder && holder.id !== userId) {
+          throw new ConflictException(`Email '${dto.email}' is already registered to another user`);
+        }
+      }
+      await this.authRepo.confirmSchoolUserProfile(userId, {
+        ...identity,
+        gender: dto.gender,
+        date_of_birth: dto.date_of_birth ? new Date(dto.date_of_birth) : undefined,
+        blood_group: dto.blood_group,
+        address: dto.address,
+        city: dto.city,
+      });
+    } else {
+      throw new ForbiddenException('Only school staff and parents confirm their profile here');
+    }
+
+    return this.getMe(userId, context, role, schoolId);
   }
 
   async switchSchool(userId: string, schoolId: string): Promise<LoginResponse> {

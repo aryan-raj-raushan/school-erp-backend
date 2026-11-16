@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   Param,
   Headers,
@@ -21,6 +22,7 @@ import { LoginParentDto } from './dto/login-parent.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
+import { ConfirmProfileDto } from './dto/confirm-profile.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { ParentAccessible } from '../../common/decorators/parent-accessible.decorator';
 import { BypassRestriction } from '../../common/decorators/bypass-restriction.decorator';
@@ -208,5 +210,28 @@ export class AuthController {
   ) {
     const profile = await this.authService.getMe(userId, user.context, user.role, schoolId);
     return ApiResponse.success(profile);
+  }
+
+  @Patch('me/profile')
+  @ParentAccessible()
+  @BypassRestriction()
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Confirm or complete your own profile details (first-login onboarding)',
+  })
+  async confirmProfile(
+    @GetCurrentUserId() userId: string,
+    @GetCurrentUser() user: { context: AuthContext; role: string },
+    @GetSchoolId() schoolId: string,
+    @Body() dto: ConfirmProfileDto,
+  ) {
+    const profile = await this.authService.confirmProfile(
+      userId,
+      user.context,
+      user.role,
+      schoolId,
+      dto,
+    );
+    return ApiResponse.success(profile, 'Profile saved');
   }
 }

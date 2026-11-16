@@ -272,6 +272,7 @@ export const studentParents = pgTable('student_parents', {
   must_change_password: boolean('must_change_password').default(false).notNull(),
   is_active: boolean('is_active').default(true).notNull(),
   last_login_at: timestamp('last_login_at', { withTimezone: true }),
+  profile_confirmed_at: timestamp('profile_confirmed_at', { withTimezone: true }),
   deleted: boolean('deleted').default(false).notNull(),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),

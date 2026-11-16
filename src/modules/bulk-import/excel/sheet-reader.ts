@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { Readable } from 'stream';
 import { BULK_IMPORT } from '../bulk-import.constants';
 import { ImportColumn, RawCell } from '../bulk-import.types';
@@ -51,19 +52,49 @@ export function fileExtension(name: string): string {
 }
 
 export async function loadWorkbook(file: UploadedSheetFile): Promise<ExcelJS.Workbook> {
-  const workbook = new ExcelJS.Workbook();
   try {
     if (fileExtension(file.originalname) === '.csv') {
+      const workbook = new ExcelJS.Workbook();
       await workbook.csv.read(Readable.from(file.buffer), { map: (value: unknown) => value });
-    } else {
-      await workbook.xlsx.load(file.buffer as unknown as ExcelJS.Buffer);
+      return workbook;
     }
+    return await loadXlsx(file.buffer);
   } catch {
     throw new BadRequestException(
       'The file could not be read. Save it as .xlsx (Excel Workbook) or .csv and try again.',
     );
   }
+}
+
+async function loadXlsx(buffer: Buffer): Promise<ExcelJS.Workbook> {
+  try {
+    return await xlsxWorkbook(buffer);
+  } catch {
+    return xlsxWorkbook(await withoutCellNotes(buffer));
+  }
+}
+
+async function xlsxWorkbook(buffer: Buffer): Promise<ExcelJS.Workbook> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
   return workbook;
+}
+
+const SHEET_RELS_PATH = /^xl\/worksheets\/_rels\/[^/]+\.rels$/;
+const NOTE_RELATIONSHIP = /<Relationship\b[^>]*\/relationships\/(?:comments|vmlDrawing)"[^>]*\/>/g;
+
+// exceljs cannot resolve absolute comment targets, which openpyxl, Google Sheets and LibreOffice
+// write when they re-save our template. Cell notes hold no import data, so unlink them and retry.
+async function withoutCellNotes(buffer: Buffer): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(buffer);
+  const relsFiles = zip.file(SHEET_RELS_PATH);
+  await Promise.all(
+    relsFiles.map(async (rels) => {
+      const xml = await rels.async('string');
+      zip.file(rels.name, xml.replace(NOTE_RELATIONSHIP, ''));
+    }),
+  );
+  return zip.generateAsync({ type: 'nodebuffer' });
 }
 
 function pickSheet(workbook: ExcelJS.Workbook): ExcelJS.Worksheet {

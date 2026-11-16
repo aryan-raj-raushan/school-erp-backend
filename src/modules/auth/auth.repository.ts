@@ -372,6 +372,12 @@ export class AuthRepository {
         school_id: schoolUsers.school_id,
         profile_image: schoolUsers.profile_image,
         custom_role_id: schoolUsers.custom_role_id,
+        gender: schoolUsers.gender,
+        date_of_birth: schoolUsers.date_of_birth,
+        blood_group: schoolUsers.blood_group,
+        address: schoolUsers.address,
+        city: schoolUsers.city,
+        profile_confirmed_at: schoolUsers.profile_confirmed_at,
         created_at: schoolUsers.created_at,
       })
       .from(schoolUsers)
@@ -390,10 +396,50 @@ export class AuthRepository {
         school_id: studentParents.school_id,
         student_id: studentParents.student_id,
         profile_image: studentParents.profile_image,
+        alternate_phone: studentParents.alternate_phone,
+        occupation: studentParents.occupation,
+        profile_confirmed_at: studentParents.profile_confirmed_at,
         created_at: studentParents.created_at,
       })
       .from(studentParents)
       .where(eq(studentParents.id, id));
     return parent ?? null;
+  }
+
+  async confirmSchoolUserProfile(
+    id: string,
+    data: Partial<{
+      first_name: string;
+      last_name: string;
+      email: string;
+      gender: string;
+      date_of_birth: Date;
+      blood_group: string;
+      address: string;
+      city: string;
+    }>,
+  ): Promise<void> {
+    const now = new Date();
+    await this.db
+      .update(schoolUsers)
+      .set({ ...data, profile_confirmed_at: now, updated_at: now })
+      .where(eq(schoolUsers.id, id));
+  }
+
+  async confirmParentProfile(
+    id: string,
+    data: Partial<{
+      first_name: string;
+      last_name: string;
+      email: string;
+      alternate_phone: string;
+      occupation: string;
+    }>,
+  ): Promise<void> {
+    const now = new Date();
+    await this.db
+      .update(studentParents)
+      .set({ ...data, profile_confirmed_at: now, updated_at: now })
+      .where(eq(studentParents.id, id));
   }
 }

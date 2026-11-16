@@ -21,7 +21,8 @@ import { CompanyRole } from '../../shared/enums';
 import { CacheTTL, NO_PHONE_PLACEHOLDER } from '../../shared/constants';
 import { APP_EVENTS } from '../../shared/events/event-names';
 
-const ADMIN_LOGIN_REQUIRED = 'Provide the admin phone number or email so the school admin can log in';
+const ADMIN_LOGIN_REQUIRED =
+  'Provide the admin phone number or email so the school admin can log in';
 
 @Injectable()
 export class SchoolsService {

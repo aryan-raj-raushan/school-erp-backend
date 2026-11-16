@@ -8,16 +8,14 @@ import { StaffRepository } from './staff.repository';
 import { RolesRepository } from '../roles/roles.repository';
 import { RedisService } from '../redis/redis.service';
 import { generateId } from '../../utils/uuid.utils';
-import { hashPassword } from '../../utils/hash.utils';
+import { generateTempPassword, hashPassword } from '../../utils/hash.utils';
 import { PaginationResponse } from '../../shared/responses/api-response';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { FilterStaffDto } from './dto/filter-staff.dto';
-import { StaffMember } from './types/staff.types';
+import { StaffLoginCredentials, StaffMember } from './types/staff.types';
 import { SchoolRole } from '../../shared/enums';
 import { CacheTTL, JobTTL } from '../../shared/constants';
-
-const TEMP_PASSWORD = 'TrueSkul@123';
 
 @Injectable()
 export class StaffService {
@@ -68,7 +66,11 @@ export class StaffService {
     dto: CreateStaffDto,
     schoolId: string,
     createdBy: string,
-  ): Promise<{ staff: StaffMember; inviteToken: string }> {
+  ): Promise<{
+    staff: StaffMember;
+    inviteToken: string;
+    login_credentials?: StaffLoginCredentials;
+  }> {
     const existing = await this.staffRepo.findByPhone(dto.phone_number, dto.dial_code, schoolId);
     if (existing) {
       throw new ConflictException('A staff member with this phone number already exists');
@@ -85,7 +87,8 @@ export class StaffService {
       }
     }
 
-    const password_hash = await hashPassword(dto.password ?? TEMP_PASSWORD);
+    const temporaryPassword = generateTempPassword();
+    const password_hash = await hashPassword(dto.password || temporaryPassword);
     const id = generateId();
 
     const staff = await this.staffRepo.create({
@@ -124,7 +127,20 @@ export class StaffService {
     const inviteToken = await this.generateInviteToken(id, schoolId);
     await this.invalidate(schoolId);
 
-    return { staff, inviteToken };
+    if (dto.password) return { staff, inviteToken };
+    return {
+      staff,
+      inviteToken,
+      login_credentials: { login_id: dto.phone_number, temporary_password: temporaryPassword },
+    };
+  }
+
+  async resetPassword(id: string, schoolId: string): Promise<StaffLoginCredentials> {
+    const member = await this.findById(id, schoolId);
+    const temporaryPassword = generateTempPassword();
+    await this.staffRepo.setTemporaryPassword(id, schoolId, await hashPassword(temporaryPassword));
+    await this.redisService.revokeUserSessions(id);
+    return { login_id: member.phone_number, temporary_password: temporaryPassword };
   }
 
   async update(id: string, schoolId: string, dto: UpdateStaffDto): Promise<StaffMember> {

@@ -121,4 +121,11 @@ export class StaffRepository {
       .returning();
     return row;
   }
+
+  async setTemporaryPassword(id: string, schoolId: string, password_hash: string): Promise<void> {
+    await this.db
+      .update(schoolUsers)
+      .set({ password_hash, must_change_password: true, updated_at: new Date() })
+      .where(and(eq(schoolUsers.id, id), eq(schoolUsers.school_id, schoolId)));
+  }
 }
