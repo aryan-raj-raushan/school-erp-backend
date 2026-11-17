@@ -100,6 +100,7 @@ export class StaffService {
       is_active: dto.is_active ?? true,
       dial_code: dto.dial_code,
       phone_number: dto.phone_number,
+      salutation: dto.salutation,
       first_name: dto.first_name,
       last_name: dto.last_name,
       email: dto.email,

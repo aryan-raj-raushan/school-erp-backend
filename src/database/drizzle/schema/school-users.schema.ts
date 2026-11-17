@@ -20,6 +20,7 @@ export const schoolUsers = pgTable(
     school_id: varchar('school_id', { length: 36 })
       .notNull()
       .references(() => schools.id, { onDelete: 'cascade' }),
+    salutation: varchar('salutation', { length: 10 }),
     first_name: varchar('first_name', { length: 100 }).notNull(),
     last_name: varchar('last_name', { length: 100 }),
     email: varchar('email', { length: 150 }),

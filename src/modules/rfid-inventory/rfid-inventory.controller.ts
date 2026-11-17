@@ -22,9 +22,12 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { CompanyRole } from '../../shared/enums';
+import { PlatformPermissions } from '../../common/decorators/platform-permission.decorator';
+import { PLATFORM_PERMISSIONS } from '../../shared/constants/platform-permissions';
 
 @ApiTags('RFID Inventory')
 @ApiBearerAuth('access-token')
+@PlatformPermissions(PLATFORM_PERMISSIONS.rfidInventory.manage)
 @Controller('rfid-inventory')
 @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.OPERATOR)
 export class RfidInventoryController {

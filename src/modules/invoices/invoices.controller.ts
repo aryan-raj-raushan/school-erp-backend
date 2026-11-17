@@ -23,6 +23,8 @@ import { BypassRestriction } from '../../common/decorators/bypass-restriction.de
 import { ApiResponse } from '../../shared/responses/api-response';
 import { CompanyRole, AuthContext } from '../../shared/enums';
 import { JwtPayload } from '../../shared/types/jwt-payload.types';
+import { PlatformPermissions } from '../../common/decorators/platform-permission.decorator';
+import { PLATFORM_PERMISSIONS } from '../../shared/constants/platform-permissions';
 
 @ApiTags('Invoices')
 @ApiBearerAuth('access-token')
@@ -30,6 +32,7 @@ import { JwtPayload } from '../../shared/types/jwt-payload.types';
 export class InvoicesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.billing.view)
   @Get()
   @Roles(
     CompanyRole.SUPER_ADMIN,
@@ -78,6 +81,7 @@ export class InvoicesController {
     return ApiResponse.success({ pdf_url });
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.billing.manage)
   @Post()
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SALES, CompanyRole.OPERATOR)
   @HttpCode(HttpStatus.CREATED)
@@ -89,6 +93,7 @@ export class InvoicesController {
     return ApiResponse.created(data, 'Invoice generated');
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.billing.manage)
   @Post(':id/line-items')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SALES, CompanyRole.OPERATOR)
   @HttpCode(HttpStatus.CREATED)
@@ -111,6 +116,7 @@ export class InvoicesController {
 export class OneTimeChargesController {
   constructor(private readonly invoicesService: InvoicesService) {}
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.billing.view)
   @Get()
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SALES, CompanyRole.OPERATOR)
   @ApiOperation({ summary: 'List one-time charges (scoped to assigned schools for Sales)' })
@@ -123,6 +129,7 @@ export class OneTimeChargesController {
     return ApiResponse.success(data.items, 'One-time charges fetched', data.meta);
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.billing.manage)
   @Post()
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SALES, CompanyRole.OPERATOR)
   @HttpCode(HttpStatus.CREATED)

@@ -12,6 +12,10 @@ import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
 import { rfidDevices } from '../../database/drizzle/schema/rfid-devices.schema';
 import { students, studentAcademicInfo } from '../../database/drizzle/schema/students.schema';
 import { academicYears } from '../../database/drizzle/schema/academic-years.schema';
+import { classes } from '../../database/drizzle/schema/classes.schema';
+import { schools } from '../../database/drizzle/schema/schools.schema';
+import { DateUtils } from '../../utils/date.utils';
+import { sections } from '../../database/drizzle/schema/sections.schema';
 import { attendances } from '../../database/drizzle/schema/attendance.schema';
 import { staffAttendances } from '../../database/drizzle/schema/staff-attendance.schema';
 import { examSchedules } from '../../database/drizzle/schema/exam-schedule.schema';
@@ -225,7 +229,10 @@ export class RfidRepository {
     if (!currentYear) return;
 
     const [academic] = await this.db
-      .select({ section_id: studentAcademicInfo.section_id })
+      .select({
+        section_id: studentAcademicInfo.section_id,
+        class_id: studentAcademicInfo.class_id,
+      })
       .from(studentAcademicInfo)
       .where(
         and(
@@ -235,10 +242,13 @@ export class RfidRepository {
       )
       .limit(1);
 
-    if (!academic?.section_id) return;
+    if (!academic) return;
+    const classSectionId = academic.section_id ?? academic.class_id;
 
-    const dateStr = tapDate.toISOString().split('T')[0];
-    const tapTime = tapDate.toISOString().split('T')[1].substring(0, 5);
+    const { date: dateStr, time: tapTime } = DateUtils.zonedDateTime(
+      tapDate,
+      await this.findSchoolTimezone(schoolId),
+    );
 
     // Check if an entry punch already exists for today
     const [existingPunch] = await this.db
@@ -282,7 +292,7 @@ export class RfidRepository {
       date: dateStr,
       tapTime,
       source: 'RFID',
-      classSectionId: academic.section_id,
+      classSectionId,
     });
 
     if (engineResult.status === 'HOLIDAY' || engineResult.status === 'SKIP') return;
@@ -294,11 +304,13 @@ export class RfidRepository {
         school_id: schoolId,
         student_id: studentId,
         academic_year_id: currentYear.id,
-        class_section_id: academic.section_id,
+        class_section_id: classSectionId,
         date: dateStr,
         session: 'MORNING' as const,
         status: engineResult.status as typeof attendances.$inferInsert.status,
         marked_by: 'rfid-auto',
+        mode: 'RFID',
+        marked_at: tapDate,
         is_late: engineResult.isLate,
       })
       .onConflictDoNothing();
@@ -352,8 +364,10 @@ export class RfidRepository {
   }
 
   async autoMarkStaffAttendance(staffId: string, schoolId: string, tapDate: Date): Promise<void> {
-    const dateStr = tapDate.toISOString().split('T')[0];
-    const tapTime = tapDate.toISOString().split('T')[1].substring(0, 5);
+    const { date: dateStr, time: tapTime } = DateUtils.zonedDateTime(
+      tapDate,
+      await this.findSchoolTimezone(schoolId),
+    );
 
     const engineResult = await this.engine.resolve({
       schoolId,
@@ -375,6 +389,8 @@ export class RfidRepository {
         date: dateStr,
         status: engineResult.status as typeof staffAttendances.$inferInsert.status,
         marked_by: 'rfid-auto',
+        mode: 'RFID',
+        marked_at: tapDate,
         is_late: engineResult.isLate,
       })
       .onConflictDoNothing();
@@ -432,5 +448,135 @@ export class RfidRepository {
         })),
       )
       .onConflictDoNothing();
+  }
+
+  async findSchoolTimezone(schoolId: string): Promise<string> {
+    const [row] = await this.db
+      .select({ timezone: schools.timezone })
+      .from(schools)
+      .where(eq(schools.id, schoolId))
+      .limit(1);
+    return row?.timezone || 'Asia/Kolkata';
+  }
+
+  async findCurrentAcademicYear(schoolId: string) {
+    const [year] = await this.db
+      .select({
+        id: academicYears.id,
+        name: academicYears.name,
+        is_enabled: academicYears.is_enabled,
+      })
+      .from(academicYears)
+      .where(and(eq(academicYears.school_id, schoolId), eq(academicYears.is_current, true)))
+      .limit(1);
+    return year;
+  }
+
+  private withoutCard(
+    column: typeof students.id_card_number | typeof schoolUsers.rfid_card_number,
+  ) {
+    return sql`coalesce(trim(${column}), '') = ''`;
+  }
+
+  async countUnassignedStudentsBySection(schoolId: string, academicYearId: string) {
+    return this.db
+      .select({
+        class_id: studentAcademicInfo.class_id,
+        class_name: classes.name,
+        section_id: studentAcademicInfo.section_id,
+        section_name: sections.name,
+        unassigned: sql<number>`count(*)::int`,
+      })
+      .from(studentAcademicInfo)
+      .innerJoin(students, eq(students.id, studentAcademicInfo.student_id))
+      .innerJoin(classes, eq(classes.id, studentAcademicInfo.class_id))
+      .leftJoin(sections, eq(sections.id, studentAcademicInfo.section_id))
+      .where(
+        and(
+          eq(studentAcademicInfo.school_id, schoolId),
+          eq(studentAcademicInfo.academic_year_id, academicYearId),
+          eq(studentAcademicInfo.deleted, false),
+          eq(students.deleted, false),
+          eq(students.is_enabled, true),
+          this.withoutCard(students.id_card_number),
+        ),
+      )
+      .groupBy(
+        studentAcademicInfo.class_id,
+        classes.name,
+        classes.class_sequence,
+        studentAcademicInfo.section_id,
+        sections.name,
+      )
+      .orderBy(classes.class_sequence, classes.name, sections.name);
+  }
+
+  async findUnassignedStudents(
+    schoolId: string,
+    academicYearId: string,
+    classId: string,
+    sectionId?: string,
+  ) {
+    return this.db
+      .select({
+        id: students.id,
+        first_name: students.first_name,
+        last_name: students.last_name,
+        roll_number: studentAcademicInfo.roll_number,
+        admission_number: studentAcademicInfo.admission_number,
+      })
+      .from(studentAcademicInfo)
+      .innerJoin(students, eq(students.id, studentAcademicInfo.student_id))
+      .where(
+        and(
+          eq(studentAcademicInfo.school_id, schoolId),
+          eq(studentAcademicInfo.academic_year_id, academicYearId),
+          eq(studentAcademicInfo.class_id, classId),
+          sectionId ? eq(studentAcademicInfo.section_id, sectionId) : undefined,
+          eq(studentAcademicInfo.deleted, false),
+          eq(students.deleted, false),
+          eq(students.is_enabled, true),
+          this.withoutCard(students.id_card_number),
+        ),
+      )
+      .orderBy(students.first_name, students.last_name);
+  }
+
+  async findUnassignedStaff(schoolId: string) {
+    return this.db
+      .select({
+        id: schoolUsers.id,
+        salutation: schoolUsers.salutation,
+        first_name: schoolUsers.first_name,
+        last_name: schoolUsers.last_name,
+        employee_code: schoolUsers.employee_code,
+        role: schoolUsers.role,
+      })
+      .from(schoolUsers)
+      .where(
+        and(
+          eq(schoolUsers.school_id, schoolId),
+          eq(schoolUsers.deleted, false),
+          eq(schoolUsers.is_active, true),
+          this.withoutCard(schoolUsers.rfid_card_number),
+        ),
+      )
+      .orderBy(schoolUsers.first_name, schoolUsers.last_name);
+  }
+
+  async isEnrolledInYear(studentId: string, schoolId: string, academicYearId: string) {
+    const [row] = await this.db
+      .select({ id: studentAcademicInfo.id })
+      .from(studentAcademicInfo)
+      .where(
+        and(
+          eq(studentAcademicInfo.student_id, studentId),
+          eq(studentAcademicInfo.school_id, schoolId),
+          eq(studentAcademicInfo.academic_year_id, academicYearId),
+          eq(studentAcademicInfo.deleted, false),
+        ),
+      )
+      .limit(1);
+    return !!row;
   }
 }

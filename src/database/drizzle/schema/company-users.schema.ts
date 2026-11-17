@@ -1,4 +1,5 @@
 import { pgTable, varchar, boolean, timestamp, pgEnum } from 'drizzle-orm/pg-core';
+import { companyRoles } from './company-roles.schema';
 
 export const companyRoleEnum = pgEnum('company_role', [
   'SUPER_ADMIN',
@@ -15,6 +16,9 @@ export const companyUsers = pgTable('company_users', {
   email: varchar('email', { length: 150 }).notNull().unique(),
   password_hash: varchar('password_hash', { length: 255 }).notNull(),
   role: companyRoleEnum('role').default('ADMIN').notNull(),
+  company_role_id: varchar('company_role_id', { length: 36 }).references(() => companyRoles.id, {
+    onDelete: 'set null',
+  }),
   is_active: boolean('is_active').default(true).notNull(),
   deleted: boolean('deleted').default(false).notNull(),
   last_login_at: timestamp('last_login_at', { withTimezone: true }),

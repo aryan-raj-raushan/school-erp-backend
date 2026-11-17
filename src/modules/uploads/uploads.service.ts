@@ -12,7 +12,9 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -34,6 +36,8 @@ export interface UploadMeta {
   reference_type: string;
   document_type: string;
 }
+
+const INLINE_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 
 @Injectable()
 export class UploadsService {
@@ -119,6 +123,21 @@ export class UploadsService {
     }
   }
 
+  async toDataUrl(url: string | null | undefined, schoolId: string): Promise<string | null> {
+    if (!url) return null;
+    const key = UploadsService.keyFromUrl(url);
+    if (!key || !key.startsWith(`${schoolId}/`)) return url;
+    try {
+      const object = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      if ((object.ContentLength ?? 0) > INLINE_IMAGE_MAX_BYTES) return url;
+      const bytes = await object.Body!.transformToByteArray();
+      return `data:${object.ContentType ?? 'image/jpeg'};base64,${Buffer.from(bytes).toString('base64')}`;
+    } catch (error) {
+      this.logger.warn(`Could not inline ${key}: ${(error as Error).message}`);
+      return url;
+    }
+  }
+
   async deleteByUrls(urls: string[], schoolId: string): Promise<void> {
     const keys = urls
       .map((url) => UploadsService.keyFromUrl(url))
@@ -137,6 +156,36 @@ export class UploadsService {
     await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: s3Key }));
     await this.docUploadModel.deleteOne({ s3_key: s3Key }).exec();
     this.logger.log(`Deleted S3 object: ${s3Key}`);
+  }
+
+  async purgeSchoolFiles(schoolId: string): Promise<{ deleted: number; failed: number }> {
+    let deleted = 0;
+    let failed = 0;
+    let continuationToken: string | undefined;
+    do {
+      const page = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: `${schoolId}/`,
+          ContinuationToken: continuationToken,
+        }),
+      );
+      const keys = (page.Contents ?? [])
+        .map((object) => ({ Key: object.Key! }))
+        .filter((o) => o.Key);
+      if (keys.length) {
+        const result = await this.s3.send(
+          new DeleteObjectsCommand({ Bucket: this.bucket, Delete: { Objects: keys, Quiet: true } }),
+        );
+        failed += result.Errors?.length ?? 0;
+        deleted += keys.length - (result.Errors?.length ?? 0);
+      }
+      continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    await this.docUploadModel.deleteMany({ school_id: schoolId }).exec();
+    this.logger.log(`Purged ${deleted} S3 object(s) for school ${schoolId} (${failed} failed)`);
+    return { deleted, failed };
   }
 
   private async upload(

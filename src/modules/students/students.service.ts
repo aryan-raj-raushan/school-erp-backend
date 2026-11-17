@@ -28,6 +28,10 @@ import {
   NewStudentDocument,
 } from './types/student.types';
 import { REDIS_STUDENT_KEY } from '@shared/redis/redis-key';
+import { BulkCardsQueryDto } from './dto/bulk-cards-query.dto';
+
+const BULK_CARDS_MAX_STUDENTS = 200;
+const BULK_CARDS_IMAGE_CONCURRENCY = 8;
 
 @Injectable()
 export class StudentsService {
@@ -271,7 +275,6 @@ export class StudentsService {
       last_issued: format?.last_number ?? 0,
     };
   }
-
 
   // ─── List ───────────────────────────────────────────────────────────────────
 
@@ -628,6 +631,32 @@ export class StudentsService {
       const address = await this.repo.findAddress(studentId, schoolId);
       return { ...data, address };
     });
+  }
+
+  async getBulkCardData(schoolId: string, scope: BulkCardsQueryDto) {
+    const rows = await this.repo.findStudentsForCards(schoolId, scope);
+    if (rows.length > BULK_CARDS_MAX_STUDENTS) {
+      throw new BadRequestException(
+        `This selection has ${rows.length} students — pick a single section (max ${BULK_CARDS_MAX_STUDENTS} cards at a time)`,
+      );
+    }
+    const schoolLogo = await this.uploadsService.toDataUrl(rows[0]?.school_logo, schoolId);
+    const toItem = async ({ parents, ...card }: (typeof rows)[number]) => ({
+      id_card: {
+        ...card,
+        school_logo: schoolLogo,
+        profile_image: await this.uploadsService.toDataUrl(card.profile_image, schoolId),
+      },
+      parents,
+    });
+
+    const items: Awaited<ReturnType<typeof toItem>>[] = [];
+    for (let i = 0; i < rows.length; i += BULK_CARDS_IMAGE_CONCURRENCY) {
+      items.push(
+        ...(await Promise.all(rows.slice(i, i + BULK_CARDS_IMAGE_CONCURRENCY).map(toItem))),
+      );
+    }
+    return { items };
   }
 
   async findAllGuardians(schoolId: string, search?: string, studentId?: string) {

@@ -13,11 +13,16 @@ import {
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { SchoolRole, Gender, BloodGroup } from '../../../shared/enums';
+import { SchoolRole, Gender, BloodGroup, Salutation } from '../../../shared/enums';
 import { StringUtils } from '../../../utils/string.utils';
 import { REGEX } from '../../../utils/regex.utils';
 
 export class CreateStaffDto {
+  @ApiPropertyOptional({ enum: Salutation, example: Salutation.MR })
+  @IsOptional()
+  @IsEnum(Salutation)
+  salutation?: Salutation;
+
   @ApiProperty({ example: 'John' })
   @IsString()
   @IsNotEmpty()

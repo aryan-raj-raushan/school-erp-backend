@@ -500,6 +500,7 @@ export class StudentsRepository {
     school_id: studentParents.school_id,
     student_id: studentParents.student_id,
     relation: studentParents.relation,
+    salutation: studentParents.salutation,
     first_name: studentParents.first_name,
     last_name: studentParents.last_name,
     email: studentParents.email,
@@ -716,6 +717,93 @@ export class StudentsRepository {
   }
 
   // ─── ID Card data ───────────────────────────────────────────────────────────
+
+  private readonly idCardColumns = {
+    id: students.id,
+    system_number: students.system_number,
+    first_name: students.first_name,
+    last_name: students.last_name,
+    profile_image: students.profile_image,
+    gender: students.gender,
+    blood_group: students.blood_group,
+    phone_number: students.phone_number,
+    admission_number: studentAcademicInfo.admission_number,
+    roll_number: studentAcademicInfo.roll_number,
+    class_name: classes.name,
+    section_name: sections.name,
+    school_name: schools.name,
+    school_address: schools.address,
+    school_city: schools.city,
+    school_logo: schools.logo_url,
+    school_phone: schools.contact_number,
+    school_email: schools.email,
+    school_website: schools.website,
+  };
+
+  async findStudentsForCards(
+    schoolId: string,
+    scope: { academic_year_id: string; class_id: string; section_id?: string },
+  ) {
+    const rows = await this.db
+      .select(this.idCardColumns)
+      .from(students)
+      .innerJoin(
+        studentAcademicInfo,
+        and(
+          eq(studentAcademicInfo.student_id, students.id),
+          eq(studentAcademicInfo.academic_year_id, scope.academic_year_id),
+          eq(studentAcademicInfo.class_id, scope.class_id),
+          scope.section_id ? eq(studentAcademicInfo.section_id, scope.section_id) : undefined,
+        ),
+      )
+      .leftJoin(classes, eq(studentAcademicInfo.class_id, classes.id))
+      .leftJoin(sections, eq(studentAcademicInfo.section_id, sections.id))
+      .leftJoin(schools, eq(students.school_id, schools.id))
+      .where(
+        and(
+          eq(students.school_id, schoolId),
+          eq(students.deleted, false),
+          eq(students.is_enabled, true),
+        ),
+      )
+      .orderBy(
+        sections.name,
+        sql`${studentAcademicInfo.roll_number} is null`,
+        sql`length(${studentAcademicInfo.roll_number})`,
+        studentAcademicInfo.roll_number,
+        students.first_name,
+      );
+    if (!rows.length) return [];
+
+    const ids = rows.map((r) => r.id);
+    const [addresses, parents] = await Promise.all([
+      this.db
+        .select()
+        .from(studentAddresses)
+        .where(
+          and(
+            inArray(studentAddresses.student_id, ids),
+            eq(studentAddresses.school_id, schoolId),
+            eq(studentAddresses.deleted, false),
+          ),
+        ),
+      this.db
+        .select(this.parentSafeColumns)
+        .from(studentParents)
+        .where(
+          and(
+            inArray(studentParents.student_id, ids),
+            eq(studentParents.school_id, schoolId),
+            eq(studentParents.deleted, false),
+          ),
+        ),
+    ]);
+    return rows.map((row) => ({
+      ...row,
+      address: addresses.find((a) => a.student_id === row.id) ?? null,
+      parents: parents.filter((p) => p.student_id === row.id),
+    }));
+  }
 
   async findStudentForIdCard(studentId: string, schoolId: string) {
     const [row] = await this.db

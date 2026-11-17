@@ -54,6 +54,8 @@ export const schoolSettings = pgTable('school_settings', {
   admission_include_year: boolean('admission_include_year').default(true).notNull(),
   admission_number_digits: integer('admission_number_digits').default(5).notNull(),
   admission_start_number: integer('admission_start_number').default(1).notNull(),
+  id_card_template: varchar('id_card_template', { length: 40 }),
+  pickup_card_template: varchar('pickup_card_template', { length: 40 }),
   created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updated_at: timestamp('updated_at', { withTimezone: true }),
 });

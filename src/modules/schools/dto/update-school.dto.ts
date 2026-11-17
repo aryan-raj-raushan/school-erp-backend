@@ -1,10 +1,21 @@
 import { PartialType } from '@nestjs/swagger';
-import { IsString, IsOptional, IsInt, IsNumberString, MaxLength, Min, Max, Matches } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  IsEnum,
+  IsNumberString,
+  MaxLength,
+  Min,
+  Max,
+  Matches,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { StringUtils } from '../../../utils/string.utils';
 import { REGEX } from '../../../utils/regex.utils';
 import { CreateSchoolDto } from './create-school.dto';
+import { Salutation } from '../../../shared/enums';
 
 export class UpdateSchoolDto extends PartialType(CreateSchoolDto) {
   @ApiPropertyOptional({ example: 'Asia/Kolkata' })
@@ -32,7 +43,12 @@ export class UpdateSchoolDto extends PartialType(CreateSchoolDto) {
   @Max(new Date().getFullYear())
   established_year?: number;
 
-  @ApiPropertyOptional({ example: 'Dr. Rajesh Kumar' })
+  @ApiPropertyOptional({ enum: Salutation, example: Salutation.DR })
+  @IsOptional()
+  @IsEnum(Salutation)
+  principal_salutation?: Salutation;
+
+  @ApiPropertyOptional({ example: 'Rajesh Kumar' })
   @IsOptional()
   @IsString()
   @MaxLength(150)

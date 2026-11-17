@@ -28,6 +28,7 @@ import {
   StudentSummaryResponse,
 } from './types/attendance.types';
 import { CacheTTL } from '../../shared/constants';
+import { attendanceLockReason } from './attendance-lock';
 
 @Injectable()
 export class AttendanceService {
@@ -67,8 +68,23 @@ export class AttendanceService {
     markedBy: string,
   ): Promise<MarkAttendanceResponse> {
     const results: Attendance[] = [];
+    const session = dto.session ?? 'MORNING';
+    const existing = await this.attendanceRepo.findLockCandidates(
+      schoolId,
+      dto.entries.map((e) => e.student_id),
+      dto.date,
+      session,
+    );
+    const locked: MarkAttendanceResponse['locked'] = [];
 
     for (const entry of dto.entries) {
+      const current = existing.find((r) => r.student_id === entry.student_id);
+      const lockReason = current ? attendanceLockReason(current) : null;
+      if (lockReason) {
+        locked.push({ student_id: entry.student_id, reason: lockReason });
+        continue;
+      }
+
       const engineResult = await this.attendanceEngine.resolve({
         schoolId,
         personId: entry.student_id,
@@ -88,11 +104,13 @@ export class AttendanceService {
         academic_year_id: dto.academic_year_id,
         class_section_id: dto.class_section_id,
         date: dto.date,
-        session: dto.session ?? 'MORNING',
+        session,
         status: engineResult.status as Attendance['status'],
         is_late: engineResult.isLate,
         remarks: entry.remarks,
         marked_by: markedBy,
+        mode: 'MANUAL',
+        marked_at: new Date(),
       });
       results.push(record);
     }
@@ -106,6 +124,7 @@ export class AttendanceService {
 
     return {
       records: results,
+      locked,
       summary: {
         date: dto.date,
         totalStudents: total,
@@ -126,6 +145,8 @@ export class AttendanceService {
     ipAddress?: string,
   ): Promise<Attendance> {
     const record = await this.findById(id, schoolId);
+    const lockReason = attendanceLockReason(record);
+    if (lockReason) throw new ForbiddenException(lockReason);
 
     if (!isAdmin) {
       const settings = await this.settingsService.getSettings(schoolId);
@@ -163,7 +184,9 @@ export class AttendanceService {
     return this.db
       .select()
       .from(attendanceAuditLog)
-      .where(and(eq(attendanceAuditLog.attendance_id, id), eq(attendanceAuditLog.school_id, schoolId)))
+      .where(
+        and(eq(attendanceAuditLog.attendance_id, id), eq(attendanceAuditLog.school_id, schoolId)),
+      )
       .orderBy(desc(attendanceAuditLog.changed_at));
   }
 
@@ -282,7 +305,10 @@ export class AttendanceService {
     );
   }
 
-  async generateExport(schoolId: string, filters: AttendanceExportFilterDto): Promise<{ buffer: Buffer; filename: string }> {
+  async generateExport(
+    schoolId: string,
+    filters: AttendanceExportFilterDto,
+  ): Promise<{ buffer: Buffer; filename: string }> {
     const records = await this.attendanceRepo.getExportRecords(schoolId, filters);
 
     const workbook = new ExcelJS.Workbook();
@@ -414,7 +440,12 @@ export class AttendanceService {
     return this.attendanceRepo.getConflicts(schoolId, date);
   }
 
-  async resolveConflict(conflictId: string, schoolId: string, resolution: 'RFID_WON' | 'MANUAL_WON' | 'ADMIN_SET', resolvedBy: string) {
+  async resolveConflict(
+    conflictId: string,
+    schoolId: string,
+    resolution: 'RFID_WON' | 'MANUAL_WON' | 'ADMIN_SET',
+    resolvedBy: string,
+  ) {
     return this.attendanceRepo.resolveConflict(conflictId, schoolId, resolution, resolvedBy);
   }
 

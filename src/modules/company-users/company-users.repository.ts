@@ -2,7 +2,12 @@ import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, ilike, or, sql, SQL } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import { companyUsers, companyUserSchools, schools } from '../../database/drizzle/schema';
+import {
+  companyUsers,
+  companyUserSchools,
+  companyRoles,
+  schools,
+} from '../../database/drizzle/schema';
 import { CompanyUserFilterDto } from './dto/company-user-filter.dto';
 import { CompanyUserProfile, AssignedSchool } from './types/company-user.types';
 import { generateId } from '../../utils/uuid.utils';
@@ -14,6 +19,7 @@ const PROFILE_COLUMNS = {
   last_name: companyUsers.last_name,
   email: companyUsers.email,
   role: companyUsers.role,
+  company_role_id: companyUsers.company_role_id,
   is_active: companyUsers.is_active,
   deleted: companyUsers.deleted,
   last_login_at: companyUsers.last_login_at,
@@ -42,15 +48,18 @@ export class CompanyUsersRepository {
     return conditions;
   }
 
-  async findAll(filters: CompanyUserFilterDto): Promise<CompanyUserProfile[]> {
+  async findAll(
+    filters: CompanyUserFilterDto,
+  ): Promise<(CompanyUserProfile & { company_role_name: string | null })[]> {
     const conditions = this.filterConditions(filters);
 
     const limit = filters.limit ?? 20;
     const offset = ((filters.page ?? 1) - 1) * limit;
 
     return this.db
-      .select(PROFILE_COLUMNS)
+      .select({ ...PROFILE_COLUMNS, company_role_name: companyRoles.name })
       .from(companyUsers)
+      .leftJoin(companyRoles, eq(companyRoles.id, companyUsers.company_role_id))
       .where(and(...conditions))
       .limit(limit)
       .offset(offset);
@@ -76,7 +85,14 @@ export class CompanyUsersRepository {
 
   async update(
     id: string,
-    data: Partial<{ first_name: string; last_name: string; role: CompanyRole; is_active: boolean }>,
+    data: Partial<{
+      first_name: string;
+      last_name: string;
+      email: string;
+      role: CompanyRole;
+      company_role_id: string | null;
+      is_active: boolean;
+    }>,
   ): Promise<CompanyUserProfile> {
     const [row] = await this.db
       .update(companyUsers)
@@ -84,6 +100,20 @@ export class CompanyUsersRepository {
       .where(eq(companyUsers.id, id))
       .returning(PROFILE_COLUMNS);
     return row;
+  }
+
+  async emailTaken(email: string, excludeId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: companyUsers.id })
+      .from(companyUsers)
+      .where(
+        and(
+          sql`lower(${companyUsers.email}) = lower(${email})`,
+          sql`${companyUsers.id} <> ${excludeId}`,
+        ),
+      )
+      .limit(1);
+    return !!row;
   }
 
   async softDelete(id: string): Promise<void> {

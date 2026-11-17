@@ -59,6 +59,7 @@ export interface AttendanceSummaryResponse {
 export interface MarkAttendanceResponse {
   records: Attendance[];
   summary: AttendanceSummaryResponse;
+  locked: { student_id: string; reason: string }[];
 }
 
 export interface DefaulterRecord {

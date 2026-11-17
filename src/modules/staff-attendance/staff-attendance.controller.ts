@@ -6,6 +6,7 @@ import {
   MarkStaffAttendanceDto,
   StaffAttendanceExportDto,
   StaffAttendanceRangeDto,
+  StaffPunchInDto,
 } from './dto/staff-attendance.dto';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { PERMISSION_REGISTRY } from '../../shared/constants';
@@ -56,6 +57,25 @@ export class StaffAttendanceController {
       'Content-Length': buffer.length,
     });
     res.end(buffer);
+  }
+
+  @Get('me/today')
+  @ApiOperation({ summary: "The signed-in staff member's attendance for today" })
+  async myToday(@GetSchoolId() schoolId: string, @GetCurrentUserId() userId: string) {
+    const data = await this.service.getMyToday(schoolId, userId);
+    return ApiResponse.success(data, "Today's attendance fetched");
+  }
+
+  @Post('me/punch-in')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Punch in from the mobile app with the current GPS location' })
+  async punchIn(
+    @Body() dto: StaffPunchInDto,
+    @GetSchoolId() schoolId: string,
+    @GetCurrentUserId() userId: string,
+  ) {
+    const data = await this.service.punchIn(schoolId, userId, dto);
+    return ApiResponse.created(data, 'Punched in from the app');
   }
 
   @Post()

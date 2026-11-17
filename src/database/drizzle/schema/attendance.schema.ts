@@ -21,6 +21,8 @@ import { schools } from './schools.schema';
 import { students } from './students.schema';
 import { academicYears } from './academic-years.schema';
 
+export type AttendanceMode = 'MANUAL' | 'RFID' | 'APP';
+
 export const attendanceStatusEnum = pgEnum('attendance_status', [
   'PRESENT',
   'ABSENT',
@@ -52,12 +54,18 @@ export const attendances = pgTable(
     status: attendanceStatusEnum('status').notNull(),
     remarks: varchar('remarks', { length: 255 }),
     marked_by: varchar('marked_by', { length: 36 }).notNull(),
+    mode: varchar('mode', { length: 10 }).$type<AttendanceMode>().default('MANUAL').notNull(),
+    marked_at: timestamp('marked_at', { withTimezone: true }),
     is_late: boolean('is_late').default(false).notNull(),
     created_at: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp('updated_at', { withTimezone: true }),
   },
   (t) => ({
-    uniqueStudentDate: unique('attendances_student_date_session_unique').on(t.student_id, t.date, t.session),
+    uniqueStudentDate: unique('attendances_student_date_session_unique').on(
+      t.student_id,
+      t.date,
+      t.session,
+    ),
     idx_school_date: index('attendances_school_date_idx').on(t.school_id, t.date),
     idx_student: index('attendances_student_id_idx').on(t.student_id),
     idx_class_section_date: index('attendances_section_date_idx').on(t.class_section_id, t.date),

@@ -36,6 +36,7 @@ export const schools = pgTable('schools', {
   udise_code: varchar('udise_code', { length: 30 }),
   affiliation_number: varchar('affiliation_number', { length: 50 }),
   established_year: integer('established_year'),
+  principal_salutation: varchar('principal_salutation', { length: 10 }),
   principal_name: varchar('principal_name', { length: 150 }),
   principal_email: varchar('principal_email', { length: 100 }),
   principal_phone: varchar('principal_phone', { length: 15 }),

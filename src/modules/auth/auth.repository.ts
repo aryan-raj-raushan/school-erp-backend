@@ -62,6 +62,7 @@ export class AuthRepository {
     email: string;
     password_hash: string;
     role: CompanyRole;
+    company_role_id?: string | null;
   }) {
     const [user] = await this.db.insert(companyUsers).values(data).returning({
       id: companyUsers.id,

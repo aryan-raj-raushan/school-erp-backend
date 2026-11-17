@@ -47,6 +47,7 @@ export class BulkImportRepository {
       .select({
         id: classes.id,
         name: classes.name,
+        class_code: classes.class_code,
         academic_year_id: classes.academic_year_id,
         is_active: classes.is_active,
       })

@@ -1,7 +1,15 @@
 import { Body, Controller, Get, Post, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsNumber, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
 import { Public } from '../../common/decorators/public.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { RfidService } from './rfid.service';
@@ -23,6 +31,11 @@ class AssignRfidDto {
   @IsString() rfidCardId: string;
   @IsEnum(['staff', 'student']) personType: 'staff' | 'student';
   @IsString() personId: string;
+}
+
+class AssignableStudentsQueryDto {
+  @IsUUID('all', { message: 'Select a class' }) class_id: string;
+  @IsOptional() @IsUUID('all', { message: 'Invalid section' }) section_id?: string;
 }
 
 class UnassignRfidDto {
@@ -60,6 +73,29 @@ export class RfidController {
     @Query('type') type: 'staff' | 'student' | 'all' = 'all',
   ) {
     return { persons: await this.rfidService.searchPersons(q ?? '', type, schoolId) };
+  }
+
+  @Get('assignable')
+  @ApiOperation({
+    summary: 'Classes, sections and staff that still need a smart card (current academic year)',
+  })
+  async assignable(@GetSchoolId() schoolId: string) {
+    return this.rfidService.getAssignableOverview(schoolId);
+  }
+
+  @Get('assignable/students')
+  @ApiOperation({ summary: 'Students without a smart card in a class/section of the current year' })
+  async assignableStudents(
+    @GetSchoolId() schoolId: string,
+    @Query() query: AssignableStudentsQueryDto,
+  ) {
+    return {
+      students: await this.rfidService.getAssignableStudents(
+        schoolId,
+        query.class_id,
+        query.section_id,
+      ),
+    };
   }
 
   @Post('assign')

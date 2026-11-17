@@ -25,6 +25,8 @@ import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { CompanyRole, AuthContext } from '../../shared/enums';
 import { JwtPayload } from '../../shared/types/jwt-payload.types';
+import { PlatformPermissions } from '../../common/decorators/platform-permission.decorator';
+import { PLATFORM_PERMISSIONS } from '../../shared/constants/platform-permissions';
 
 @ApiTags('Invoice Payments')
 @ApiBearerAuth('access-token')
@@ -77,6 +79,7 @@ export class PaymentsController {
     return ApiResponse.success(data, 'Razorpay order created');
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.billing.approvePayments)
   @Post(':paymentId/approve')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.OPERATOR, CompanyRole.SALES)
   @ApiOperation({ summary: 'Approve a manually-submitted payment' })
@@ -92,6 +95,7 @@ export class PaymentsController {
     return ApiResponse.success(data, 'Payment approved');
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.billing.approvePayments)
   @Post(':paymentId/reject')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.OPERATOR, CompanyRole.SALES)
   @ApiOperation({ summary: 'Reject a manually-submitted payment' })
@@ -116,6 +120,7 @@ export class PaymentsController {
 export class PaymentsQueueController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.billing.approvePayments)
   @Get('pending')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.OPERATOR, CompanyRole.SALES)
   @ApiOperation({ summary: 'List manual payments awaiting verification (scoped like invoices)' })

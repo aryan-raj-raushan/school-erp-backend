@@ -20,14 +20,18 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { CompanyRole } from '../../shared/enums';
+import { PlatformPermissions } from '../../common/decorators/platform-permission.decorator';
+import { PLATFORM_PERMISSIONS } from '../../shared/constants/platform-permissions';
 
 @ApiTags('Subscription Plans')
 @ApiBearerAuth('access-token')
+@PlatformPermissions(PLATFORM_PERMISSIONS.plans.manage)
 @Controller('subscription-plans')
 @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
 export class SubscriptionPlansController {
   constructor(private readonly plansService: SubscriptionPlansService) {}
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.plans.manage, PLATFORM_PERMISSIONS.subscriptions.manage)
   @Get()
   @ApiOperation({ summary: 'List the subscription plan catalog' })
   async findAll(@Query() filters: SubscriptionPlanFilterDto) {
@@ -35,6 +39,7 @@ export class SubscriptionPlansController {
     return ApiResponse.success(data.items, 'Subscription plans fetched', data.meta);
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.plans.manage, PLATFORM_PERMISSIONS.subscriptions.manage)
   @Get(':id')
   @ApiOperation({ summary: 'Get a subscription plan by ID' })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {

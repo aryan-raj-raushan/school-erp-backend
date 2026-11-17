@@ -1,5 +1,5 @@
 ﻿import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, gte, lte, sql, isNull, count, desc } from 'drizzle-orm';
+import { eq, and, gte, lte, sql, isNull, count, desc, inArray } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import { attendances } from '../../database/drizzle/schema/attendance.schema';
@@ -49,12 +49,41 @@ export class AttendanceRepository {
     return row;
   }
 
-  async findByStudentAndDate(studentId: string, date: string, schoolId: string): Promise<Attendance | undefined> {
+  async findByStudentAndDate(
+    studentId: string,
+    date: string,
+    schoolId: string,
+  ): Promise<Attendance | undefined> {
     const [row] = await this.db
       .select()
       .from(attendances)
-      .where(and(eq(attendances.student_id, studentId), eq(attendances.date, date), eq(attendances.school_id, schoolId)));
+      .where(
+        and(
+          eq(attendances.student_id, studentId),
+          eq(attendances.date, date),
+          eq(attendances.school_id, schoolId),
+        ),
+      );
     return row;
+  }
+
+  async findLockCandidates(schoolId: string, studentIds: string[], date: string, session: string) {
+    if (!studentIds.length) return [];
+    return this.db
+      .select({
+        student_id: attendances.student_id,
+        mode: attendances.mode,
+        date: attendances.date,
+      })
+      .from(attendances)
+      .where(
+        and(
+          eq(attendances.school_id, schoolId),
+          inArray(attendances.student_id, studentIds),
+          eq(attendances.date, date),
+          eq(attendances.session, session as Attendance['session']),
+        ),
+      );
   }
 
   async upsert(data: NewAttendance): Promise<Attendance> {
@@ -63,7 +92,12 @@ export class AttendanceRepository {
       .values(data)
       .onConflictDoUpdate({
         target: [attendances.student_id, attendances.date, attendances.session],
-        set: { status: data.status, remarks: data.remarks, is_late: data.is_late, updated_at: new Date() },
+        set: {
+          status: data.status,
+          remarks: data.remarks,
+          is_late: data.is_late,
+          updated_at: new Date(),
+        },
       })
       .returning();
     return row;
@@ -79,10 +113,16 @@ export class AttendanceRepository {
   }
 
   async remove(id: string, schoolId: string): Promise<void> {
-    await this.db.delete(attendances).where(and(eq(attendances.id, id), eq(attendances.school_id, schoolId)));
+    await this.db
+      .delete(attendances)
+      .where(and(eq(attendances.id, id), eq(attendances.school_id, schoolId)));
   }
 
-  async getStudentHistory(studentId: string, schoolId: string, filters: StudentAttendanceFilterDto): Promise<Attendance[]> {
+  async getStudentHistory(
+    studentId: string,
+    schoolId: string,
+    filters: StudentAttendanceFilterDto,
+  ): Promise<Attendance[]> {
     const { page = 1, limit = 20, from_date, to_date, academic_year_id } = filters;
     const offset = (page - 1) * limit;
     const conditions = [eq(attendances.student_id, studentId), eq(attendances.school_id, schoolId)];
@@ -100,7 +140,11 @@ export class AttendanceRepository {
       .offset(offset);
   }
 
-  async getStudentHistoryCount(studentId: string, schoolId: string, filters: StudentAttendanceFilterDto): Promise<number> {
+  async getStudentHistoryCount(
+    studentId: string,
+    schoolId: string,
+    filters: StudentAttendanceFilterDto,
+  ): Promise<number> {
     const { from_date, to_date, academic_year_id } = filters;
     const conditions = [eq(attendances.student_id, studentId), eq(attendances.school_id, schoolId)];
 
@@ -131,10 +175,19 @@ export class AttendanceRepository {
     const total = Number(row?.total ?? 0);
     const present = Number(row?.present ?? 0);
     const absent = Number(row?.absent ?? 0);
-    return { total_days: total, present, absent, attendance_percentage: total > 0 ? Math.round((present / total) * 100 * 100) / 100 : 0 };
+    return {
+      total_days: total,
+      present,
+      absent,
+      attendance_percentage: total > 0 ? Math.round((present / total) * 100 * 100) / 100 : 0,
+    };
   }
 
-  async getStudentMonthlySummary(studentId: string, schoolId: string, academicYearId?: string): Promise<MonthlyBreakdown[]> {
+  async getStudentMonthlySummary(
+    studentId: string,
+    schoolId: string,
+    academicYearId?: string,
+  ): Promise<MonthlyBreakdown[]> {
     const conditions = [eq(attendances.student_id, studentId), eq(attendances.school_id, schoolId)];
     if (academicYearId) conditions.push(eq(attendances.academic_year_id, academicYearId));
 
@@ -148,8 +201,14 @@ export class AttendanceRepository {
       })
       .from(attendances)
       .where(and(...conditions))
-      .groupBy(sql`extract(year from ${attendances.date}::date)`, sql`extract(month from ${attendances.date}::date)`)
-      .orderBy(sql`extract(year from ${attendances.date}::date)`, sql`extract(month from ${attendances.date}::date)`);
+      .groupBy(
+        sql`extract(year from ${attendances.date}::date)`,
+        sql`extract(month from ${attendances.date}::date)`,
+      )
+      .orderBy(
+        sql`extract(year from ${attendances.date}::date)`,
+        sql`extract(month from ${attendances.date}::date)`,
+      );
 
     return rows.map((r) => {
       const total = Number(r.total);
@@ -165,7 +224,11 @@ export class AttendanceRepository {
     });
   }
 
-  async getDailyReportEnriched(schoolId: string, classSectionId: string, date: string): Promise<EnrichedAttendanceRecord[]> {
+  async getDailyReportEnriched(
+    schoolId: string,
+    classSectionId: string,
+    date: string,
+  ): Promise<EnrichedAttendanceRecord[]> {
     return this.db
       .select({
         id: attendances.id,
@@ -179,12 +242,16 @@ export class AttendanceRepository {
         is_late: attendances.is_late,
         remarks: attendances.remarks,
         marked_by: attendances.marked_by,
+        mode: attendances.mode,
+        marked_at: attendances.marked_at,
         created_at: attendances.created_at,
         updated_at: attendances.updated_at,
         student_name: sql<string>`concat(${students.first_name}, ' ', ${students.last_name})`,
         // roll_number: students.roll_number,
         // admission_number: students.admission_number,
-        marked_by_username: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
+        marked_by_username: sql<
+          string | null
+        >`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
       })
       .from(attendances)
       .innerJoin(students, eq(attendances.student_id, students.id))
@@ -198,7 +265,12 @@ export class AttendanceRepository {
       );
   }
 
-  async getMonthlyReportEnriched(schoolId: string, classSectionId: string, from_date: string, to_date: string): Promise<EnrichedAttendanceRecord[]> {
+  async getMonthlyReportEnriched(
+    schoolId: string,
+    classSectionId: string,
+    from_date: string,
+    to_date: string,
+  ): Promise<EnrichedAttendanceRecord[]> {
     return this.db
       .select({
         id: attendances.id,
@@ -212,12 +284,16 @@ export class AttendanceRepository {
         is_late: attendances.is_late,
         remarks: attendances.remarks,
         marked_by: attendances.marked_by,
+        mode: attendances.mode,
+        marked_at: attendances.marked_at,
         created_at: attendances.created_at,
         updated_at: attendances.updated_at,
         student_name: sql<string>`concat(${students.first_name}, ' ', ${students.last_name})`,
         // roll_number: students.roll_number,
         // admission_number: students.admission_number,
-        marked_by_username: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
+        marked_by_username: sql<
+          string | null
+        >`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
       })
       .from(attendances)
       .innerJoin(students, eq(attendances.student_id, students.id))
@@ -242,7 +318,13 @@ export class AttendanceRepository {
     return row ? `${row.class_name} ${row.section_name}` : classSectionId;
   }
 
-  async getDefaulters(schoolId: string, class_section_id?: string, month?: number, year?: number, threshold = 75): Promise<DefaulterRecord[]> {
+  async getDefaulters(
+    schoolId: string,
+    class_section_id?: string,
+    month?: number,
+    year?: number,
+    threshold = 75,
+  ): Promise<DefaulterRecord[]> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const conditions: any[] = [eq(attendances.school_id, schoolId)];
 
@@ -296,18 +378,40 @@ export class AttendanceRepository {
   }
 
   // Legacy â€” kept for backward compat with section date-range endpoint
-  async getDailyReport(schoolId: string, classSectionId: string, date: string): Promise<Attendance[]> {
+  async getDailyReport(
+    schoolId: string,
+    classSectionId: string,
+    date: string,
+  ): Promise<Attendance[]> {
     return this.db
       .select()
       .from(attendances)
-      .where(and(eq(attendances.school_id, schoolId), eq(attendances.class_section_id, classSectionId), eq(attendances.date, date)));
+      .where(
+        and(
+          eq(attendances.school_id, schoolId),
+          eq(attendances.class_section_id, classSectionId),
+          eq(attendances.date, date),
+        ),
+      );
   }
 
-  async getSectionByDateRange(schoolId: string, classSectionId: string, from_date: string, to_date: string): Promise<Attendance[]> {
+  async getSectionByDateRange(
+    schoolId: string,
+    classSectionId: string,
+    from_date: string,
+    to_date: string,
+  ): Promise<Attendance[]> {
     return this.db
       .select()
       .from(attendances)
-      .where(and(eq(attendances.school_id, schoolId), eq(attendances.class_section_id, classSectionId), gte(attendances.date, from_date), lte(attendances.date, to_date)))
+      .where(
+        and(
+          eq(attendances.school_id, schoolId),
+          eq(attendances.class_section_id, classSectionId),
+          gte(attendances.date, from_date),
+          lte(attendances.date, to_date),
+        ),
+      )
       .orderBy(attendances.date);
   }
 
@@ -405,7 +509,10 @@ export class AttendanceRepository {
   }
 
   async getConflicts(schoolId: string, date?: string) {
-    const conditions = [eq(attendanceConflicts.school_id, schoolId), isNull(attendanceConflicts.resolved_at)];
+    const conditions = [
+      eq(attendanceConflicts.school_id, schoolId),
+      isNull(attendanceConflicts.resolved_at),
+    ];
     if (date) conditions.push(eq(attendanceConflicts.date, date) as any);
     return this.db
       .select()
@@ -414,22 +521,36 @@ export class AttendanceRepository {
       .orderBy(desc(attendanceConflicts.created_at));
   }
 
-  async resolveConflict(conflictId: string, schoolId: string, resolution: 'RFID_WON' | 'MANUAL_WON' | 'ADMIN_SET', resolvedBy: string) {
+  async resolveConflict(
+    conflictId: string,
+    schoolId: string,
+    resolution: 'RFID_WON' | 'MANUAL_WON' | 'ADMIN_SET',
+    resolvedBy: string,
+  ) {
     const [row] = await this.db
       .update(attendanceConflicts)
       .set({ resolution, resolved_by: resolvedBy, resolved_at: new Date() })
-      .where(and(eq(attendanceConflicts.id, conflictId), eq(attendanceConflicts.school_id, schoolId)))
+      .where(
+        and(eq(attendanceConflicts.id, conflictId), eq(attendanceConflicts.school_id, schoolId)),
+      )
       .returning();
     return row;
   }
 
   async getExportRecords(
     schoolId: string,
-    filters: { class_section_id?: string; start_date?: string; end_date?: string; academic_year_id?: string },
+    filters: {
+      class_section_id?: string;
+      start_date?: string;
+      end_date?: string;
+      academic_year_id?: string;
+    },
   ) {
     const conditions = [eq(attendances.school_id, schoolId)];
-    if (filters.class_section_id) conditions.push(eq(attendances.class_section_id, filters.class_section_id));
-    if (filters.academic_year_id) conditions.push(eq(attendances.academic_year_id, filters.academic_year_id));
+    if (filters.class_section_id)
+      conditions.push(eq(attendances.class_section_id, filters.class_section_id));
+    if (filters.academic_year_id)
+      conditions.push(eq(attendances.academic_year_id, filters.academic_year_id));
     if (filters.start_date) conditions.push(gte(attendances.date, filters.start_date));
     if (filters.end_date) conditions.push(lte(attendances.date, filters.end_date));
 
@@ -441,7 +562,9 @@ export class AttendanceRepository {
         session: attendances.session,
         remarks: attendances.remarks,
         student_name: sql<string>`concat(${students.first_name}, ' ', coalesce(${students.last_name}, ''))`,
-        marked_by_name: sql<string | null>`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
+        marked_by_name: sql<
+          string | null
+        >`CASE WHEN ${schoolUsers.id} IS NOT NULL THEN concat(${schoolUsers.first_name}, ' ', ${schoolUsers.last_name}) ELSE NULL END`,
         section_label: sql<string>`concat(${classes.name}, ' ', ${sections.name})`,
       })
       .from(attendances)
@@ -453,7 +576,11 @@ export class AttendanceRepository {
       .orderBy(attendances.date, students.first_name);
   }
 
-  async resolveMissingPunch(punchId: string, schoolId: string, resolvedStatus: 'PRESENT' | 'HALF_DAY'): Promise<void> {
+  async resolveMissingPunch(
+    punchId: string,
+    schoolId: string,
+    resolvedStatus: 'PRESENT' | 'HALF_DAY',
+  ): Promise<void> {
     const [punch] = await this.db
       .select()
       .from(rfidPunchLog)

@@ -16,6 +16,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { StudentsService } from './students.service';
 import { CreateStudentDto, StudentDocumentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
+import { BulkCardsQueryDto } from './dto/bulk-cards-query.dto';
+import { NoTimeout } from '../../common/decorators/no-timeout.decorator';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { GetCurrentUserId } from '../../common/decorators/current-user.decorator';
@@ -199,6 +201,20 @@ export class StudentsController {
   }
 
   // ─── ID Card ─────────────────────────────────────────────────────────────
+
+  @Get('cards/bulk')
+  @NoTimeout()
+  @ApiOperation({
+    summary: 'ID and pickup card data for a whole class or section',
+    description:
+      'Photos and the school logo are embedded as data URLs so cards can be exported as images.',
+  })
+  async getBulkCards(@Query() query: BulkCardsQueryDto, @GetSchoolId() schoolId: string) {
+    return ApiResponse.success(
+      await this.studentsService.getBulkCardData(schoolId, query),
+      'Card data fetched',
+    );
+  }
 
   @Get(':id/id-card')
   @ApiOperation({

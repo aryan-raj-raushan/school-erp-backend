@@ -33,6 +33,8 @@ import { K6 } from '../../common/decorators/k6.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { AuthContext } from '../../shared/enums';
 import { RefreshTokenPayload } from '../../shared/types/jwt-payload.types';
+import { PlatformPermissions } from '../../common/decorators/platform-permission.decorator';
+import { PLATFORM_PERMISSIONS } from '../../shared/constants/platform-permissions';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -168,6 +170,7 @@ export class AuthController {
     return ApiResponse.success(result, 'Switched to student context');
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.schools.loginAs)
   @Post('switch-school/:schoolId')
   @BypassRestriction()
   @HttpCode(HttpStatus.OK)

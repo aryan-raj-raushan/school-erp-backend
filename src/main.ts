@@ -13,6 +13,8 @@ import { LoadTestService } from './modules/load-test/load-test.service';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { CustomValidationPipe } from './common/pipes/validation.pipe';
 
+const IMPORT_JOB_POLL_PATH = /\/bulk-import\/[\w-]+\/jobs\/[\w-]+$/;
+
 const CREDENTIAL_AUTH_PATHS = new Set([
   '/login',
   '/company/login',
@@ -94,6 +96,7 @@ async function bootstrap() {
       windowMs: parseInt(process.env.RATE_LIMIT_TTL || '60', 10) * 1000,
       max: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
       keyGenerator: clientIp,
+      skip: (req) => req.method === 'GET' && IMPORT_JOB_POLL_PATH.test(req.path),
       standardHeaders: true,
       legacyHeaders: false,
       message: {

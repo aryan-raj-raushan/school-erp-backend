@@ -1,5 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, gte, lte, asc, SQL } from 'drizzle-orm';
+import { eq, and, gte, lte, asc, inArray, SQL } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
 import {
@@ -8,6 +8,7 @@ import {
   StaffAttendanceRow,
 } from '../../database/drizzle/schema/staff-attendance.schema';
 import { schoolUsers } from '../../database/drizzle/schema/school-users.schema';
+import { schools } from '../../database/drizzle/schema/schools.schema';
 
 export type StaffAttendanceWithMeta = StaffAttendanceRow & {
   staff_first_name: string;
@@ -36,6 +37,61 @@ export class StaffAttendanceRepository {
       })
       .returning();
     return row;
+  }
+
+  async insertPunch(data: NewStaffAttendanceRow): Promise<StaffAttendanceRow | undefined> {
+    const [row] = await this.db
+      .insert(staffAttendances)
+      .values(data)
+      .onConflictDoNothing()
+      .returning();
+    return row;
+  }
+
+  async findOne(
+    schoolId: string,
+    staffId: string,
+    date: string,
+  ): Promise<StaffAttendanceRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(staffAttendances)
+      .where(
+        and(
+          eq(staffAttendances.school_id, schoolId),
+          eq(staffAttendances.staff_id, staffId),
+          eq(staffAttendances.date, date),
+        ),
+      )
+      .limit(1);
+    return row;
+  }
+
+  async findLockCandidates(schoolId: string, staffIds: string[], date: string) {
+    if (!staffIds.length) return [];
+    return this.db
+      .select({
+        staff_id: staffAttendances.staff_id,
+        mode: staffAttendances.mode,
+        date: staffAttendances.date,
+      })
+      .from(staffAttendances)
+      .where(
+        and(
+          eq(staffAttendances.school_id, schoolId),
+          inArray(staffAttendances.staff_id, staffIds),
+          eq(staffAttendances.date, date),
+        ),
+      );
+  }
+
+  async findSchoolTimezone(schoolId: string): Promise<string> {
+    const [row] = await this.db
+      .select({ timezone: schools.timezone })
+      .from(schools)
+      .where(eq(schools.id, schoolId))
+      .limit(1);
+    return row?.timezone || 'Asia/Kolkata';
   }
 
   async findByDate(schoolId: string, date: string): Promise<StaffAttendanceWithMeta[]> {
@@ -69,6 +125,11 @@ export class StaffAttendanceRepository {
         status: staffAttendances.status,
         remarks: staffAttendances.remarks,
         marked_by: staffAttendances.marked_by,
+        mode: staffAttendances.mode,
+        marked_at: staffAttendances.marked_at,
+        latitude: staffAttendances.latitude,
+        longitude: staffAttendances.longitude,
+        location_accuracy_m: staffAttendances.location_accuracy_m,
         is_late: staffAttendances.is_late,
         created_at: staffAttendances.created_at,
         updated_at: staffAttendances.updated_at,

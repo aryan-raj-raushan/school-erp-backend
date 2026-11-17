@@ -23,3 +23,11 @@ export enum ParentRelation {
   SIBLING = 'SIBLING',
   OTHER = 'OTHER',
 }
+
+export enum Salutation {
+  MR = 'Mr.',
+  MRS = 'Mrs.',
+  MISS = 'Miss',
+  MS = 'Ms.',
+  DR = 'Dr.',
+}

@@ -1,4 +1,13 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum, Matches, MaxLength } from 'class-validator';
+import {
+  IsUUID,
+  ValidateIf,
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { REGEX } from '../../../utils/regex.utils';
@@ -40,4 +49,13 @@ export class CreateCompanyUserDto {
   @ApiProperty({ enum: CompanyRole, example: CompanyRole.SALES })
   @IsEnum(CompanyRole)
   role: CompanyRole;
+
+  @ApiPropertyOptional({
+    description:
+      'Custom platform role — when set, its permissions decide what this member can access',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID('all', { message: 'Invalid role' })
+  company_role_id?: string | null;
 }

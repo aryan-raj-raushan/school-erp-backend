@@ -29,6 +29,7 @@ import { SubscriptionPlansModule } from './modules/subscription-plans/subscripti
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { RfidInventoryModule } from './modules/rfid-inventory/rfid-inventory.module';
 import { CompanyUsersModule } from './modules/company-users/company-users.module';
+import { CompanyRolesModule } from './modules/company-roles/company-roles.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
@@ -108,6 +109,7 @@ import { BulkImportModule } from '@modules/bulk-import/bulk-import.module';
     InvoicesModule,
     RfidInventoryModule,
     CompanyUsersModule,
+    CompanyRolesModule,
     PromotionsModule,
     UploadsModule,
     SchedulerModule,

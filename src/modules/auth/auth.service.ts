@@ -32,7 +32,8 @@ import {
 import { REGEX } from '../../utils/regex.utils';
 import { SchoolsRepository } from '../schools/schools.repository';
 import { School } from '../schools/types/school.types';
-import { AuthTTL } from '../../shared/constants';
+import { AuthTTL, BUILT_IN_PLATFORM_PERMISSIONS } from '../../shared/constants';
+import { CompanyAccessService } from '../company-roles/company-access.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { RolesService } from '../roles/roles.service';
 
@@ -48,6 +49,7 @@ export class AuthService {
     private readonly redisService: RedisService,
     private readonly permissionsService: PermissionsService,
     private readonly rolesService: RolesService,
+    private readonly companyAccess: CompanyAccessService,
   ) {}
 
   async schoolSignup(dto: SchoolSignupDto): Promise<LoginResponse> {
@@ -664,7 +666,17 @@ export class AuthService {
     if (context === AuthContext.COMPANY || role === CompanyRole.SUPER_ADMIN) {
       const user = await this.authRepo.findCompanyUserProfile(userId);
       if (!user) throw new NotFoundException('User not found');
-      return user;
+      const customRole =
+        user.role === CompanyRole.SUPER_ADMIN
+          ? null
+          : await this.companyAccess.getCustomRole(userId);
+      return {
+        ...user,
+        company_role_id: customRole?.role_id ?? null,
+        company_role_name: customRole?.role_name ?? null,
+        permissions:
+          customRole?.permissions ?? BUILT_IN_PLATFORM_PERMISSIONS[user.role as CompanyRole] ?? [],
+      };
     }
 
     if (context === AuthContext.PARENT) {

@@ -23,6 +23,7 @@ import {
   Religion,
   StudentStatus,
 } from '@shared/enums/student.enum';
+import { Salutation } from '@shared/enums/gender.enum';
 
 const BlankAsUndefined = () =>
   Transform(({ value }) => (typeof value === 'string' ? value.trim() || undefined : value));
@@ -94,6 +95,10 @@ export class StudentParentDto {
   @IsString()
   id?: string;
   @ApiProperty({ enum: ParentRelation }) @IsEnum(ParentRelation) relation: ParentRelation;
+  @ApiPropertyOptional({ enum: Salutation })
+  @IsOptional()
+  @IsEnum(Salutation)
+  salutation?: Salutation;
   @ApiProperty() @IsString() @MaxLength(100) first_name: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) last_name?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() email?: string;

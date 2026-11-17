@@ -1,4 +1,13 @@
-import { IsString, Matches, IsOptional, IsEnum, MaxLength, IsBoolean } from 'class-validator';
+import {
+  IsUUID,
+  ValidateIf,
+  IsString,
+  Matches,
+  IsOptional,
+  IsEnum,
+  MaxLength,
+  IsBoolean,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { REGEX } from '../../../utils/regex.utils';
@@ -23,6 +32,13 @@ export class UpdateCompanyUserDto {
   @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)) || undefined)
   last_name?: string;
 
+  @ApiPropertyOptional({ example: 'sales.ramesh@company.com' })
+  @IsOptional()
+  @IsString()
+  @Matches(REGEX.EMAIL, { message: 'Invalid email address' })
+  @Transform(({ value }) => StringUtils.trim(value)?.toLowerCase())
+  email?: string;
+
   @ApiPropertyOptional({ enum: CompanyRole, example: CompanyRole.SALES })
   @IsOptional()
   @IsEnum(CompanyRole)
@@ -32,4 +48,13 @@ export class UpdateCompanyUserDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Custom platform role — when set, its permissions decide what this member can access',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID('all', { message: 'Invalid role' })
+  company_role_id?: string | null;
 }

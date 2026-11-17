@@ -2,15 +2,18 @@ import { Injectable, Inject } from '@nestjs/common';
 import { eq, and, ilike, sql, inArray, asc } from 'drizzle-orm';
 import { DRIZZLE_ORM } from '../../database/drizzle/drizzle.constants';
 import { DrizzleDB } from '../../database/drizzle/drizzle.provider';
-import {
-  schools,
-  companyUserSchools,
-  schoolUsers,
-  studentParents,
-  subscriptions,
-} from '../../database/drizzle/schema';
+import { schools, companyUserSchools } from '../../database/drizzle/schema';
 import { School, NewSchool } from './types/school.types';
 import { SchoolFilterDto } from './dto/school-filter.dto';
+
+const PURGE_MAX_PASSES = 10;
+const FOREIGN_KEY_VIOLATION = '23503';
+
+export interface SchoolDataCounts {
+  students: number;
+  staff: number;
+  parents: number;
+}
 
 @Injectable()
 export class SchoolsRepository {
@@ -103,38 +106,6 @@ export class SchoolsRepository {
     return row;
   }
 
-  async softDelete(id: string): Promise<void> {
-    const now = new Date();
-    await this.db.transaction(async (tx) => {
-      await tx
-        .update(schools)
-        .set({ deleted: true, is_active: false, updated_at: now })
-        .where(eq(schools.id, id));
-      await tx
-        .update(schoolUsers)
-        .set({ deleted: true, is_active: false, updated_at: now })
-        .where(eq(schoolUsers.school_id, id));
-      await tx
-        .update(studentParents)
-        .set({ is_active: false, updated_at: now })
-        .where(eq(studentParents.school_id, id));
-      await tx
-        .update(subscriptions)
-        .set({
-          status: 'CANCELLED',
-          cancelled_at: now,
-          cancellation_reason: 'School deleted',
-          updated_at: now,
-        })
-        .where(
-          and(
-            eq(subscriptions.school_id, id),
-            inArray(subscriptions.status, ['ACTIVE', 'TRIAL', 'PENDING']),
-          ),
-        );
-    });
-  }
-
   async findSchoolIdsByCompanyUserId(userId: string): Promise<string[]> {
     const rows = await this.db
       .select({ school_id: companyUserSchools.school_id })
@@ -153,5 +124,64 @@ export class SchoolsRepository {
         updated_at: new Date(),
       })
       .where(eq(schools.id, schoolId));
+  }
+
+  async countSchoolData(schoolId: string): Promise<SchoolDataCounts> {
+    const result = await this.db.execute<{ students: string; staff: string; parents: string }>(sql`
+      SELECT
+        (SELECT count(*) FROM students WHERE school_id = ${schoolId}) AS students,
+        (SELECT count(*) FROM school_users WHERE school_id = ${schoolId}) AS staff,
+        (SELECT count(*) FROM student_parents WHERE school_id = ${schoolId}) AS parents
+    `);
+    const row = result.rows[0];
+    return {
+      students: Number(row?.students ?? 0),
+      staff: Number(row?.staff ?? 0),
+      parents: Number(row?.parents ?? 0),
+    };
+  }
+
+  async purgeSchoolData(schoolId: string): Promise<{ tables: number; rows: number }> {
+    return this.db.transaction(async (tx) => {
+      const tableResult = await tx.execute<{ table_name: string }>(sql`
+        SELECT DISTINCT c.table_name
+        FROM information_schema.columns c
+        JOIN information_schema.tables t
+          ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+        WHERE c.table_schema = 'public'
+          AND c.column_name = 'school_id'
+          AND t.table_type = 'BASE TABLE'
+          AND c.table_name <> 'schools'
+      `);
+      const remaining = new Set(tableResult.rows.map((r) => r.table_name));
+      const tableCount = remaining.size;
+      let rows = 0;
+      let blockedBy = '';
+
+      for (let pass = 0; pass < PURGE_MAX_PASSES && remaining.size; pass++) {
+        const before = remaining.size;
+        for (const table of [...remaining]) {
+          try {
+            const deleted = await tx.transaction((sp) =>
+              sp.execute(sql`DELETE FROM ${sql.identifier(table)} WHERE school_id = ${schoolId}`),
+            );
+            rows += deleted.rowCount ?? 0;
+            remaining.delete(table);
+          } catch (error) {
+            if ((error as { code?: string }).code !== FOREIGN_KEY_VIOLATION) throw error;
+            blockedBy = `${table}: ${(error as Error).message}`;
+          }
+        }
+        if (remaining.size === before) break;
+      }
+
+      if (remaining.size) {
+        throw new Error(`Could not delete school data — ${blockedBy}`);
+      }
+
+      const deletedSchool = await tx.delete(schools).where(eq(schools.id, schoolId));
+      rows += deletedSchool.rowCount ?? 0;
+      return { tables: tableCount, rows };
+    });
   }
 }

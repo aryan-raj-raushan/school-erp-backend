@@ -255,6 +255,7 @@ export const studentParents = pgTable('student_parents', {
     .notNull()
     .references(() => students.id, { onDelete: 'cascade' }),
   relation: parentRelationEnum('relation').notNull(),
+  salutation: varchar('salutation', { length: 10 }),
   first_name: varchar('first_name', { length: 100 }).notNull(),
   last_name: varchar('last_name', { length: 100 }),
   email: varchar('email', { length: 150 }),

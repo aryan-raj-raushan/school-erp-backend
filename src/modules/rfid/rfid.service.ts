@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { RedisService } from '../redis/redis.service';
 import { CacheTTL } from '../../shared/constants';
@@ -77,12 +77,75 @@ export class RfidService {
     );
   }
 
+  private async requireCurrentYear(schoolId: string) {
+    const year = await this.rfidRepository.findCurrentAcademicYear(schoolId);
+    if (!year) {
+      throw new BadRequestException('Set a current academic year before assigning smart cards');
+    }
+    if (!year.is_enabled) {
+      throw new BadRequestException(`The current academic year '${year.name}' is disabled`);
+    }
+    return year;
+  }
+
+  async getAssignableOverview(schoolId: string) {
+    const year = await this.requireCurrentYear(schoolId);
+    const [sectionCounts, staff] = await Promise.all([
+      this.rfidRepository.countUnassignedStudentsBySection(schoolId, year.id),
+      this.rfidRepository.findUnassignedStaff(schoolId),
+    ]);
+    const classes = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        unassigned: number;
+        sections: { id: string; name: string; unassigned: number }[];
+      }
+    >();
+    for (const row of sectionCounts) {
+      const cls = classes.get(row.class_id) ?? {
+        id: row.class_id,
+        name: row.class_name,
+        unassigned: 0,
+        sections: [],
+      };
+      cls.unassigned += row.unassigned;
+      if (row.section_id && row.section_name) {
+        cls.sections.push({
+          id: row.section_id,
+          name: row.section_name,
+          unassigned: row.unassigned,
+        });
+      }
+      classes.set(row.class_id, cls);
+    }
+    return {
+      academic_year: { id: year.id, name: year.name },
+      classes: [...classes.values()],
+      staff,
+    };
+  }
+
+  async getAssignableStudents(schoolId: string, classId: string, sectionId?: string) {
+    const year = await this.requireCurrentYear(schoolId);
+    return this.rfidRepository.findUnassignedStudents(schoolId, year.id, classId, sectionId);
+  }
+
   async assignCard(
     rfidCardId: string,
     personType: 'staff' | 'student',
     personId: string,
     schoolId: string,
   ): Promise<void> {
+    if (personType === 'student') {
+      const year = await this.requireCurrentYear(schoolId);
+      if (!(await this.rfidRepository.isEnrolledInYear(personId, schoolId, year.id))) {
+        throw new BadRequestException(
+          `This student is not enrolled in the current academic year (${year.name}) — smart cards can only be assigned for the current year`,
+        );
+      }
+    }
     const owners = await this.rfidRepository.findCardOwners(rfidCardId, schoolId);
     if (owners.some((o) => o.id !== personId)) {
       throw new ConflictException(`Card '${rfidCardId}' is already assigned to someone else`);

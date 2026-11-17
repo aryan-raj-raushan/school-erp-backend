@@ -16,6 +16,8 @@ import { UpdateCompanyUserDto } from './dto/update-company-user.dto';
 import { CompanyUserFilterDto } from './dto/company-user-filter.dto';
 import { CompanyRole } from '../../shared/enums';
 import { CompanyUserProfile, AssignedSchool } from './types/company-user.types';
+import { CompanyRolesService } from '../company-roles/company-roles.service';
+import { CompanyAccessService } from '../company-roles/company-access.service';
 
 // SUPER_ADMIN accounts are never created/edited through this staff-management module.
 const ASSIGNABLE_COMPANY_ROLES = [
@@ -31,6 +33,8 @@ export class CompanyUsersService {
     private readonly companyUsersRepo: CompanyUsersRepository,
     private readonly authRepo: AuthRepository,
     private readonly redisService: RedisService,
+    private readonly companyRoles: CompanyRolesService,
+    private readonly companyAccess: CompanyAccessService,
   ) {}
 
   async findAll(filters: CompanyUserFilterDto): Promise<PaginationResponse<CompanyUserProfile>> {
@@ -53,6 +57,7 @@ export class CompanyUsersService {
     }
     const exists = await this.authRepo.findCompanyUserByEmailExists(dto.email);
     if (exists) throw new ConflictException(`Email '${dto.email}' is already in use`);
+    if (dto.company_role_id) await this.companyRoles.findById(dto.company_role_id);
 
     const password_hash = await hashPassword(dto.password);
     const created = await this.authRepo.createCompanyUser({
@@ -62,6 +67,7 @@ export class CompanyUsersService {
       email: dto.email,
       password_hash,
       role: dto.role,
+      company_role_id: dto.company_role_id ?? null,
     });
     return this.findById(created.id);
   }
@@ -76,8 +82,15 @@ export class CompanyUsersService {
       throw new BadRequestException(`Cannot assign role '${dto.role}'`);
     }
 
+    if (dto.company_role_id) await this.companyRoles.findById(dto.company_role_id);
+    if (dto.email && (await this.companyUsersRepo.emailTaken(dto.email, id))) {
+      throw new ConflictException(`Email '${dto.email}' is already in use`);
+    }
+
     const changesAccess =
-      (dto.role !== undefined && dto.role !== target.role) || dto.is_active === false;
+      (dto.role !== undefined && dto.role !== target.role) ||
+      (dto.company_role_id !== undefined && dto.company_role_id !== target.company_role_id) ||
+      dto.is_active === false;
     if (changesAccess && target.role === CompanyRole.SUPER_ADMIN) {
       throw new ForbiddenException('A SUPER_ADMIN account cannot be deactivated or demoted');
     }
@@ -86,6 +99,7 @@ export class CompanyUsersService {
     }
 
     const updated = await this.companyUsersRepo.update(id, dto);
+    await this.companyAccess.invalidateUser(id);
     if (changesAccess) await this.redisService.revokeUserSessions(id);
     return updated;
   }

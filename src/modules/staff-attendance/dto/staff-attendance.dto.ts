@@ -10,6 +10,9 @@ import {
   IsBoolean,
   MaxLength,
   IsIn,
+  IsNumber,
+  Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -85,4 +88,24 @@ export class StaffAttendanceExportDto extends StaffAttendanceRangeDto {
   @IsOptional()
   @IsIn(['xlsx', 'csv'])
   format?: 'xlsx' | 'csv' = 'xlsx';
+}
+
+export class StaffPunchInDto {
+  @ApiProperty({ example: 26.8467 })
+  @IsNumber({}, { message: 'Location is required to punch in' })
+  @Min(-90)
+  @Max(90)
+  latitude: number;
+
+  @ApiProperty({ example: 80.9462 })
+  @IsNumber({}, { message: 'Location is required to punch in' })
+  @Min(-180)
+  @Max(180)
+  longitude: number;
+
+  @ApiPropertyOptional({ example: 25, description: 'GPS accuracy in metres' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  accuracy?: number;
 }

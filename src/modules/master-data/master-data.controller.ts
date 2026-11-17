@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { MasterDataService } from './master-data.service';
 import { ApiResponse } from '../../shared/responses/api-response';
@@ -14,5 +14,12 @@ export class MasterDataController {
   async findAllSubjects() {
     const data = await this.masterDataService.findAllSubjects();
     return ApiResponse.success(data, 'Master subjects fetched successfully');
+  }
+
+  @Get('pincode/:pincode')
+  @ApiOperation({ summary: 'Resolve an Indian pincode to its city, district and state' })
+  async lookupPincode(@Param('pincode') pincode: string) {
+    const data = await this.masterDataService.lookupPincode(pincode);
+    return ApiResponse.success(data, 'Pincode details fetched successfully');
   }
 }

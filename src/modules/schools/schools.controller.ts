@@ -17,12 +17,16 @@ import { CreateSchoolDto } from './dto/create-school.dto';
 import { UpdateSchoolDto } from './dto/update-school.dto';
 import { UpdateSchoolProfileDto } from './dto/update-school-profile.dto';
 import { SchoolFilterDto } from './dto/school-filter.dto';
+import { DeleteSchoolDto } from './dto/delete-school.dto';
+import { NoTimeout } from '../../common/decorators/no-timeout.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { GetCurrentUser } from '../../common/decorators/current-user.decorator';
 import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { CompanyRole } from '../../shared/enums';
 import { JwtPayload } from '../../shared/types/jwt-payload.types';
+import { PlatformPermissions } from '../../common/decorators/platform-permission.decorator';
+import { PLATFORM_PERMISSIONS } from '../../shared/constants/platform-permissions';
 
 @ApiTags('Schools')
 @ApiBearerAuth('access-token')
@@ -44,6 +48,7 @@ export class SchoolsController {
     return ApiResponse.success(data, 'School profile updated successfully');
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.schools.view)
   @Get()
   @Roles(
     CompanyRole.SUPER_ADMIN,
@@ -58,6 +63,7 @@ export class SchoolsController {
     return ApiResponse.success(data.items, 'Schools fetched successfully', data.meta);
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.schools.view)
   @Get(':id')
   @Roles(
     CompanyRole.SUPER_ADMIN,
@@ -72,6 +78,7 @@ export class SchoolsController {
     return ApiResponse.success(data);
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.schools.adminAccess)
   @Get(':id/admin')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @ApiOperation({ summary: "Get a school's admin account details, if provisioned" })
@@ -80,6 +87,7 @@ export class SchoolsController {
     return ApiResponse.success(data);
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.schools.adminAccess)
   @Post(':id/admin/reset-password')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @HttpCode(HttpStatus.OK)
@@ -101,6 +109,7 @@ export class SchoolsController {
     return ApiResponse.created(data, 'School created successfully');
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.schools.manage)
   @Patch(':id')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SALES, CompanyRole.OPERATOR)
   @ApiOperation({ summary: 'Update school details (scoped to assigned schools for Sales)' })
@@ -113,12 +122,32 @@ export class SchoolsController {
     return ApiResponse.success(data, 'School updated successfully');
   }
 
+  @Get(':id/deletion-summary')
+  @Roles(CompanyRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'What will be lost if this school is deleted, and when it was last backed up',
+  })
+  async deletionSummary(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetCurrentUser() user: JwtPayload,
+  ) {
+    const data = await this.schoolsService.getDeletionSummary(id, user.sub, user.role as string);
+    return ApiResponse.success(data, 'Deletion summary fetched successfully');
+  }
+
   @Delete(':id')
   @Roles(CompanyRole.SUPER_ADMIN)
+  @NoTimeout()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Soft delete a school (SUPER_ADMIN only)' })
-  async remove(@Param('id', ParseUUIDPipe) id: string, @GetCurrentUser() user: JwtPayload) {
-    await this.schoolsService.remove(id, user.sub, user.role as string);
-    return ApiResponse.noContent('School deleted successfully');
+  @ApiOperation({
+    summary: 'Permanently delete a school with all its data and files (SUPER_ADMIN only)',
+  })
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: DeleteSchoolDto,
+    @GetCurrentUser() user: JwtPayload,
+  ) {
+    const data = await this.schoolsService.remove(id, dto, user.sub, user.role as string);
+    return ApiResponse.success(data, 'School and all its data were permanently deleted');
   }
 }

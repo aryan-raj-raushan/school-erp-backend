@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { BackupRepository } from './backup.repository';
+import { RedisService } from '../redis/redis.service';
+import { BACKUP_LAST_DOWNLOADED_KEY } from './backup.constants';
 
 type Column = { header: string; key: string; width: number };
 
@@ -12,7 +14,10 @@ const formatDate = (value?: string | Date | null) =>
 
 @Injectable()
 export class BackupService {
-  constructor(private readonly repo: BackupRepository) {}
+  constructor(
+    private readonly repo: BackupRepository,
+    private readonly redisService: RedisService,
+  ) {}
 
   private addSheet(
     workbook: ExcelJS.Workbook,
@@ -177,6 +182,7 @@ export class BackupService {
     );
 
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    await this.redisService.set(BACKUP_LAST_DOWNLOADED_KEY(schoolId), new Date().toISOString());
     const code = school.code ?? 'school';
     return { buffer, filename: `${code}_backup_${formatDate(new Date())}.xlsx` };
   }

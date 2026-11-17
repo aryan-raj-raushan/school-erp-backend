@@ -1,11 +1,18 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { UploadsService } from '../uploads/uploads.service';
+import { NotificationLog } from '../../database/mongo/schemas/notification-log.schema';
+import { DeleteSchoolDto } from './dto/delete-school.dto';
+import { BACKUP_LAST_DOWNLOADED_KEY } from '../backup/backup.constants';
 import { SchoolsRepository } from './schools.repository';
 import { AuthRepository } from '../auth/auth.repository';
 import { RedisService } from '../redis/redis.service';
@@ -24,13 +31,39 @@ import { APP_EVENTS } from '../../shared/events/event-names';
 const ADMIN_LOGIN_REQUIRED =
   'Provide the admin phone number or email so the school admin can log in';
 
+export interface SchoolDeletionSummary {
+  id: string;
+  name: string;
+  code: string | null;
+  students: number;
+  staff: number;
+  parents: number;
+  last_backup_at: string | null;
+}
+
+export interface SchoolDeletionResult {
+  id: string;
+  name: string;
+  code: string | null;
+  rows_deleted: number;
+  files_deleted: number;
+  files_failed: number;
+}
+
+const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
 @Injectable()
 export class SchoolsService {
+  private readonly logger = new Logger(SchoolsService.name);
+
   constructor(
     private readonly schoolsRepo: SchoolsRepository,
     private readonly authRepo: AuthRepository,
     private readonly redisService: RedisService,
     private readonly events: EventEmitter2,
+    private readonly uploadsService: UploadsService,
+    @InjectModel(NotificationLog.name)
+    private readonly notificationLogModel: Model<NotificationLog>,
   ) {}
 
   // BUG-003/004/005: returns null for SUPER_ADMIN (= all access), array for others
@@ -348,13 +381,69 @@ export class SchoolsService {
     return updated;
   }
 
-  async remove(id: string, userId: string, role: string): Promise<void> {
-    await this.assertSchoolAccess(id, userId, role);
-    await this.findById(id, userId, role);
-    await this.schoolsRepo.softDelete(id);
+  async getDeletionSummary(
+    id: string,
+    userId: string,
+    role: string,
+  ): Promise<SchoolDeletionSummary> {
+    const school = await this.findById(id, userId, role);
+    const [counts, lastBackupAt] = await Promise.all([
+      this.schoolsRepo.countSchoolData(id),
+      this.redisService.get(BACKUP_LAST_DOWNLOADED_KEY(id)),
+    ]);
+    return {
+      id: school.id,
+      name: school.name,
+      code: school.code ?? null,
+      ...counts,
+      last_backup_at: lastBackupAt,
+    };
+  }
+
+  async remove(
+    id: string,
+    dto: DeleteSchoolDto,
+    userId: string,
+    role: string,
+  ): Promise<SchoolDeletionResult> {
+    const school = await this.findById(id, userId, role);
+    if (normalizeName(dto.confirm_name) !== normalizeName(school.name)) {
+      throw new BadRequestException(
+        `Type the school name "${school.name}" exactly to confirm deletion`,
+      );
+    }
+
+    const purged = await this.schoolsRepo.purgeSchoolData(id);
+
+    let files = { deleted: 0, failed: 0 };
+    try {
+      files = await this.uploadsService.purgeSchoolFiles(id);
+    } catch (error) {
+      files.failed = -1;
+      this.logger.error(`S3 cleanup failed for deleted school ${id}: ${(error as Error).message}`);
+    }
+    await this.notificationLogModel
+      .deleteMany({ school_id: id })
+      .exec()
+      .catch((error: Error) =>
+        this.logger.error(`Notification log cleanup failed for school ${id}: ${error.message}`),
+      );
+
+    await this.redisService.delByPattern(`*${id}*`);
     await this.redisService.revokeSchoolSessions(id);
-    await this.redisService.del(`schools:${id}`, `subscription_status:${id}`);
     await this.redisService.delByPattern(`schools:list:*`);
     await this.redisService.delByPattern(`*subscriptions:list:*`);
+    this.logger.warn(
+      `School ${school.name} (${id}) permanently deleted by ${userId}: ${purged.rows} rows from ${purged.tables} tables, ${files.deleted} files`,
+    );
+
+    return {
+      id,
+      name: school.name,
+      code: school.code ?? null,
+      rows_deleted: purged.rows,
+      files_deleted: files.deleted,
+      files_failed: files.failed,
+    };
   }
 }

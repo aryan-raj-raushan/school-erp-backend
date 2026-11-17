@@ -76,9 +76,10 @@ export class AuditInterceptor implements NestInterceptor {
           // operations with no single affected id).
           if (!entityId) return;
 
+          const schoolDeleted = entity === 'SCHOOL' && action === 'DELETE';
           const schoolId = isPlatformRequest
             ? ((data?.school_id as string | undefined) ??
-              (entity === 'SCHOOL' ? String(entityId) : null))
+              (entity === 'SCHOOL' && !schoolDeleted ? String(entityId) : null))
             : user.school_id;
 
           void this.auditLogs
@@ -89,7 +90,8 @@ export class AuditInterceptor implements NestInterceptor {
               action,
               changed_by: user.sub,
               ip_address: request.ip,
-              new_value: action !== 'DELETE' ? this.withoutSecrets(data) : undefined,
+              new_value:
+                action !== 'DELETE' || schoolDeleted ? this.withoutSecrets(data) : undefined,
             })
             .catch((error: Error) =>
               this.logger.warn(

@@ -397,6 +397,8 @@ describe('BulkImportService', () => {
         ],
         ['Tara', '', 'Female', '', '', 'Nursery', '', '', '', 'Raj', '', '', '9123456789', 'Yes'],
         ['Zoe', '', 'Female', '', '', '5', 'A', '', '', '', '', '', '', ''],
+        ['Neel', '', 'Male', '', '', 'Class 5', 'B', '', '', '', '', '', '', ''],
+        ['Ira', '', 'Female', '', '', '9', '', '', '', '', '', '', '', ''],
       ]);
       const report = await service.validate('students', file, SCHOOL);
       const issues = (row: number) => report.rows.find((r) => r.row === row)!.issues;
@@ -406,7 +408,16 @@ describe('BulkImportService', () => {
           .join(' | ');
 
       expect(report.rows.find((r) => r.row === 2)!.status).toBe('ready');
-      expect(messages(3)).toMatch(/Section is required — class 5 has sections A, B/);
+      expect(issues(3)).toContainEqual(
+        expect.objectContaining({
+          column: 'section',
+          severity: 'warning',
+          message: expect.stringMatching(
+            /No section given .* class 5 without a section \(available: A, B\)/,
+          ),
+        }),
+      );
+      expect(issues(3).some((i) => i.severity === 'error')).toBe(false);
       expect(messages(4)).toMatch(/'2024-25' is not a valid Academic Year/);
       expect(messages(5)).toMatch(/Section 'C' does not exist in class 5 \(available: A, B\)/);
       expect(messages(6)).toMatch(/Admission number already belongs to Old Student/);
@@ -425,6 +436,8 @@ describe('BulkImportService', () => {
           message: expect.stringMatching(/No parent/),
         }),
       ]);
+      expect(issues(10).some((i) => i.column === 'class')).toBe(false);
+      expect(messages(11)).toMatch(/Class '9' does not exist in 2025-26 \(available: 5, Nursery\)/);
     });
 
     it('resolves expense parties and warns on duplicates and negative balances', async () => {

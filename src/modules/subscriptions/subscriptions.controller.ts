@@ -23,6 +23,8 @@ import { GetSchoolId } from '../../common/decorators/school-id.decorator';
 import { ApiResponse } from '../../shared/responses/api-response';
 import { CompanyRole } from '../../shared/enums';
 import { JwtPayload } from '../../shared/types/jwt-payload.types';
+import { PlatformPermissions } from '../../common/decorators/platform-permission.decorator';
+import { PLATFORM_PERMISSIONS } from '../../shared/constants/platform-permissions';
 
 @ApiTags('Subscriptions')
 @ApiBearerAuth('access-token')
@@ -30,6 +32,7 @@ import { JwtPayload } from '../../shared/types/jwt-payload.types';
 export class SubscriptionsController {
   constructor(private readonly subscriptionsService: SubscriptionsService) {}
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.subscriptions.view)
   @Get()
   @Roles(
     CompanyRole.SUPER_ADMIN,
@@ -51,6 +54,7 @@ export class SubscriptionsController {
     return ApiResponse.success(data);
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.subscriptions.view)
   @Get(':id')
   @Roles(
     CompanyRole.SUPER_ADMIN,
@@ -65,6 +69,7 @@ export class SubscriptionsController {
     return ApiResponse.success(data);
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.subscriptions.manage)
   @Post()
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @HttpCode(HttpStatus.CREATED)
@@ -74,6 +79,7 @@ export class SubscriptionsController {
     return ApiResponse.created(data, 'Subscription created');
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.subscriptions.manage)
   @Patch(':id')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @ApiOperation({ summary: 'Update subscription' })
@@ -86,6 +92,7 @@ export class SubscriptionsController {
     return ApiResponse.success(data, 'Subscription updated');
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.subscriptions.manage)
   @Post(':id/cancel')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @HttpCode(HttpStatus.OK)
@@ -99,6 +106,7 @@ export class SubscriptionsController {
     return ApiResponse.success(data, 'Subscription cancelled');
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.subscriptions.view)
   @Get(':id/payments')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN, CompanyRole.SUPPORT)
   @ApiOperation({ summary: 'List payments for a subscription' })
@@ -107,6 +115,7 @@ export class SubscriptionsController {
     return ApiResponse.success(data);
   }
 
+  @PlatformPermissions(PLATFORM_PERMISSIONS.subscriptions.manage)
   @Post(':id/payments')
   @Roles(CompanyRole.SUPER_ADMIN, CompanyRole.ADMIN)
   @HttpCode(HttpStatus.CREATED)

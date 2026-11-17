@@ -96,6 +96,15 @@ function fullName(payload: CreateStudentDto): string {
   return [payload.first_name, payload.last_name].filter(Boolean).join(' ');
 }
 
+const CLASS_LABEL_PREFIX = /^(class|std|standard|grade)\b\.?\s*/;
+
+function normalizeClassLabel(value: string): string {
+  return lower(value)
+    .trim()
+    .replace(CLASS_LABEL_PREFIX, '')
+    .replace(/[\s\-_]+/g, '');
+}
+
 @Injectable()
 export class StudentsImporter implements BulkImporter<StudentsContext, CreateStudentDto> {
   readonly entity = 'students' as const;
@@ -244,7 +253,7 @@ export class StudentsImporter implements BulkImporter<StudentsContext, CreateStu
         maxLength: 50,
         required: true,
         options: classNames.map((name) => ({ value: name, label: name })),
-        hint: 'Class name exactly as set up in the app',
+        hint: 'Class name or class code as set up in the app, e.g. 1 or Class 1',
         width: 14,
       },
       {
@@ -253,7 +262,7 @@ export class StudentsImporter implements BulkImporter<StudentsContext, CreateStu
         kind: 'text',
         maxLength: 10,
         options: sectionNames.map((name) => ({ value: name, label: name })),
-        hint: 'Required when the class has sections',
+        hint: 'Optional — leave blank to add the student without a section',
         width: 12,
       },
       {
@@ -521,11 +530,16 @@ export class StudentsImporter implements BulkImporter<StudentsContext, CreateStu
     let classId: string | undefined;
     let sectionId: string | undefined;
     if (year && v.class) {
-      const matches = ctx.classes.filter(
-        (c) => c.academic_year_id === year.id && lower(c.name) === lower(String(v.class)),
-      );
+      const yearClasses = ctx.classes.filter((c) => c.academic_year_id === year.id);
+      const matches = this.matchClass(yearClasses, String(v.class));
       if (!matches.length) {
-        row.issue('class', `Class '${v.class}' does not exist in ${year.name}`);
+        const available = yearClasses.filter((c) => c.is_active).map((c) => c.name);
+        row.issue(
+          'class',
+          available.length
+            ? `Class '${v.class}' does not exist in ${year.name} (available: ${available.join(', ')})`
+            : `No classes are set up in ${year.name} yet — create classes before importing students`,
+        );
       } else if (matches.length > 1) {
         row.issue('class', `More than one class is named '${v.class}' in ${year.name}`);
       } else if (!matches[0].is_active) {
@@ -601,6 +615,13 @@ export class StudentsImporter implements BulkImporter<StudentsContext, CreateStu
     } as CreateStudentDto;
   }
 
+  private matchClass(yearClasses: ClassRow[], wanted: string): ClassRow[] {
+    const key = normalizeClassLabel(wanted);
+    const byName = yearClasses.filter((c) => normalizeClassLabel(c.name) === key);
+    if (byName.length) return byName;
+    return yearClasses.filter((c) => c.class_code && normalizeClassLabel(c.class_code) === key);
+  }
+
   private resolveSection(row: RowContext, ctx: StudentsContext, cls: ClassRow): string | undefined {
     const classSections = ctx.sections.filter((s) => s.class_id === cls.id && s.is_active);
     const wanted = row.values.section ? String(row.values.section) : undefined;
@@ -608,7 +629,11 @@ export class StudentsImporter implements BulkImporter<StudentsContext, CreateStu
 
     if (!wanted) {
       if (classSections.length) {
-        row.issue('section', `Section is required — class ${cls.name} has sections ${available}`);
+        row.issue(
+          'section',
+          `No section given — the student will be added to class ${cls.name} without a section (available: ${available})`,
+          'warning',
+        );
       }
       return undefined;
     }

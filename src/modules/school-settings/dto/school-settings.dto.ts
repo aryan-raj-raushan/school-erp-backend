@@ -11,6 +11,8 @@ import {
 } from 'class-validator';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 
+const CARD_TEMPLATE_PATTERN = /^[a-z0-9-]{2,40}$/;
+
 export enum AttendanceMethodDto {
   MANUAL = 'MANUAL',
   RFID = 'RFID',
@@ -81,6 +83,18 @@ export class UpdateSchoolSettingsDto {
   @Min(1)
   @Max(99999999)
   admission_start_number?: number;
+
+  @ApiPropertyOptional({ example: 'classic', description: 'Template used for student ID cards' })
+  @IsOptional()
+  @IsString()
+  @Matches(CARD_TEMPLATE_PATTERN, { message: 'Invalid card template' })
+  id_card_template?: string;
+
+  @ApiPropertyOptional({ example: 'classic', description: 'Template used for parent pickup cards' })
+  @IsOptional()
+  @IsString()
+  @Matches(CARD_TEMPLATE_PATTERN, { message: 'Invalid card template' })
+  pickup_card_template?: string;
 }
 
 export enum TimingTypeDto {

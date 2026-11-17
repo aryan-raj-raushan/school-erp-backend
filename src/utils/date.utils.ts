@@ -1,4 +1,24 @@
 export class DateUtils {
+  static zonedDateTime(instant: Date, timeZone = 'Asia/Kolkata'): { date: string; time: string } {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      })
+        .formatToParts(instant)
+        .map((p) => [p.type, p.value]),
+    );
+    return {
+      date: `${parts.year}-${parts.month}-${parts.day}`,
+      time: `${parts.hour}:${parts.minute}`,
+    };
+  }
+
   static nowISO(): string {
     return new Date().toISOString();
   }
