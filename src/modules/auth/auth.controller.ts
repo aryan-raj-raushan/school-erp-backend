@@ -20,6 +20,7 @@ import { LoginCompanyDto } from './dto/login-company.dto';
 import { LoginSchoolDto } from './dto/login-school.dto';
 import { LoginParentDto } from './dto/login-parent.dto';
 import { LoginUnifiedDto } from './dto/login-unified.dto';
+import { SocialLoginDto } from './dto/social-login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
 import { ConfirmProfileDto } from './dto/confirm-profile.dto';
@@ -106,6 +107,18 @@ export class AuthController {
   })
   async loginUnified(@Body() dto: LoginUnifiedDto) {
     const result = await this.authService.loginUnified(dto);
+    return ApiResponse.success(result, 'Login successful');
+  }
+
+  @Public()
+  @Post('social-login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Google / Microsoft login — exchanges a Clerk session token for app tokens, matched by verified email to an existing company or school user.',
+  })
+  async socialLogin(@Body() dto: SocialLoginDto) {
+    const result = await this.authService.socialLogin(dto);
     return ApiResponse.success(result, 'Login successful');
   }
 

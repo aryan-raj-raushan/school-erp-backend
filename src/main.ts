@@ -17,6 +17,7 @@ const IMPORT_JOB_POLL_PATH = /\/bulk-import\/[\w-]+\/jobs\/[\w-]+$/;
 
 const CREDENTIAL_AUTH_PATHS = new Set([
   '/login',
+  '/social-login',
   '/company/login',
   '/school/login',
   '/parent/login',

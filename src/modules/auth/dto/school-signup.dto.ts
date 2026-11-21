@@ -19,7 +19,7 @@ export class SchoolSignupDto {
   @IsString()
   @MaxLength(10)
   @Matches(REGEX.SCHOOL_CODE, { message: 'Code must be 2-10 uppercase alphanumeric chars' })
-  @Transform(({ value }) => StringUtils.trim(value)?.toUpperCase())
+  @Transform(({ value }) => StringUtils.trim(value).toUpperCase() || undefined)
   school_code?: string;
 
   @ApiPropertyOptional({ enum: BoardType })
@@ -44,7 +44,7 @@ export class SchoolSignupDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)))
+  @Transform(({ value }) => StringUtils.titleCase(StringUtils.trim(value)) || undefined)
   last_name?: string;
 
   @ApiPropertyOptional({ example: '+91' })
@@ -61,7 +61,7 @@ export class SchoolSignupDto {
   @ApiPropertyOptional({ example: 'admin@school.edu.in' })
   @IsOptional()
   @Matches(REGEX.EMAIL, { message: 'Invalid email' })
-  @Transform(({ value }) => StringUtils.trim(value)?.toLowerCase())
+  @Transform(({ value }) => StringUtils.trim(value).toLowerCase() || undefined)
   email?: string;
 
   @ApiProperty({ example: 'Admin@1234', minLength: 8 })

@@ -5,9 +5,11 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 
 import { AuthRepository } from './auth.repository';
 import { RedisService } from '../redis/redis.service';
@@ -23,6 +25,7 @@ import { LoginUnifiedDto } from './dto/login-unified.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { SchoolSignupDto } from './dto/school-signup.dto';
 import { ConfirmProfileDto } from './dto/confirm-profile.dto';
+import { SocialLoginDto } from './dto/social-login.dto';
 import {
   LoginResponse,
   TokenPair,
@@ -325,26 +328,7 @@ export class AuthService {
       if (companyUser) {
         const match = await comparePassword(dto.password, companyUser.password_hash);
         if (!match) throw new UnauthorizedException('Invalid credentials');
-        if (!companyUser.is_active) throw new UnauthorizedException('Account is deactivated');
-        await this.authRepo.updateCompanyUserLastLogin(companyUser.id);
-        if (companyUser.role !== CompanyRole.SUPER_ADMIN) {
-          await this.cacheCompanyUserSchools(companyUser.id);
-        }
-        const tokens = await this.generateTokens({
-          sub: companyUser.id,
-          email: companyUser.email,
-          role: companyUser.role as CompanyRole,
-          context: AuthContext.COMPANY,
-        });
-        return {
-          ...tokens,
-          user: {
-            id: companyUser.id,
-            email: companyUser.email,
-            role: companyUser.role,
-            context: AuthContext.COMPANY,
-          },
-        };
+        return this.completeCompanyUserLogin(companyUser);
       }
     }
 
@@ -361,6 +345,56 @@ export class AuthService {
       dial_code: dto.dial_code ?? '+91',
       password: dto.password,
     });
+  }
+
+  async socialLogin(dto: SocialLoginDto): Promise<LoginOrChangeResponse> {
+    const secretKey = this.configService.get<string>('CLERK_SECRET_KEY');
+    if (!secretKey) throw new ServiceUnavailableException('Social login is not configured');
+
+    const { data, errors } = await verifyToken(dto.token, { secretKey });
+    if (errors) throw new UnauthorizedException('Social sign-in expired, please try again');
+
+    const clerkUser = await createClerkClient({ secretKey }).users.getUser(data.sub);
+    const primaryEmail = clerkUser.primaryEmailAddress;
+    if (!primaryEmail || primaryEmail.verification?.status !== 'verified') {
+      throw new UnauthorizedException('This account has no verified email address');
+    }
+    const email = primaryEmail.emailAddress.toLowerCase();
+
+    const companyUser = await this.authRepo.findCompanyUserByEmail(email);
+    if (companyUser) return this.completeCompanyUserLogin(companyUser);
+
+    const [schoolUser] = await this.authRepo.findSchoolUserCandidatesByEmail(email);
+    if (schoolUser) return this.completeSchoolUserLogin(schoolUser);
+
+    throw new UnauthorizedException(
+      `No account is registered with ${email}. Sign in with your password or ask your school admin to add this email.`,
+    );
+  }
+
+  private async completeCompanyUserLogin(
+    companyUser: NonNullable<Awaited<ReturnType<AuthRepository['findCompanyUserByEmail']>>>,
+  ): Promise<LoginResponse> {
+    if (!companyUser.is_active) throw new UnauthorizedException('Account is deactivated');
+    await this.authRepo.updateCompanyUserLastLogin(companyUser.id);
+    if (companyUser.role !== CompanyRole.SUPER_ADMIN) {
+      await this.cacheCompanyUserSchools(companyUser.id);
+    }
+    const tokens = await this.generateTokens({
+      sub: companyUser.id,
+      email: companyUser.email,
+      role: companyUser.role as CompanyRole,
+      context: AuthContext.COMPANY,
+    });
+    return {
+      ...tokens,
+      user: {
+        id: companyUser.id,
+        email: companyUser.email,
+        role: companyUser.role,
+        context: AuthContext.COMPANY,
+      },
+    };
   }
 
   private async matchSchoolUser<T extends { password_hash: string | null }>(
